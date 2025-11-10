@@ -1,0 +1,26 @@
+appId: com.ordermanagement.app
+productName: 訂單管理系統
+directories:
+  output: dist
+files:
+  - '.next/standalone/**/*'
+  - '.next/static/**/*'
+  - 'public/**/*'
+  - 'node_modules/**/*'
+  - 'package.json'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 訂單管理系統
+
+
+
+

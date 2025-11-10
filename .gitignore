@@ -1,0 +1,55 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# database
+*.db
+*.sqlite
+*.sqlite3
+
+# electron
+/electron/dist
+/electron/out
+
+# sensitive files with tokens
+使用Token推送到_GitHub.bat
+使用ClassicToken推送.bat
+推送到_GitHub_交互式認證.bat
+
+# large files (超過 GitHub 100MB 限制)
+*.7z
+*.zip
+*.rar
+*.tar.gz
+*.iso
+*.dmg
+*.exe
+*.msi
