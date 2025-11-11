@@ -4,7 +4,8 @@ import { ensureDatabaseInitialized } from '@/lib/db';
 // 確保響應頭設置為 JSON
 function setJsonHeaders(res: NextApiResponse) {
   if (!res.headersSent) {
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   }
 }
 
@@ -23,6 +24,7 @@ export default async function handler(
 
   try {
     if (req.method !== 'GET') {
+      setJsonHeaders(res);
       return res.status(405).json({ 
         error: 'Method not allowed', 
         allowedMethods: ['GET'] 
@@ -46,6 +48,7 @@ export default async function handler(
     try {
       await ensureDatabaseInitialized();
       
+      setJsonHeaders(res);
       return res.status(200).json({
         success: true,
         message: '資料庫連線正常',
@@ -53,6 +56,7 @@ export default async function handler(
         databaseType,
       });
     } catch (error: any) {
+      setJsonHeaders(res);
       return res.status(500).json({
         success: false,
         message: '資料庫連線失敗',
@@ -63,7 +67,9 @@ export default async function handler(
       });
     }
   } catch (error: any) {
+    // 最外層錯誤處理
     console.error('測試 API 錯誤:', error);
+    setJsonHeaders(res);
     return res.status(500).json({
       success: false,
       message: 'API 處理錯誤',
@@ -71,4 +77,3 @@ export default async function handler(
     });
   }
 }
-
