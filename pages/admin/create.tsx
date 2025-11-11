@@ -55,7 +55,7 @@ export default function CreateForm() {
         setIsLimitedOrder(hasOrderLimit);
         setOrderLimit(hasOrderLimit ? String(form.order_limit) : '');
         // 嘗試解析現有的取貨時間格式
-        const existingPickupTime = form.pickupTime || form.pickup_time || '';
+        const existingPickupTime = form.pickup_time || '';
         if (existingPickupTime) {
           // 嘗試解析格式：2024-12-25 14:00-18:00 或 2024-12-25 14:00
           const rangeMatch = existingPickupTime.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})-(\d{2}:\d{2})/);
