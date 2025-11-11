@@ -5,10 +5,20 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  await ensureDatabaseInitialized();
-  
+  // 先檢查 HTTP 方法
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed', allowedMethods: ['POST'] });
+  }
+
+  try {
+    await ensureDatabaseInitialized();
+  } catch (error: any) {
+    console.error('資料庫初始化錯誤:', error);
+    return res.status(500).json({ 
+      error: '資料庫初始化失敗',
+      details: error?.message || '無法連接到資料庫',
+      hint: '請檢查 Supabase 環境變數設定'
+    });
   }
 
   try {
@@ -34,9 +44,15 @@ export default async function handler(
     const form = await getFormById(formId);
 
     return res.status(200).json({ success: true, formId, formToken: form?.form_token });
-  } catch (error) {
+  } catch (error: any) {
     console.error('建立表單錯誤:', error);
-    return res.status(500).json({ error: '伺服器錯誤' });
+    // 提供更詳細的錯誤訊息
+    const errorMessage = error?.message || '伺服器錯誤';
+    return res.status(500).json({ 
+      error: '伺服器錯誤',
+      details: errorMessage,
+      hint: '請檢查 Supabase 連線設定和資料庫表結構'
+    });
   }
 }
 

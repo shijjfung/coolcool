@@ -1,12 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
 // 取得環境變數
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// 優先使用標準環境變數（Vercel 使用）
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase 環境變數未設定，請檢查 .env.local 檔案');
+if (!supabaseUrl) {
+  console.error('❌ 錯誤：SUPABASE_URL 未設定！請在 Vercel 環境變數中設定。');
+}
+if (!supabaseServiceKey) {
+  console.warn('⚠️  警告：SUPABASE_SERVICE_ROLE_KEY 未設定，將使用 anon key（可能會有權限限制）');
 }
 
 // 客戶端（前端使用，使用 anon key）

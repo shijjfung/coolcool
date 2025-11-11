@@ -251,17 +251,45 @@ export default function CreateForm() {
           }),
         });
 
+        if (!res.ok) {
+          // 嘗試解析錯誤回應
+          let errorData;
+          try {
+            errorData = await res.json();
+          } catch {
+            errorData = { error: `HTTP ${res.status}: ${res.statusText}` };
+          }
+          
+          // 顯示更詳細的錯誤訊息
+          const errorMsg = errorData.error || '建立表單失敗';
+          const details = errorData.details ? `\n詳細資訊：${errorData.details}` : '';
+          const hint = errorData.hint ? `\n\n提示：${errorData.hint}` : '';
+          const fullError = `${errorMsg}${details}${hint}\n\n狀態碼：${res.status}`;
+          alert(fullError);
+          console.error('建立表單失敗:', {
+            status: res.status,
+            statusText: res.statusText,
+            error: errorData,
+            url: res.url
+          });
+          setSaving(false);
+          return;
+        }
+
         const data = await res.json();
 
-        if (res.ok) {
+        if (data.success && data.formToken) {
           router.push(`/admin/share/${data.formToken}`);
         } else {
-          alert(data.error || '建立表單失敗');
+          alert(`建立表單失敗：${data.error || '未知錯誤'}\n\n回應：${JSON.stringify(data, null, 2)}`);
+          console.error('建立表單回應異常:', data);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('建立表單錯誤:', error);
-      alert('建立表單時發生錯誤');
+      const errorMsg = error?.message || '建立表單時發生錯誤';
+      const errorType = error?.name || 'UnknownError';
+      alert(`建立表單時發生錯誤\n\n錯誤類型：${errorType}\n錯誤訊息：${errorMsg}\n\n請檢查：\n1. 網路連線是否正常\n2. Vercel 部署是否正常\n3. Supabase 環境變數是否設定\n\n按 F12 查看 Console 獲取更多資訊。`);
     } finally {
       setSaving(false);
     }
