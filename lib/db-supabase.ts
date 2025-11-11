@@ -555,6 +555,40 @@ export async function cleanupExpiredReservations(): Promise<void> {
 // 初始化檢查（保持 API 相容性）
 export async function ensureDatabaseInitialized() {
   // Supabase 不需要初始化，表結構已在 SQL Editor 中建立
-  return true;
+  // 但需要檢查 Supabase 連線是否正常
+  try {
+    // 先檢查 supabaseAdmin 是否存在
+    if (!supabaseAdmin) {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      if (!supabaseUrl) {
+        throw new Error('SUPABASE_URL 環境變數未設定。請在 Vercel Dashboard > Settings > Environment Variables 中設定。');
+      }
+      if (!supabaseServiceKey && !supabaseAnonKey) {
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_ANON_KEY 環境變數未設定。請在 Vercel Dashboard > Settings > Environment Variables 中設定。');
+      }
+      throw new Error('Supabase 客戶端初始化失敗。請檢查環境變數設定。');
+    }
+    
+    const supabase = getSupabase();
+    // 嘗試一個簡單的查詢來驗證連線
+    const { error } = await supabase.from('forms').select('id').limit(1);
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 表示沒有記錄，這是正常的
+      // 其他錯誤表示連線或表結構有問題
+      if (error.code === '42P01') {
+        throw new Error('資料庫表不存在。請在 Supabase Dashboard > SQL Editor 中執行 supabase-complete-schema.sql 來建立表結構。');
+      }
+      throw new Error(`Supabase 連線失敗：${error.message} (code: ${error.code})`);
+    }
+    return true;
+  } catch (error: any) {
+    if (error.message.includes('Supabase 未正確設定') || error.message.includes('環境變數')) {
+      throw error; // 重新拋出環境變數錯誤
+    }
+    throw new Error(`資料庫連線檢查失敗：${error.message}`);
+  }
 }
 
