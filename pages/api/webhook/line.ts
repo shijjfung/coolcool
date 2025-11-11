@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-import { getFormByToken, createOrder, ensureDatabaseInitialized } from '@/lib/db';
+import { getFormByToken, createOrder, ensureDatabaseInitialized, FormField } from '@/lib/db';
 
 /**
  * LINE Webhook API
@@ -163,17 +163,17 @@ export default async function handler(
       const orderData: Record<string, any> = {};
 
       const productField = form.fields.find(
-        f => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+        (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
       );
       if (productField && mergedItems.length > 0) {
         orderData[productField.name] = mergedItems[0].productName;
       }
 
       const quantityField = form.fields.find(
-        f => f.label.includes('數量') || f.label.includes('訂購數量')
+        (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
       );
       if (quantityField) {
-        const totalQuantity = mergedItems.reduce((sum, item) => sum + item.quantity, 0);
+        const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
         orderData[quantityField.name] = totalQuantity;
       }
 
@@ -187,7 +187,7 @@ export default async function handler(
 
       // 回覆確認訊息
       const itemsText = mergedItems
-        .map(item => `${item.productName} x${item.quantity}`)
+        .map((item: any) => `${item.productName} x${item.quantity}`)
         .join('、');
       await replyMessage(
         event.replyToken!,

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getOrdersByFormId, getFormById, ensureDatabaseInitialized } from '@/lib/db';
+import { getOrdersByFormId, getFormById, ensureDatabaseInitialized, FormField } from '@/lib/db';
 
 export default async function handler(
   req: NextApiRequest,
@@ -28,18 +28,18 @@ export default async function handler(
       const form = await getFormById(parseInt(formId));
       
       if (form) {
-        form.fields.forEach(field => {
+        form.fields.forEach((field: FormField) => {
           if (field.type === 'number') {
             // 數字欄位統計總和、平均
             const values = orders
-              .map(order => parseFloat(order.order_data[field.name] || '0'))
-              .filter(v => !isNaN(v));
+              .map((order: any) => parseFloat(order.order_data[field.name] || '0'))
+              .filter((v: number) => !isNaN(v));
             
             if (values.length > 0) {
               statistics[field.name] = {
                 label: field.label,
-                total: values.reduce((a, b) => a + b, 0),
-                average: values.reduce((a, b) => a + b, 0) / values.length,
+                total: values.reduce((a: number, b: number) => a + b, 0),
+                average: values.reduce((a: number, b: number) => a + b, 0) / values.length,
                 count: values.length,
               };
             }
