@@ -6,6 +6,46 @@ body {
   @apply bg-gray-50;
 }
 
+/* 手機端優化 */
+@layer utilities {
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* 改善手機端輸入體驗 */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+textarea,
+select {
+  font-size: 16px; /* 防止 iOS 自動縮放 */
+}
+
+@media (min-width: 640px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  textarea,
+  select {
+    font-size: inherit;
+  }
+}
+
+/* 改善手機端按鈕點擊體驗 */
+button {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+}
+
+/* 改善手機端滾動體驗 */
+html {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
 
 
 

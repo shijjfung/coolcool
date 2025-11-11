@@ -36,7 +36,7 @@ export default async function handler(
         }
       }
       
-      return res.status(200).json(order);
+      return res.status(200).json({ order });
     } catch (error) {
       console.error('取得訂單錯誤:', error);
       return res.status(500).json({ error: '伺服器錯誤' });

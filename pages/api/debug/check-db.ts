@@ -1,20 +1,36 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { ensureDatabaseInitialized, dbAll, dbGet } from '@/lib/db';
-import { promisify } from 'util';
-import sqlite3 from 'sqlite3';
-import path from 'path';
+import { ensureDatabaseInitialized } from '@/lib/db';
 
-const dbPath = path.join(process.cwd(), 'orders.db');
-const db = new sqlite3.Database(dbPath);
-const dbAllSync = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any[]>;
-const dbGetSync = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
+// 這個 API 僅用於本地 SQLite 調試，在 Vercel (Supabase) 環境下不適用
+const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // 如果是 Supabase 模式，直接返回提示
+  if (DATABASE_TYPE === 'supabase') {
+    return res.status(200).json({
+      success: true,
+      message: '當前使用 Supabase 資料庫，此檢查功能僅適用於 SQLite 模式',
+      databaseType: 'supabase',
+      note: 'Supabase 資料庫結構請在 Supabase Dashboard 中查看'
+    });
+  }
+
+  // SQLite 模式下的檢查（僅在本地開發環境使用）
   try {
     await ensureDatabaseInitialized();
+    
+    // 動態導入 SQLite 相關模組（避免在 Supabase 模式下載入）
+    const { promisify } = await import('util');
+    const sqlite3 = await import('sqlite3');
+    const path = await import('path');
+    
+    const dbPath = path.join(process.cwd(), 'orders.db');
+    const db = new sqlite3.Database(dbPath);
+    const dbAllSync = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any[]>;
+    const dbGetSync = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 
     // 檢查表結構
     const tableInfo = await dbAllSync("PRAGMA table_info(forms)") as any[];
@@ -40,7 +56,7 @@ export default async function handler(
     return res.status(500).json({
       error: '檢查失敗',
       message: error.message,
-      stack: error.stack
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }

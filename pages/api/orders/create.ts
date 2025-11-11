@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createOrder, getFormByToken, ensureDatabaseInitialized } from '@/lib/db';
+import { createOrder, getFormByToken, getOrdersByFormId, confirmReservedOrder, ensureDatabaseInitialized, generateSessionId } from '@/lib/db';
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,7 +12,7 @@ export default async function handler(
   }
 
   try {
-    const { formToken, orderData, customerName, customerPhone } = req.body;
+    const { formToken, orderData, customerName, customerPhone, sessionId } = req.body;
 
     if (!formToken || !orderData) {
       return res.status(400).json({ error: '缺少必要欄位' });
@@ -28,15 +28,48 @@ export default async function handler(
     const deadline = new Date(form.deadline);
     const now = new Date();
     if (now > deadline) {
-      return res.status(400).json({ error: '表單已超過截止時間' });
+      return res.status(400).json({ error: '表單已超過結單時間' });
     }
+
+    // 檢查訂單數量限制
+    if (form.order_limit && form.order_limit > 0) {
+      // 如果有 sessionId，確認保留的排序
+      if (sessionId) {
+        await confirmReservedOrder(form.id, sessionId, ''); // 先清空，稍後會更新
+      }
+      
+      const orders = await getOrdersByFormId(form.id);
+      if (orders.length >= form.order_limit) {
+        return res.status(400).json({ 
+          error: `本訂單已達${form.order_limit}單，無法再下單，您可以稍等再試看是否有其他客戶刪除訂單。` 
+        });
+      }
+    }
+
+    // 取得客戶 IP 地址
+    const clientIp = 
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      (req.headers['x-real-ip'] as string) ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    // 取得 User-Agent（設備資訊）
+    const userAgent = req.headers['user-agent'] || 'unknown';
 
     const orderToken = await createOrder(
       form.id,
       orderData,
       customerName,
-      customerPhone
+      customerPhone,
+      clientIp,
+      userAgent,
+      form // 傳入 form 以便提取物品清單
     );
+
+    // 如果有 sessionId，確認保留的排序已提交
+    if (sessionId && form.order_limit && form.order_limit > 0) {
+      await confirmReservedOrder(form.id, sessionId, orderToken);
+    }
 
     return res.status(200).json({ success: true, orderToken });
   } catch (error) {

@@ -12,7 +12,7 @@ export default async function handler(
   }
 
   try {
-    const { name, fields, deadline, orderDeadline } = req.body;
+    const { name, fields, deadline, orderDeadline, orderLimit, pickupTime } = req.body;
 
     if (!name || !fields || !deadline) {
       return res.status(400).json({ error: '缺少必要欄位' });
@@ -22,7 +22,15 @@ export default async function handler(
       return res.status(400).json({ error: '欄位設定不正確' });
     }
 
-    const formId = await createForm(name, fields as FormField[], deadline, orderDeadline);
+    // 驗證訂單數量限制
+    if (orderLimit !== undefined && orderLimit !== null) {
+      const limit = parseInt(String(orderLimit));
+      if (isNaN(limit) || limit < 1) {
+        return res.status(400).json({ error: '訂單數量限制必須是大於 0 的整數' });
+      }
+    }
+
+    const formId = await createForm(name, fields as FormField[], deadline, orderDeadline, orderLimit ? parseInt(String(orderLimit)) : undefined, pickupTime);
     const form = await getFormById(formId);
 
     return res.status(200).json({ success: true, formId, formToken: form?.form_token });

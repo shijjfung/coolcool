@@ -738,11 +738,21 @@ export default function AdminDashboard() {
                         </div>
                       ) : (
                         <>
-                          <h3 className="text-lg sm:text-xl font-semibold text-gray-800">
+                          <div className="flex-1 flex items-center gap-2 min-w-0">
+                            <h3 className="text-lg sm:text-xl font-semibold text-gray-800 truncate">
                             {form.name}
                           </h3>
+                            <Link
+                              href={`/admin/create?id=${form.id}`}
+                              className="flex-shrink-0 bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                              title="修改表單"
+                            >
+                              ✏️ 修改
+                            </Link>
+                          </div>
                           {form.report_generated === 1 && (
-                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded flex-shrink-0">
                               ✓ 報表已生成
                             </span>
                           )}

@@ -39,9 +39,22 @@ export default async function handler(
 
     // 設定回應標頭
     res.setHeader('Content-Type', 'text/csv;charset=utf-8');
+    
+    // 處理中文檔名：生成安全的 ASCII fallback 檔名
+    // 將中文轉換為拼音或使用英文檔名作為 fallback
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeFormName = form.name.replace(/[^\x20-\x7E]/g, '_'); // 移除非 ASCII 字元
+    const safeFileName = `report_${safeFormName}_${dateStr}.csv`;
+    
+    // 編碼原始中文檔名（用於 filename* 參數）
+    const encodedFileName = encodeURIComponent(fileName);
+    
+    // 使用 RFC 5987 格式，提供 ASCII fallback 和 UTF-8 編碼版本
+    // filename 參數只包含 ASCII 字元（給舊瀏覽器）
+    // filename* 參數包含 UTF-8 編碼的中文檔名（給現代瀏覽器）
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${fileName}"`
+      `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`
     );
 
     return res.status(200).send(csvContent);

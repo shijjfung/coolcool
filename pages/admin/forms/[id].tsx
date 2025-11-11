@@ -6,6 +6,8 @@ interface Order {
   customer_name?: string;
   customer_phone?: string;
   order_data: Record<string, any>;
+  client_ip?: string;
+  user_agent?: string;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +48,22 @@ export default function FormReport() {
     window.location.href = `/api/reports/${id}/download`;
   };
 
+  const downloadItemsStatistics = () => {
+    // 下載物品統計資料
+    if (!id) return;
+    window.location.href = `/api/reports/${id}/items-statistics/download`;
+  };
+
+  // 解析設備類型
+  const getDeviceType = (userAgent?: string): string => {
+    if (!userAgent || userAgent === 'unknown') return '-';
+    const ua = userAgent.toLowerCase();
+    if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+      return '📱 手機';
+    }
+    return '💻 電腦';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -68,6 +86,12 @@ export default function FormReport() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800">訂單報表</h1>
           <div className="flex gap-4">
+            <button
+              onClick={downloadItemsStatistics}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              下載物品統計
+            </button>
             <button
               onClick={exportToCSV}
               className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
@@ -134,7 +158,7 @@ export default function FormReport() {
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
-                      訂單編號
+                      提交時間
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       客戶姓名
@@ -146,14 +170,26 @@ export default function FormReport() {
                       訂單內容
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
-                      建立時間
+                      設備類型
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      客戶 IP
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.orders.map((order) => (
                     <tr key={order.id} className="border-b border-gray-100">
-                      <td className="py-3 px-4 text-sm">{order.id}</td>
+                      <td className="py-3 px-4 text-sm">
+                        {new Date(order.created_at).toLocaleString('zh-TW', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </td>
                       <td className="py-3 px-4 text-sm">
                         {order.customer_name || '-'}
                       </td>
@@ -162,16 +198,40 @@ export default function FormReport() {
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <div className="space-y-1">
-                          {Object.entries(order.order_data).map(([key, value]) => (
-                            <div key={key}>
-                              <span className="font-medium">{key}:</span>{' '}
-                              <span>{String(value)}</span>
-                            </div>
-                          ))}
+                          {Object.entries(order.order_data).map(([key, value]) => {
+                            // 處理陣列類型的值（例如：好事多代購欄位）
+                            let displayValue: string;
+                            if (Array.isArray(value)) {
+                              displayValue = value.map((item: any) => {
+                                if (typeof item === 'object' && item !== null) {
+                                  // 如果是物件，顯示 name 和 quantity
+                                  if (item.name && item.quantity !== undefined) {
+                                    return `${item.name} × ${item.quantity}`;
+                                  }
+                                  return JSON.stringify(item);
+                                }
+                                return String(item);
+                              }).join(', ');
+                            } else if (typeof value === 'object' && value !== null) {
+                              displayValue = JSON.stringify(value);
+                            } else {
+                              displayValue = String(value);
+                            }
+                            
+                            return (
+                              <div key={key}>
+                                <span className="font-medium">{key}:</span>{' '}
+                                <span>{displayValue}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        {new Date(order.created_at).toLocaleString('zh-TW')}
+                        {getDeviceType(order.user_agent)}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-mono text-xs">
+                        {order.client_ip || '-'}
                       </td>
                     </tr>
                   ))}

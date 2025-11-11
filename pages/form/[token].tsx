@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
 interface FormField {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'costco';
   required: boolean;
   options?: string[];
+  price?: number; // 價格欄位（可選）
 }
 
 interface Form {
@@ -14,6 +15,8 @@ interface Form {
   name: string;
   fields: FormField[];
   deadline: string;
+  order_limit?: number; // 訂單數量限制（可選）
+  pickup_time?: string; // 取貨時間（可選）
   created_at: string;
   form_token: string;
 }
@@ -45,14 +48,92 @@ export default function CustomerForm() {
   const [deleteName, setDeleteName] = useState('');
   const [deletePhone, setDeletePhone] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [clientIp, setClientIp] = useState<string>('');
+  const [deviceType, setDeviceType] = useState<string>('');
+  const [orderCount, setOrderCount] = useState<number>(0);
+  const [orderNumber, setOrderNumber] = useState<number | null>(null); // 當前訂單的排序號
+  const [isOrderFull, setIsOrderFull] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [reservedExpiresAt, setReservedExpiresAt] = useState<Date | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0); // 剩餘秒數
+
+  // 用於保存每個數字輸入欄位的前一個有效值
+  const previousValues = useRef<Record<string, string>>({});
 
   useEffect(() => {
     if (token && typeof token === 'string') {
-      fetchForm();
+      // 生成或取得 session ID
+      let sid = sessionStorage.getItem(`session_${token}`);
+      if (!sid) {
+        sid = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+        sessionStorage.setItem(`session_${token}`, sid);
+      }
+      setSessionId(sid);
+      
+      fetchForm(sid);
+      fetchClientInfo();
+      detectDeviceType();
     }
   }, [token]);
 
-  const fetchForm = async () => {
+  // 當訂單送出後，重新檢查訂單數量
+  useEffect(() => {
+    if (order.order_token && form?.order_limit && form.order_limit > 0) {
+      checkOrderCount();
+    }
+  }, [order.order_token, form?.order_limit]);
+
+  // 取得客戶端 IP
+  const fetchClientInfo = async () => {
+    try {
+      const res = await fetch('/api/client-info');
+      const data = await res.json();
+      if (res.ok && data.ip) {
+        setClientIp(data.ip);
+      }
+    } catch (error) {
+      console.error('取得客戶端資訊錯誤:', error);
+    }
+  };
+
+  // 檢測設備類型
+  const detectDeviceType = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    let device = '其他';
+
+    // 檢測作業系統
+    if (ua.includes('mac os x') || ua.includes('macintosh')) {
+      // 檢測是 Mac 還是 iPad（iPadOS 13+ 會顯示為 Mac）
+      if (ua.includes('ipad') || (ua.includes('mac') && 'ontouchend' in document)) {
+        device = '📱 平板 (iPad)';
+      } else {
+        device = '💻 Mac';
+      }
+    } else if (ua.includes('windows')) {
+      device = '💻 Windows PC';
+    } else if (ua.includes('linux') && !ua.includes('android')) {
+      device = '💻 Linux PC';
+    } else if (ua.includes('android')) {
+      // Android 設備
+      if (ua.includes('mobile')) {
+        device = '📱 Android 手機';
+      } else {
+        device = '📱 Android 平板';
+      }
+    } else if (ua.includes('iphone')) {
+      device = '📱 iPhone';
+    } else if (ua.includes('ipad')) {
+      device = '📱 iPad';
+    } else if (ua.includes('mobile')) {
+      device = '📱 手機';
+    } else {
+      device = '💻 電腦';
+    }
+
+    setDeviceType(device);
+  };
+
+  const fetchForm = async (sid?: string) => {
     try {
       const res = await fetch(`/api/forms/token/${token}`);
       const data = await res.json();
@@ -65,6 +146,14 @@ export default function CustomerForm() {
         if (now > deadline) {
           setIsExpired(true);
         }
+        
+        // 如果有訂單限制，先保留排序
+        if (data.order_limit && data.order_limit > 0 && (sid || sessionId)) {
+          const currentSessionId = sid || sessionId;
+          if (currentSessionId) {
+            await reserveOrderNumberWithSession(currentSessionId);
+          }
+        }
       } else {
         alert(data.error || '表單不存在');
       }
@@ -76,6 +165,85 @@ export default function CustomerForm() {
     }
   };
 
+  // 使用指定的 sessionId 保留排序
+  const reserveOrderNumberWithSession = async (sid: string) => {
+    if (!token) return;
+    
+    try {
+      const res = await fetch('/api/orders/reserve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formToken: token,
+          sessionId: sid,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setOrderNumber(data.orderNumber);
+        setReservedExpiresAt(new Date(data.expiresAt));
+        // 開始倒計時
+        startCountdown(new Date(data.expiresAt));
+        // 檢查訂單數量
+        await checkOrderCount();
+      } else if (data.error && data.error.includes('已達')) {
+        setIsOrderFull(true);
+      }
+    } catch (error) {
+      console.error('保留訂單排序錯誤:', error);
+    }
+  };
+
+  // 保留訂單排序（使用當前的 sessionId）
+  const reserveOrderNumber = async () => {
+    if (!sessionId || !token) return;
+    await reserveOrderNumberWithSession(sessionId);
+  };
+
+  // 開始倒計時
+  const startCountdown = (expiresAt: Date) => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const remaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+      setTimeRemaining(remaining);
+      
+      if (remaining <= 0) {
+        // 時間到，重新檢查並嘗試保留
+        if (form && form.order_limit && form.order_limit > 0 && sessionId) {
+          reserveOrderNumberWithSession(sessionId);
+        }
+      } else {
+        setTimeout(updateCountdown, 1000);
+      }
+    };
+    updateCountdown();
+  };
+
+  // 檢查訂單數量和排序
+  const checkOrderCount = async () => {
+    try {
+      const res = await fetch(`/api/orders/count?formToken=${token}`);
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setOrderCount(data.currentCount);
+        setIsOrderFull(data.isFull);
+        
+        // 如果當前訂單已送出，找到對應的排序號
+        if (order.order_token) {
+          const currentOrder = data.orders.find((o: any) => o.order_token === order.order_token);
+          if (currentOrder) {
+            setOrderNumber(currentOrder.order_number);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('檢查訂單數量錯誤:', error);
+    }
+  };
+
   const handleFieldChange = (fieldName: string, value: any) => {
     setOrder({
       ...order,
@@ -84,6 +252,21 @@ export default function CustomerForm() {
         [fieldName]: value,
       },
     });
+  };
+
+  // 計算單項總計（數量 × 價格）
+  const calculateItemTotal = (field: FormField): number => {
+    if (!field.price || field.price <= 0) return 0;
+    const quantity = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
+    return quantity * field.price;
+  };
+
+  // 計算總計價格
+  const calculateTotal = (): number => {
+    if (!form) return 0;
+    return form.fields.reduce((total, field) => {
+      return total + calculateItemTotal(field);
+    }, 0);
   };
 
   const validateForm = (): boolean => {
@@ -122,13 +305,32 @@ export default function CustomerForm() {
             }
           } else if (field.type === 'text') {
             if (typeof value !== 'string' || value.trim() === '') {
-              alert(`「${field.label}」不能為空`);
-              return false;
+              if (field.required) {
+                alert(`「${field.label}」不能為空`);
+                return false;
+              }
             }
-          } else if (field.type === 'select') {
-            if (!value || value.trim() === '') {
-              alert(`請選擇「${field.label}」`);
-              return false;
+          } else if (field.type === 'costco') {
+            // 支持數組格式（物品名稱和數量）
+            if (Array.isArray(value)) {
+              if (value.length === 0) {
+                if (field.required) {
+                  alert(`「${field.label}」至少需要一個項目`);
+                  return false;
+                }
+              } else {
+                // 檢查每個項目是否有物品名稱
+                const hasEmptyName = value.some((item: any) => !item.name || !item.name.trim());
+                if (hasEmptyName) {
+                  alert(`「${field.label}」的項目名稱不能為空`);
+                  return false;
+                }
+              }
+            } else {
+              if (field.required) {
+                alert(`「${field.label}」至少需要一個項目`);
+                return false;
+              }
             }
           }
         }
@@ -203,13 +405,17 @@ export default function CustomerForm() {
 
         const data = await res.json();
         if (res.ok) {
-          setOrder({ ...order, order_token: data.orderToken });
-          alert('訂單已送出成功！您可以稍後使用訂單代碼修改訂單。');
-          // 清空表單
-          setCustomerName('');
-          setCustomerPhone('');
-          setOrder({ order_data: {} });
+          // 跳轉到訂單確認頁面
+          router.push(`/order/success/${data.orderToken}`);
         } else {
+          // 檢查是否是因為額滿而失敗
+          if (data.error && data.error.includes('額滿')) {
+            setIsOrderFull(true);
+            // 重新檢查訂單數量
+            if (form?.order_limit && form.order_limit > 0) {
+              await checkOrderCount();
+            }
+          }
           alert(data.error || '送出訂單失敗');
         }
       }
@@ -382,16 +588,38 @@ export default function CustomerForm() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center bg-white rounded-lg shadow p-8 max-w-md">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">表單已截止</h1>
-          <p className="text-gray-600">
-            此表單的截止時間為：{new Date(form.deadline).toLocaleString('zh-TW', { 
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">
+            {form ? `${form.name}的單已收單截止` : '表單已截止'}
+          </h1>
+          <p className="text-gray-600 mb-2">
+            此表單的結單及停止下單時間為：{form && new Date(form.deadline).toLocaleString('zh-TW', { 
               year: 'numeric', 
               month: '2-digit', 
               day: '2-digit', 
               hour: '2-digit', 
               minute: '2-digit',
-              hour12: false 
+              hour12: false
             })}
+          </p>
+          <p className="text-gray-600 mt-4">
+            若有疑問可電 <a href="tel:087663016" className="text-blue-600 hover:text-blue-800 underline">(08)7663016</a> 洽詢 涼涼古早味冰品團購
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 檢查訂單是否已額滿
+  if (isOrderFull && form && form.order_limit && form.order_limit > 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white rounded-lg shadow p-8 max-w-md">
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">本訂單已達{form.order_limit}單</h1>
+          <p className="text-gray-600 mb-2">
+            無法再下單
+          </p>
+          <p className="text-sm text-gray-500">
+            您可以稍等再試，看是否有其他客戶刪除訂單。
           </p>
         </div>
       </div>
@@ -418,9 +646,15 @@ export default function CustomerForm() {
             </button>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">{form.name}</h1>
+          <div className="mb-4 sm:mb-6 text-center">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">涼涼冰品團購</h1>
+            <p className="text-sm sm:text-base text-gray-600 mb-2">吼哩涼涼ㄟ妹!</p>
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mt-4 mb-2">
+              [{form.name}]
+            </p>
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-            截止時間：{new Date(form.deadline).toLocaleString('zh-TW', { 
+            結單及停止下單時間：{new Date(form.deadline).toLocaleString('zh-TW', { 
               year: 'numeric', 
               month: '2-digit', 
               day: '2-digit', 
@@ -428,10 +662,79 @@ export default function CustomerForm() {
               minute: '2-digit',
               hour12: false 
             })}
+            {form.order_limit && form.order_limit > 0 && (
+              <>
+                <br />
+                <span className="text-xs text-gray-500">
+                  訂單限額：{form.order_limit} 單
+                  {orderCount > 0 && (
+                    <span className="ml-2">
+                      （目前已達 {orderCount} 單）
+                    </span>
+                  )}
+                </span>
+                {orderNumber && !order.order_token && (
+                  <>
+                    <br />
+                    <div className="flex items-center justify-between gap-2 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                      <span className="text-sm text-blue-700 font-semibold">
+                        你搶到第 {orderNumber} 張單，請於5分鐘內送出表單
+                      </span>
+                      {timeRemaining > 0 && (
+                        <span className="text-sm text-orange-600 font-bold whitespace-nowrap">
+                          剩餘 {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {form.pickup_time && (
+              <>
+                <br />
+                <span className="text-xs text-green-600 font-semibold">
+                  📦 取貨時間：{form.pickup_time}
+                </span>
+              </>
+            )}
             <br />
-            <span className="text-xs text-gray-500">在截止時間之前，您可以填寫和修改訂單</span>
+            <span className="text-xs text-gray-500">在結單時間之前，您可以填寫和修改訂單</span>
           </p>
 
+          {/* 客戶端資訊顯示 */}
+          {(deviceType || clientIp || order.order_token || orderNumber) && (
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                  {orderNumber && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-600">訂單排序：</span>
+                      <span className="font-bold text-blue-600">第 {orderNumber} 張</span>
+                    </div>
+                  )}
+                  {order.order_token && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-600">訂單編號：</span>
+                      <span className="font-mono font-medium text-gray-800">{order.order_token}</span>
+                    </div>
+                  )}
+                  {deviceType && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-600">您的設備類型：</span>
+                      <span className="font-medium text-gray-800">{deviceType}</span>
+                    </div>
+                  )}
+                  {clientIp && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-600">您的IP地址：</span>
+                      <span className="font-mono font-medium text-gray-800">{clientIp}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {isEditMode && (
             <div className="mb-6 p-4 bg-green-50 rounded-lg">
@@ -498,57 +801,208 @@ export default function CustomerForm() {
                       <tr key={field.name} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50">
                           {field.label}
+                          {field.price !== undefined && field.price !== null && (
+                            <span className="text-blue-600 font-semibold ml-1">
+                              ({field.price}元)
+                            </span>
+                          )}
                           {field.required && (
                             <span className="text-red-500 ml-1">*</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {field.type === 'text' && (
-                            <input
-                              type="text"
-                              value={order.order_data[field.name] || ''}
-                              onChange={(e) =>
-                                handleFieldChange(field.name, e.target.value)
+                          {field.type === 'costco' && (() => {
+                            // 將數據轉換為數組格式（如果還沒有）
+                            const items = Array.isArray(order.order_data[field.name])
+                              ? order.order_data[field.name]
+                              : order.order_data[field.name]
+                                ? [{ name: String(order.order_data[field.name]), quantity: '' }]
+                                : [{ name: '', quantity: '' }];
+
+                            const updateItems = (newItems: Array<{ name: string; quantity: string }>) => {
+                              handleFieldChange(field.name, newItems);
+                            };
+
+                            const addItem = () => {
+                              updateItems([...items, { name: '', quantity: '' }]);
+                            };
+
+                            const removeItem = (index: number) => {
+                              if (items.length > 1) {
+                                updateItems(items.filter((_, i) => i !== index));
                               }
-                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                              required={field.required}
-                              placeholder={`請輸入${field.label}`}
-                            />
-                          )}
+                            };
+
+                            const updateItem = (index: number, field: 'name' | 'quantity', value: string) => {
+                              const newItems = [...items];
+                              newItems[index] = { ...newItems[index], [field]: value };
+                              updateItems(newItems);
+                            };
+
+                            return (
+                              <div className="space-y-3">
+                                {items.map((item, index) => (
+                                  <div key={index} className="flex gap-2 items-start">
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                      <input
+                                        type="text"
+                                        value={item.name}
+                                        onChange={(e) => updateItem(index, 'name', e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        placeholder="物品名稱"
+                                        required={field.required && index === 0}
+                                      />
+                                      <input
+                                        type="number"
+                                        value={item.quantity}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          // 只接受整數
+                                          if (value === '' || (parseInt(value, 10) > 0 && !value.includes('.'))) {
+                                            updateItem(index, 'quantity', value);
+                                          } else if (value.includes('.')) {
+                                            alert('數量只能輸入整數');
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === '.' || e.key === ',') {
+                                            e.preventDefault();
+                                            alert('數量只能輸入整數');
+                                          }
+                                        }}
+                                        className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        placeholder="數量"
+                                        min="0"
+                                        step="1"
+                                        required={field.required && index === 0}
+                                      />
+                                    </div>
+                                    {items.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeItem(index)}
+                                        className="px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors text-sm font-medium"
+                                        title="刪除此項目"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={addItem}
+                                  className="w-full px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                                >
+                                  + 新增項目
+                                </button>
+                              </div>
+                            );
+                          })()}
                           {field.type === 'number' && (
-                            <input
-                              type="number"
-                              value={order.order_data[field.name] || ''}
-                              onChange={(e) =>
-                                handleFieldChange(field.name, parseFloat(e.target.value) || 0)
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                              required={field.required}
-                              min="0"
-                              step="0.01"
-                              placeholder="0"
-                            />
-                          )}
-                          {field.type === 'select' && (
-                            <select
-                              value={order.order_data[field.name] || ''}
-                              onChange={(e) =>
-                                handleFieldChange(field.name, e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
-                              required={field.required}
-                            >
-                              <option value="">請選擇</option>
-                              {field.options?.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={order.order_data[field.name] || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  const fieldName = field.name;
+                                  
+                                  // 允許空值
+                                  if (value === '') {
+                                    previousValues.current[fieldName] = '';
+                                    handleFieldChange(fieldName, '');
+                                    return;
+                                  }
+                                  
+                                  // 檢查是否包含小數點或逗號
+                                  if (value.includes('.') || value.includes(',')) {
+                                    alert('只能輸入整數，請勿輸入小數點');
+                                    // 恢復到前一個有效值
+                                    const prevValue = previousValues.current[fieldName] || '';
+                                    if (prevValue === '') {
+                                      handleFieldChange(fieldName, '');
+                                    } else {
+                                      const prevInt = parseInt(prevValue, 10);
+                                      if (!isNaN(prevInt) && prevInt >= 0) {
+                                        handleFieldChange(fieldName, prevInt);
+                                      } else {
+                                        handleFieldChange(fieldName, '');
+                                      }
+                                    }
+                                    return;
+                                  }
+                                  
+                                  // 檢查是否為有效的整數
+                                  const intValue = parseInt(value, 10);
+                                  if (!isNaN(intValue) && intValue >= 0) {
+                                    // 保存當前有效值
+                                    previousValues.current[fieldName] = String(intValue);
+                                    handleFieldChange(fieldName, intValue);
+                                  } else if (value === '-') {
+                                    // 允許輸入負號（但最終會被拒絕，因為 min="0"）
+                                    previousValues.current[fieldName] = '';
+                                    handleFieldChange(fieldName, '');
+                                  } else {
+                                    // 如果不是有效數字，拒絕輸入並恢復
+                                    alert('只能輸入大於等於 0 的整數');
+                                    const prevValue = previousValues.current[fieldName] || '';
+                                    if (prevValue === '') {
+                                      handleFieldChange(fieldName, '');
+                                    } else {
+                                      const prevInt = parseInt(prevValue, 10);
+                                      if (!isNaN(prevInt) && prevInt >= 0) {
+                                        handleFieldChange(fieldName, prevInt);
+                                      } else {
+                                        handleFieldChange(fieldName, '');
+                                      }
+                                    }
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  // 阻止輸入小數點
+                                  if (e.key === '.' || e.key === ',') {
+                                    e.preventDefault();
+                                    alert('只能輸入整數，請勿輸入小數點');
+                                  }
+                                }}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                required={field.required}
+                                min="0"
+                                step="1"
+                                placeholder="0"
+                              />
+                              {field.price !== undefined && field.price !== null && field.price > 0 && (
+                                <div className="text-sm text-gray-600 min-w-[80px] text-right">
+                                  {(() => {
+                                    const quantity = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
+                                    const itemTotal = quantity * field.price;
+                                    return itemTotal > 0 ? (
+                                      <span className="text-green-600 font-semibold">
+                                        = {itemTotal.toFixed(0)}元
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
                     ))}
+                    {/* 總計價格行 */}
+                    {form.fields.some(f => f.price !== undefined && f.price !== null && f.price > 0) && (
+                      <tr className="bg-green-50 border-t-2 border-green-200">
+                        <td className="px-4 py-3 text-sm font-bold text-gray-800 bg-green-50" colSpan={2}>
+                          <div className="flex justify-between items-center">
+                            <span>總計價格：</span>
+                            <span className="text-green-600 text-lg font-bold">
+                              {calculateTotal().toFixed(0)} 元
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -583,29 +1037,6 @@ export default function CustomerForm() {
             </div>
           </form>
 
-          {/* 結單日期顯示 */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">📅</span>
-              <div>
-                <div className="text-sm font-medium text-blue-900">本次訂單結單日期</div>
-                <div className="text-lg font-bold text-blue-700">
-                  {new Date(form.deadline).toLocaleString('zh-TW', { 
-                    year: 'numeric', 
-                    month: '2-digit', 
-                    day: '2-digit', 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: false 
-                  })}
-                </div>
-                <div className="text-xs text-blue-600 mt-1">
-                  請在結單日期前完成訂單填寫
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* 確認畫面 */}
           {showConfirm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -626,15 +1057,76 @@ export default function CustomerForm() {
                     {form && form.fields.map((field) => {
                       const value = order.order_data[field.name];
                       if (value === null || value === undefined || value === '') return null;
+                      
+                      // 處理好事多代購類型（數組格式）
+                      if (field.type === 'costco' && Array.isArray(value)) {
+                        return (
+                          <div key={field.name} className="border-b border-gray-200 pb-3">
+                            <div className="text-sm font-medium text-gray-700 mb-2">{field.label}</div>
+                            <div className="space-y-2">
+                              {value.map((item: any, idx: number) => (
+                                <div key={idx} className="text-base text-gray-900 bg-gray-50 p-2 rounded">
+                                  {item.name} {item.quantity ? `× ${item.quantity}` : ''}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // 計算單項總計
+                      const quantity = field.type === 'number' ? (parseInt(String(value), 10) || 0) : 0;
+                      const itemTotal = field.price && field.price > 0 && quantity > 0 
+                        ? quantity * field.price 
+                        : 0;
+                      
                       return (
                         <div key={field.name} className="border-b border-gray-200 pb-3">
-                          <div className="text-sm font-medium text-gray-700 mb-1">{field.label}</div>
-                          <div className="text-base text-gray-900">
-                            {field.type === 'select' ? value : String(value)}
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-gray-700 mb-1">
+                                {field.label}
+                                {field.price !== undefined && field.price !== null && field.price > 0 && (
+                                  <span className="text-blue-600 font-semibold ml-1">
+                                    ({field.price}元/單位)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-base text-gray-900">
+                                {field.type === 'select' ? value : String(value)}
+                                {field.type === 'number' && quantity > 0 && (
+                                  <span className="text-gray-500 ml-1">單位</span>
+                                )}
+                              </div>
+                            </div>
+                            {itemTotal > 0 && (
+                              <div className="text-right ml-4">
+                                <div className="text-sm text-gray-600">小計</div>
+                                <div className="text-lg font-bold text-green-600">
+                                  {itemTotal.toFixed(0)} 元
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
                     })}
+                    
+                    {/* 總計價格 */}
+                    {form && form.fields.some(f => {
+                      const value = order.order_data[f.name];
+                      const quantity = f.type === 'number' ? (parseInt(String(value), 10) || 0) : 0;
+                      return f.price && f.price > 0 && quantity > 0;
+                    }) && (
+                      <div className="border-t-2 border-green-200 pt-4 mt-4 bg-green-50 rounded-lg p-4">
+                        <div className="flex justify-between items-center">
+                          <div className="text-lg font-bold text-gray-800">總計價格：</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {calculateTotal().toFixed(0)} 元
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-3 justify-end">

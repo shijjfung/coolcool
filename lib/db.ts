@@ -42,6 +42,8 @@ async function initDatabaseSQLite() {
       fields TEXT NOT NULL,
       deadline TEXT NOT NULL,
       order_deadline TEXT,
+      order_limit INTEGER,
+      pickup_time TEXT,
       report_generated INTEGER DEFAULT 0,
       report_generated_at TEXT,
       deleted INTEGER DEFAULT 0,
@@ -54,6 +56,16 @@ async function initDatabaseSQLite() {
   // 檢查並新增新欄位（向後相容）
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_deadline TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN order_limit INTEGER`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN pickup_time TEXT`);
   } catch (e: any) {
     // 欄位已存在，忽略錯誤
   }
@@ -86,12 +98,32 @@ async function initDatabaseSQLite() {
       customer_name TEXT,
       customer_phone TEXT,
       order_data TEXT NOT NULL,
+      items_summary TEXT,
+      client_ip TEXT,
+      user_agent TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       order_token TEXT UNIQUE NOT NULL,
       FOREIGN KEY (form_id) REFERENCES forms(id)
     )
   `);
+  
+  // 檢查並新增新欄位（向後相容）
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN client_ip TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN user_agent TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN items_summary TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
 
   // 系統設定表
   await dbRun(`
@@ -101,15 +133,41 @@ async function initDatabaseSQLite() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // 保留訂單排序表（用於先取單機制）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS reserved_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id INTEGER NOT NULL,
+      session_id TEXT NOT NULL,
+      order_number INTEGER NOT NULL,
+      reserved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      order_token TEXT,
+      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
+      UNIQUE(form_id, session_id)
+    )
+  `);
+  
+  // 建立索引
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_form_id ON reserved_orders(form_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_session_id ON reserved_orders(session_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_reserved_at ON reserved_orders(reserved_at)`);
+  } catch (e: any) {}
 }
 
 // 表單相關操作
 export interface FormField {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'costco';
   required: boolean;
   options?: string[];
+  price?: number; // 價格欄位（可選）
 }
 
 export interface Form {
@@ -118,6 +176,7 @@ export interface Form {
   fields: FormField[];
   deadline: string;
   order_deadline?: string; // 收單截止時間
+  order_limit?: number; // 訂單數量限制（可選）
   report_generated?: number; // 報表是否已生成 (0/1)
   report_generated_at?: string; // 報表生成時間
   deleted?: number; // 是否已刪除到垃圾桶 (0/1)
@@ -130,12 +189,14 @@ async function createFormSQLite(
   name: string, 
   fields: FormField[], 
   deadline: string,
-  orderDeadline?: string
+  orderDeadline?: string,
+  orderLimit?: number,
+  pickupTime?: string
 ): Promise<number> {
   const formToken = generateToken();
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, form_token) VALUES (?, ?, ?, ?, ?)',
-    [name, JSON.stringify(fields), deadline, orderDeadline || null, formToken]
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, form_token) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [name, JSON.stringify(fields), deadline, orderDeadline || null, orderLimit || null, pickupTime || null, formToken]
   );
   const result = await dbGet('SELECT last_insert_rowid() as id') as { id: number };
   return result.id;
@@ -150,6 +211,8 @@ async function getFormByTokenSQLite(token: string): Promise<Form | null> {
     fields: JSON.parse(row.fields),
     deadline: row.deadline,
     order_deadline: row.order_deadline || undefined,
+    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
+    pickup_time: row.pickup_time || undefined,
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     deleted: row.deleted || 0,
@@ -171,6 +234,8 @@ async function getFormByIdSQLite(id: number, includeDeleted: boolean = false): P
     fields: JSON.parse(row.fields),
     deadline: row.deadline,
     order_deadline: row.order_deadline || undefined,
+    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
+    pickup_time: row.pickup_time || undefined,
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     deleted: row.deleted || 0,
@@ -211,6 +276,8 @@ async function getDeletedFormsSQLite(): Promise<Form[]> {
     fields: JSON.parse(row.fields),
     deadline: row.deadline,
     order_deadline: row.order_deadline || undefined,
+    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
+    pickup_time: row.pickup_time || undefined,
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     deleted: row.deleted || 0,
@@ -223,6 +290,22 @@ async function getDeletedFormsSQLite(): Promise<Form[]> {
 /**
  * 更新表單名稱
  */
+async function updateFormSQLite(
+  formId: number,
+  name: string,
+  fields: FormField[],
+  deadline: string,
+  orderDeadline?: string,
+  orderLimit?: number,
+  pickupTime?: string
+): Promise<boolean> {
+  await dbRun(
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ? WHERE id = ?',
+    [name, JSON.stringify(fields), deadline, orderDeadline || null, orderLimit || null, pickupTime || null, formId]
+  );
+  return true;
+}
+
 async function updateFormNameSQLite(formId: number, newName: string): Promise<boolean> {
   const result = await dbRun(
     'UPDATE forms SET name = ? WHERE id = ?',
@@ -436,21 +519,65 @@ export interface Order {
   customer_name?: string;
   customer_phone?: string;
   order_data: Record<string, any>;
+  items_summary?: Array<{ name: string; quantity: number }>; // 物品清單（從好事多代購欄位提取）
+  client_ip?: string;
+  user_agent?: string;
   created_at: string;
   updated_at: string;
   order_token: string;
+}
+
+// 從訂單資料中提取物品清單（從好事多代購欄位）
+function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
+  const items: Array<{ name: string; quantity: number }> = [];
+  
+  // 遍歷表單欄位，找出「好事多代購」類型的欄位
+  for (const field of form.fields) {
+    if (field.type === 'costco') {
+      const value = orderData[field.name];
+      if (Array.isArray(value)) {
+        // 處理數組格式的物品清單
+        for (const item of value) {
+          if (item && item.name && item.name.trim()) {
+            const quantity = parseInt(String(item.quantity || 0), 10) || 0;
+            if (quantity > 0) {
+              items.push({
+                name: item.name.trim(),
+                quantity: quantity
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return items.length > 0 ? items : null;
 }
 
 async function createOrderSQLite(
   formId: number,
   orderData: Record<string, any>,
   customerName?: string,
-  customerPhone?: string
+  customerPhone?: string,
+  clientIp?: string,
+  userAgent?: string,
+  form?: Form // 新增 form 參數用於提取物品清單
 ): Promise<string> {
   const orderToken = generateToken();
+  
+  // 提取物品清單
+  let itemsSummary: string | null = null;
+  if (form) {
+    const items = extractItemsSummary(form, orderData);
+    if (items && items.length > 0) {
+      itemsSummary = JSON.stringify(items);
+    }
+  }
+  
   await dbRun(
-    'INSERT INTO orders (form_id, customer_name, customer_phone, order_data, order_token) VALUES (?, ?, ?, ?, ?)',
-    [formId, customerName || null, customerPhone || null, JSON.stringify(orderData), orderToken]
+    'INSERT INTO orders (form_id, customer_name, customer_phone, order_data, items_summary, client_ip, user_agent, order_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [formId, customerName || null, customerPhone || null, JSON.stringify(orderData), itemsSummary, clientIp || null, userAgent || null, orderToken]
   );
   return orderToken;
 }
@@ -512,6 +639,8 @@ async function getOrderByTokenSQLite(token: string): Promise<Order | null> {
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     order_data: JSON.parse(row.order_data),
+    client_ip: row.client_ip || undefined,
+    user_agent: row.user_agent || undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     order_token: row.order_token,
@@ -519,13 +648,16 @@ async function getOrderByTokenSQLite(token: string): Promise<Order | null> {
 }
 
 async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
-  const rows = await dbAll('SELECT * FROM orders WHERE form_id = ? ORDER BY created_at DESC', [formId]) as any[];
+  const rows = await dbAll('SELECT * FROM orders WHERE form_id = ? ORDER BY created_at ASC', [formId]) as any[];
   return rows.map(row => ({
     id: row.id,
     form_id: row.form_id,
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     order_data: JSON.parse(row.order_data),
+    items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
+    client_ip: row.client_ip || undefined,
+    user_agent: row.user_agent || undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     order_token: row.order_token,
@@ -579,6 +711,118 @@ function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+// 生成 session ID
+export function generateSessionId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+}
+
+// 保留訂單排序（SQLite）
+async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+  try {
+    await ensureDatabaseInitialized();
+    
+    // 先清理過期保留（5分鐘）
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await dbRun(
+      'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
+      [fiveMinutesAgo]
+    );
+
+    // 檢查是否已有保留
+    const existing = await dbGet(
+      'SELECT * FROM reserved_orders WHERE form_id = ? AND session_id = ?',
+      [formId, sessionId]
+    ) as any;
+
+    if (existing) {
+      // 檢查是否已過期
+      const reservedAt = new Date(existing.reserved_at);
+      const now = new Date();
+      if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
+        // 已過期，刪除並重新分配
+        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
+      } else {
+        // 返回現有保留
+        return { success: true, orderNumber: existing.order_number };
+      }
+    }
+
+    // 取得當前已提交的訂單和已保留的數量
+    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
+    const reserved = await dbAll(
+      'SELECT order_number FROM reserved_orders WHERE form_id = ? AND (order_token IS NOT NULL OR reserved_at > ?)',
+      [formId, fiveMinutesAgo]
+    ) as any[];
+
+    // 計算下一個可用的排序號
+    const usedNumbers = new Set<number>();
+    reserved.forEach((r: any) => {
+      usedNumbers.add(r.order_number);
+    });
+
+    // 找到第一個可用的排序號
+    let orderNumber = 1;
+    while (usedNumbers.has(orderNumber)) {
+      orderNumber++;
+    }
+
+    // 插入保留記錄（使用 INSERT OR REPLACE 處理唯一約束）
+    await dbRun(
+      'INSERT OR REPLACE INTO reserved_orders (form_id, session_id, order_number, reserved_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+      [formId, sessionId, orderNumber]
+    );
+
+    return { success: true, orderNumber };
+  } catch (error: any) {
+    console.error('保留訂單排序錯誤:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 確認保留的排序（提交訂單時）
+async function confirmReservedOrderSQLite(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
+  try {
+    await ensureDatabaseInitialized();
+    await dbRun(
+      'UPDATE reserved_orders SET order_token = ? WHERE form_id = ? AND session_id = ?',
+      [orderToken, formId, sessionId]
+    );
+    return true;
+  } catch (error) {
+    console.error('確認保留訂單錯誤:', error);
+    return false;
+  }
+}
+
+// 取得保留的排序號
+async function getReservedOrderNumberSQLite(formId: number, sessionId: string): Promise<number | null> {
+  try {
+    await ensureDatabaseInitialized();
+    const result = await dbGet(
+      'SELECT order_number FROM reserved_orders WHERE form_id = ? AND session_id = ? AND order_token IS NULL',
+      [formId, sessionId]
+    ) as any;
+    return result ? result.order_number : null;
+  } catch (error) {
+    console.error('取得保留訂單排序錯誤:', error);
+    return null;
+  }
+}
+
+// 清理過期保留
+async function cleanupExpiredReservationsSQLite(): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await dbRun(
+      'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
+      [fiveMinutesAgo]
+    );
+  } catch (error) {
+    console.error('清理過期保留錯誤:', error);
+  }
+}
+
 // 初始化資料庫（在第一次使用時調用）
 let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
@@ -624,6 +868,10 @@ export const getAllForms = DATABASE_TYPE === 'supabase'
 export const getDeletedForms = DATABASE_TYPE === 'supabase'
   ? dbModule.getDeletedForms
   : getDeletedFormsSQLite;
+
+export const updateForm = DATABASE_TYPE === 'supabase'
+  ? dbModule.updateForm
+  : updateFormSQLite;
 
 export const updateFormName = DATABASE_TYPE === 'supabase'
   ? dbModule.updateFormName
@@ -676,4 +924,23 @@ export const getSetting = DATABASE_TYPE === 'supabase'
 export const setSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.setSetting
   : setSettingSQLite;
+
+// 保留訂單排序相關函數
+export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
+  ? dbModule.reserveOrderNumber
+  : reserveOrderNumberSQLite;
+
+export const confirmReservedOrder = DATABASE_TYPE === 'supabase'
+  ? dbModule.confirmReservedOrder
+  : confirmReservedOrderSQLite;
+
+export const getReservedOrderNumber = DATABASE_TYPE === 'supabase'
+  ? dbModule.getReservedOrderNumber
+  : getReservedOrderNumberSQLite;
+
+export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
+  ? dbModule.cleanupExpiredReservations
+  : cleanupExpiredReservationsSQLite;
+
+// generateSessionId 已在上面定義並導出
 

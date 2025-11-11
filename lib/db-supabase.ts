@@ -22,7 +22,9 @@ export async function createForm(
   name: string,
   fields: FormField[],
   deadline: string,
-  orderDeadline?: string
+  orderDeadline?: string,
+  orderLimit?: number,
+  pickupTime?: string
 ): Promise<number> {
   const formToken = generateToken();
   const { data, error } = await getSupabase()
@@ -32,6 +34,8 @@ export async function createForm(
       fields,
       deadline,
       order_deadline: orderDeadline || null,
+      order_limit: orderLimit || null,
+      pickup_time: pickupTime || null,
       form_token: formToken,
     })
     .select('id')
@@ -102,6 +106,31 @@ export async function getDeletedForms(): Promise<Form[]> {
 
   if (error) throw new Error(`取得已刪除表單失敗：${error.message}`);
   return (data || []).map(mapFormFromDb);
+}
+
+export async function updateForm(
+  formId: number,
+  name: string,
+  fields: FormField[],
+  deadline: string,
+  orderDeadline?: string,
+  orderLimit?: number,
+  pickupTime?: string
+): Promise<boolean> {
+  const { error } = await getSupabase()
+    .from('forms')
+    .update({
+      name,
+      fields,
+      deadline,
+      order_deadline: orderDeadline || null,
+      order_limit: orderLimit || null,
+      pickup_time: pickupTime || null,
+    })
+    .eq('id', formId);
+
+  if (error) throw new Error(`更新表單失敗：${error.message}`);
+  return true;
 }
 
 export async function updateFormName(formId: number, newName: string): Promise<boolean> {
@@ -216,13 +245,51 @@ export async function permanentlyDeleteForm(formId: number): Promise<{ success: 
 }
 
 // 訂單相關操作
+// 從訂單資料中提取物品清單（從好事多代購欄位）
+function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
+  const items: Array<{ name: string; quantity: number }> = [];
+  
+  // 遍歷表單欄位，找出「好事多代購」類型的欄位
+  for (const field of form.fields) {
+    if (field.type === 'costco') {
+      const value = orderData[field.name];
+      if (Array.isArray(value)) {
+        // 處理數組格式的物品清單
+        for (const item of value) {
+          if (item && item.name && item.name.trim()) {
+            const quantity = parseInt(String(item.quantity || 0), 10) || 0;
+            if (quantity > 0) {
+              items.push({
+                name: item.name.trim(),
+                quantity: quantity
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return items.length > 0 ? items : null;
+}
+
 export async function createOrder(
   formId: number,
   orderData: Record<string, any>,
   customerName?: string,
-  customerPhone?: string
+  customerPhone?: string,
+  clientIp?: string,
+  userAgent?: string,
+  form?: Form // 新增 form 參數用於提取物品清單
 ): Promise<string> {
   const orderToken = generateToken();
+  
+  // 提取物品清單
+  let itemsSummary: Array<{ name: string; quantity: number }> | null = null;
+  if (form) {
+    itemsSummary = extractItemsSummary(form, orderData);
+  }
+  
   const { error } = await getSupabase()
     .from('orders')
     .insert({
@@ -230,6 +297,9 @@ export async function createOrder(
       customer_name: customerName || null,
       customer_phone: customerPhone || null,
       order_data: orderData,
+      items_summary: itemsSummary,
+      client_ip: clientIp || null,
+      user_agent: userAgent || null,
       order_token: orderToken,
     });
 
@@ -267,7 +337,7 @@ export async function getOrdersByFormId(formId: number): Promise<Order[]> {
     .from('orders')
     .select('*')
     .eq('form_id', formId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
 
   if (error) throw new Error(`取得訂單列表失敗：${error.message}`);
   return (data || []).map(mapOrderFromDb);
@@ -320,6 +390,8 @@ function mapFormFromDb(row: any): Form {
     fields: typeof row.fields === 'string' ? JSON.parse(row.fields) : row.fields,
     deadline: row.deadline,
     order_deadline: row.order_deadline || undefined,
+    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
+    pickupTime: row.pickup_time || undefined,
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     deleted: row.deleted || 0,
@@ -337,6 +409,9 @@ function mapOrderFromDb(row: any): Order {
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     order_data: typeof row.order_data === 'string' ? JSON.parse(row.order_data) : row.order_data,
+    items_summary: row.items_summary || undefined,
+    client_ip: row.client_ip || undefined,
+    user_agent: row.user_agent || undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     order_token: row.order_token,
@@ -346,6 +421,135 @@ function mapOrderFromDb(row: any): Order {
 // 生成唯一 token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+// 保留訂單排序（Supabase）
+export async function reserveOrderNumber(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+  try {
+    // 先清理過期保留（5分鐘）
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await getSupabase()
+      .from('reserved_orders')
+      .delete()
+      .eq('form_id', formId)
+      .lt('reserved_at', fiveMinutesAgo)
+      .is('order_token', null);
+
+    // 檢查是否已有保留
+    const { data: existing } = await getSupabase()
+      .from('reserved_orders')
+      .select('*')
+      .eq('form_id', formId)
+      .eq('session_id', sessionId)
+      .single();
+
+    if (existing) {
+      // 檢查是否已過期
+      const reservedAt = new Date(existing.reserved_at);
+      const now = new Date();
+      if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
+        // 已過期，刪除並重新分配
+        await getSupabase()
+          .from('reserved_orders')
+          .delete()
+          .eq('id', existing.id);
+      } else {
+        // 返回現有保留
+        return { success: true, orderNumber: existing.order_number };
+      }
+    }
+
+    // 取得當前已提交的訂單和已保留的數量
+    const { data: orders } = await getSupabase()
+      .from('orders')
+      .select('id')
+      .eq('form_id', formId);
+
+    const { data: reserved } = await getSupabase()
+      .from('reserved_orders')
+      .select('order_number')
+      .eq('form_id', formId)
+      .or(`order_token.not.is.null,reserved_at.gt.${fiveMinutesAgo}`);
+
+    // 計算下一個可用的排序號
+    const usedNumbers = new Set<number>();
+    (reserved || []).forEach((r: any) => {
+      usedNumbers.add(r.order_number);
+    });
+
+    // 找到第一個可用的排序號
+    let orderNumber = 1;
+    while (usedNumbers.has(orderNumber)) {
+      orderNumber++;
+    }
+
+    // 插入保留記錄（使用 upsert 處理唯一約束）
+    const { error } = await getSupabase()
+      .from('reserved_orders')
+      .upsert({
+        form_id: formId,
+        session_id: sessionId,
+        order_number: orderNumber,
+        reserved_at: new Date().toISOString(),
+      }, {
+        onConflict: 'form_id,session_id'
+      });
+
+    if (error) throw error;
+
+    return { success: true, orderNumber };
+  } catch (error: any) {
+    console.error('保留訂單排序錯誤:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 確認保留的排序（提交訂單時）
+export async function confirmReservedOrder(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
+  try {
+    const { error } = await getSupabase()
+      .from('reserved_orders')
+      .update({ order_token: orderToken })
+      .eq('form_id', formId)
+      .eq('session_id', sessionId);
+
+    return !error;
+  } catch (error) {
+    console.error('確認保留訂單錯誤:', error);
+    return false;
+  }
+}
+
+// 取得保留的排序號
+export async function getReservedOrderNumber(formId: number, sessionId: string): Promise<number | null> {
+  try {
+    const { data } = await getSupabase()
+      .from('reserved_orders')
+      .select('order_number')
+      .eq('form_id', formId)
+      .eq('session_id', sessionId)
+      .is('order_token', null)
+      .single();
+
+    return data ? data.order_number : null;
+  } catch (error) {
+    console.error('取得保留訂單排序錯誤:', error);
+    return null;
+  }
+}
+
+// 清理過期保留
+export async function cleanupExpiredReservations(): Promise<void> {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await getSupabase()
+      .from('reserved_orders')
+      .delete()
+      .lt('reserved_at', fiveMinutesAgo)
+      .is('order_token', null);
+  } catch (error) {
+    console.error('清理過期保留錯誤:', error);
+  }
 }
 
 // 初始化檢查（保持 API 相容性）
