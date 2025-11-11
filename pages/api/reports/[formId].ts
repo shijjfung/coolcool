@@ -43,20 +43,7 @@ export default async function handler(
                 count: values.length,
               };
             }
-          } else if (field.type === 'select') {
-            // 選項欄位統計各選項數量
-            const counts: Record<string, number> = {};
-            orders.forEach(order => {
-              const value = order.order_data[field.name];
-              if (value) {
-                counts[value] = (counts[value] || 0) + 1;
-              }
-            });
-            statistics[field.name] = {
-              label: field.label,
-              counts,
-            };
-          }
+          // 注意：select 類型已移除，不再處理
         });
       }
     }

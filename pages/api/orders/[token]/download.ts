@@ -87,7 +87,7 @@ function generateOrderDetailHTML(form: any, order: any): string {
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${field.label}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-          ${field.type === 'select' ? value : String(value)}
+          ${String(value)}
           ${field.type === 'number' && quantity > 0 ? ' 單位' : ''}
         </td>
         ${field.price && field.price > 0 ? `

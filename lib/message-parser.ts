@@ -254,11 +254,8 @@ export function extractProductsFromForm(fields: any[]): string[] {
   const products: string[] = [];
 
   for (const field of fields) {
-    // 如果是下拉選單，選項可能是商品
-    if (field.type === 'select' && field.options) {
-      products.push(...field.options);
-    }
     // 如果欄位名稱包含「商品」、「口味」、「種類」等關鍵字
+    // 注意：select 類型已移除，現在只從欄位標籤判斷
     if (
       field.label &&
       (field.label.includes('商品') ||
@@ -266,8 +263,8 @@ export function extractProductsFromForm(fields: any[]): string[] {
         field.label.includes('種類') ||
         field.label.includes('品項'))
     ) {
-      // 嘗試從欄位名稱或選項中提取
-      if (field.options) {
+      // 如果欄位有選項（保留向後相容性）
+      if (field.options && Array.isArray(field.options)) {
         products.push(...field.options);
       }
     }

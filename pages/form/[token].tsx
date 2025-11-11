@@ -829,7 +829,7 @@ export default function CustomerForm() {
 
                             const removeItem = (index: number) => {
                               if (items.length > 1) {
-                                updateItems(items.filter((_, i) => i !== index));
+                                updateItems(items.filter((_: any, i: number) => i !== index));
                               }
                             };
 
@@ -841,7 +841,7 @@ export default function CustomerForm() {
 
                             return (
                               <div className="space-y-3">
-                                {items.map((item, index) => (
+                                {items.map((item: any, index: number) => (
                                   <div key={index} className="flex gap-2 items-start">
                                     <div className="flex-1 grid grid-cols-2 gap-2">
                                       <input
@@ -1093,7 +1093,7 @@ export default function CustomerForm() {
                                 )}
                               </div>
                               <div className="text-base text-gray-900">
-                                {field.type === 'select' ? value : String(value)}
+                                {String(value)}
                                 {field.type === 'number' && quantity > 0 && (
                                   <span className="text-gray-500 ml-1">單位</span>
                                 )}
