@@ -1,10 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAllForms, ensureDatabaseInitialized } from '@/lib/db';
 
+// 確保響應頭設置為 JSON
+function setJsonHeaders(res: NextApiResponse) {
+  if (!res.headersSent) {
+    res.setHeader('Content-Type', 'application/json');
+  }
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // 立即設置 JSON 響應頭
+  setJsonHeaders(res);
+
   // 用 try-catch 包裹整個處理函數，確保所有錯誤都返回 JSON
   try {
     // 先檢查 HTTP 方法
