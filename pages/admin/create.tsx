@@ -631,15 +631,38 @@ export default function CreateForm() {
                         <input
                           type="number"
                           value={field.price !== undefined ? field.price : ''}
-                          onChange={(e) =>
-                            updateField(index, {
-                              price: e.target.value ? parseFloat(e.target.value) : undefined,
-                            })
-                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // 只接受正整數
+                            if (value === '') {
+                              updateField(index, { price: undefined });
+                            } else if (value.includes('.') || value.includes(',')) {
+                              alert('價格只能輸入整數，請勿輸入小數點');
+                              // 恢復到前一個有效值
+                              const prevPrice = field.price !== undefined ? field.price : '';
+                              if (prevPrice === '') {
+                                updateField(index, { price: undefined });
+                              } else {
+                                const prevInt = parseInt(String(prevPrice), 10);
+                                if (!isNaN(prevInt) && prevInt >= 0) {
+                                  updateField(index, { price: prevInt });
+                                } else {
+                                  updateField(index, { price: undefined });
+                                }
+                              }
+                            } else {
+                              const intValue = parseInt(value, 10);
+                              if (!isNaN(intValue) && intValue >= 0) {
+                                updateField(index, { price: intValue });
+                              } else if (value === '') {
+                                updateField(index, { price: undefined });
+                              }
+                            }
+                          }}
                           className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                           placeholder="例如：90（留空表示無價格）"
                           min="0"
-                          step="0.01"
+                          step="1"
                           autoComplete="off"
                         />
                         <p className="text-xs text-gray-500 mt-1">
