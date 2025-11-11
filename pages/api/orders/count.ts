@@ -34,7 +34,7 @@ export default async function handler(
       : false;
 
     // 為每個訂單添加排序號
-    const ordersWithNumber = orders.map((order, index) => ({
+    const ordersWithNumber = orders.map((order: any, index: number) => ({
       ...order,
       order_number: index + 1,
     }));

@@ -843,15 +843,16 @@ let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
   if (DATABASE_TYPE === 'supabase') {
     // Supabase 不需要初始化，表結構已在 SQL Editor 中建立
+    // 但需要確保 dbModule 已載入
+    if (!dbModule) {
+      throw new Error('Supabase 模組未載入，請確認環境變數已正確設定');
+    }
     return dbModule.ensureDatabaseInitialized();
   }
   
+  // SQLite 模式
   if (!dbInitialized) {
-    if (DATABASE_TYPE === 'supabase') {
-      await dbModule.initDatabase();
-    } else {
-      await initDatabaseSQLite();
-    }
+    await initDatabaseSQLite();
     dbInitialized = true;
   }
 }
