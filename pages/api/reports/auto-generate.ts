@@ -115,9 +115,13 @@ export default async function handler(
       forms: generatedForms,
       generated: generatedForms.length,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('自動生成報表錯誤:', error);
-    return res.status(500).json({ error: '伺服器錯誤' });
+    return res.status(500).json({ 
+      error: '伺服器錯誤',
+      details: error?.message || '自動生成報表時發生錯誤',
+      hint: '請檢查 Supabase 連線設定和資料庫表結構'
+    });
   }
 }
 

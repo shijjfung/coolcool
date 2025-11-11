@@ -22,32 +22,18 @@
     }
   ],
   "categories": ["business", "productivity"],
-  "screenshots": [],
   "shortcuts": [
     {
       "name": "老闆創表單",
       "short_name": "創表單",
       "description": "快速建立新的團購表單",
-      "url": "/admin/create",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/admin/create"
     },
     {
       "name": "老闆儀表板",
       "short_name": "儀表板",
       "description": "查看所有表單和管理訂單",
-      "url": "/admin",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/admin"
     }
   ]
 }
-
