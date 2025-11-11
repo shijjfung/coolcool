@@ -6,7 +6,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // 立即設置 JSON 響應頭 - 必須在函數開始時設置
-  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   try {
@@ -27,7 +27,7 @@ export default async function handler(
       return res.status(500).json({ 
         error: '資料庫初始化失敗',
         details: error?.message || '無法連接到資料庫',
-        hint: '請檢查 Supabase 環境變數設定'
+        hint: '請檢查 Supabase 環境變數設定：DATABASE_TYPE, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY'
       });
     }
 
@@ -68,7 +68,7 @@ export default async function handler(
     console.error('API 處理函數錯誤:', error);
     // 確保響應頭已設置
     if (!res.headersSent) {
-      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
     }
     return res.status(500).json({ 
       error: '伺服器內部錯誤',

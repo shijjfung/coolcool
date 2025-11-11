@@ -591,4 +591,3 @@ export async function ensureDatabaseInitialized() {
     throw new Error(`資料庫連線檢查失敗：${error.message}`);
   }
 }
-
