@@ -36,8 +36,10 @@ export default async function handler(
     try {
       const { id } = req.query;
 
-      if (!id || isNaN(Number(id))) {
-        return res.status(400).json({ error: '無效的表單 ID' });
+      // 如果 id 是已知的靜態路由名稱，返回 404 讓 Next.js 繼續匹配其他路由
+      const staticRoutes = ['list', 'create', 'trash', 'batch-delete', 'batch-trash', 'token'];
+      if (!id || typeof id !== 'string' || staticRoutes.includes(id) || isNaN(Number(id))) {
+        return res.status(404).json({ error: '表單不存在' });
       }
 
       const form = await getFormById(Number(id));
