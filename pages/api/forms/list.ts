@@ -1,36 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAllForms, ensureDatabaseInitialized } from '@/lib/db';
 
-// 確保響應頭設置為 JSON
-function setJsonHeaders(res: NextApiResponse) {
-  if (!res.headersSent) {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  }
-}
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // 立即設置 JSON 響應頭 - 這是最重要的！
-  setJsonHeaders(res);
+  // 立即設置 JSON 響應頭 - 必須在函數開始時設置
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-  // 用 try-catch 包裹整個處理函數，確保所有錯誤都返回 JSON
   try {
     // 先檢查 HTTP 方法
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed', allowedMethods: ['GET'] });
     }
 
+    // 資料庫初始化
     try {
       await ensureDatabaseInitialized();
     } catch (error: any) {
       console.error('資料庫初始化錯誤:', error);
-      // 確保返回 JSON
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(500).json({ 
         error: '資料庫初始化失敗',
         details: error?.message || '無法連接到資料庫',
@@ -38,29 +27,23 @@ export default async function handler(
       });
     }
 
+    // 處理請求
     try {
       const forms = await getAllForms();
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(200).json(forms);
     } catch (error: any) {
       console.error('取得表單列表錯誤:', error);
-      // 確保返回 JSON
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(500).json({ 
         error: '伺服器錯誤',
         details: error?.message || '取得表單列表時發生錯誤'
       });
     }
   } catch (error: any) {
-    // 最外層錯誤處理，確保所有未預期的錯誤都返回 JSON
+    // 最外層錯誤處理
     console.error('API 處理函數錯誤:', error);
     // 確保響應頭已設置
     if (!res.headersSent) {
-      setJsonHeaders(res);
+      res.setHeader('Content-Type', 'application/json');
     }
     return res.status(500).json({ 
       error: '伺服器內部錯誤',

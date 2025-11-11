@@ -1,22 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createForm, FormField, getFormById, ensureDatabaseInitialized } from '@/lib/db';
 
-// 確保響應頭設置為 JSON
-function setJsonHeaders(res: NextApiResponse) {
-  if (!res.headersSent) {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  }
-}
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // 立即設置 JSON 響應頭 - 這是最重要的！
-  setJsonHeaders(res);
+  // 立即設置 JSON 響應頭 - 必須在函數開始時設置
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-  // 用 try-catch 包裹整個處理函數，確保所有錯誤都返回 JSON
   try {
     // 先檢查 HTTP 方法
     if (req.method !== 'POST') {
@@ -27,14 +19,11 @@ export default async function handler(
       });
     }
 
+    // 資料庫初始化
     try {
       await ensureDatabaseInitialized();
     } catch (error: any) {
       console.error('資料庫初始化錯誤:', error);
-      // 確保返回 JSON
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(500).json({ 
         error: '資料庫初始化失敗',
         details: error?.message || '無法連接到資料庫',
@@ -42,20 +31,15 @@ export default async function handler(
       });
     }
 
+    // 處理請求
     try {
       const { name, fields, deadline, orderDeadline, orderLimit, pickupTime } = req.body;
 
       if (!name || !fields || !deadline) {
-        if (!res.headersSent) {
-          setJsonHeaders(res);
-        }
         return res.status(400).json({ error: '缺少必要欄位' });
       }
 
       if (!Array.isArray(fields) || fields.length === 0) {
-        if (!res.headersSent) {
-          setJsonHeaders(res);
-        }
         return res.status(400).json({ error: '欄位設定不正確' });
       }
 
@@ -63,9 +47,6 @@ export default async function handler(
       if (orderLimit !== undefined && orderLimit !== null) {
         const limit = parseInt(String(orderLimit));
         if (isNaN(limit) || limit < 1) {
-          if (!res.headersSent) {
-            setJsonHeaders(res);
-          }
           return res.status(400).json({ error: '訂單數量限制必須是大於 0 的整數' });
         }
       }
@@ -73,16 +54,9 @@ export default async function handler(
       const formId = await createForm(name, fields as FormField[], deadline, orderDeadline, orderLimit ? parseInt(String(orderLimit)) : undefined, pickupTime);
       const form = await getFormById(formId);
 
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(200).json({ success: true, formId, formToken: form?.form_token });
     } catch (error: any) {
       console.error('建立表單錯誤:', error);
-      // 確保返回 JSON
-      if (!res.headersSent) {
-        setJsonHeaders(res);
-      }
       return res.status(500).json({ 
         error: '伺服器錯誤',
         details: error?.message || '建立表單時發生錯誤',
@@ -90,11 +64,11 @@ export default async function handler(
       });
     }
   } catch (error: any) {
-    // 最外層錯誤處理，確保所有未預期的錯誤都返回 JSON
+    // 最外層錯誤處理
     console.error('API 處理函數錯誤:', error);
     // 確保響應頭已設置
     if (!res.headersSent) {
-      setJsonHeaders(res);
+      res.setHeader('Content-Type', 'application/json');
     }
     return res.status(500).json({ 
       error: '伺服器內部錯誤',
