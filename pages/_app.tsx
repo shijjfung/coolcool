@@ -16,8 +16,8 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="application-name" content="涼涼團購" />
         <meta name="theme-color" content="#3b82f6" />
         
-        {/* Manifest - 優先使用 API 路由，如果失敗則使用靜態檔案 */}
-        <link rel="manifest" href="/api/manifest.json" />
+        {/* Manifest - 使用靜態檔案，避免 401 錯誤 */}
+        <link rel="manifest" href="/manifest.json" />
         
         {/* Apple Touch Icon */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
