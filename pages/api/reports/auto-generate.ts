@@ -11,13 +11,20 @@ import { generateGroupBuyReportCSV, generateReportFileName } from '@/lib/report-
 import fs from 'fs';
 import path from 'path';
 
+// 確保響應頭設置為 JSON
+function setJsonHeaders(res: NextApiResponse) {
+  if (!res.headersSent) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   // 立即設置 JSON 響應頭 - 必須在函數開始時設置
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setJsonHeaders(res);
 
   try {
     // 先檢查 HTTP 方法
@@ -30,6 +37,7 @@ export default async function handler(
       await ensureDatabaseInitialized();
     } catch (error: any) {
       console.error('資料庫初始化錯誤:', error);
+      setJsonHeaders(res);
       return res.status(500).json({ 
         error: '資料庫初始化失敗',
         details: error?.message || '無法連接到資料庫',
@@ -43,6 +51,7 @@ export default async function handler(
       const formsReady = await getFormsReadyForReport();
 
       if (formsReady.length === 0) {
+        setJsonHeaders(res);
         return res.status(200).json({
           message: '沒有需要生成報表的表單',
           forms: [],
@@ -107,6 +116,7 @@ export default async function handler(
         });
       }
 
+      setJsonHeaders(res);
       return res.status(200).json({
         message: `已為 ${generatedForms.length} 個表單生成報表`,
         forms: generatedForms,
@@ -114,6 +124,7 @@ export default async function handler(
       });
     } catch (error: any) {
       console.error('自動生成報表錯誤:', error);
+      setJsonHeaders(res);
       return res.status(500).json({ 
         error: '伺服器錯誤',
         details: error?.message || '自動生成報表時發生錯誤',
@@ -123,10 +134,7 @@ export default async function handler(
   } catch (error: any) {
     // 最外層錯誤處理
     console.error('API 處理函數錯誤:', error);
-    // 確保響應頭已設置
-    if (!res.headersSent) {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    }
+    setJsonHeaders(res);
     return res.status(500).json({ 
       error: '伺服器內部錯誤',
       details: error?.message || '處理請求時發生未預期的錯誤'
