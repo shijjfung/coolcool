@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-import { getFormByToken, createOrder, ensureDatabaseInitialized } from '@/lib/db';
+import { getFormByToken, createOrder, ensureDatabaseInitialized, FormField } from '@/lib/db';
 
 /**
  * API: 解析訊息並自動建立訂單
@@ -78,7 +78,7 @@ export default async function handler(
 
     // 如果有商品欄位，填入第一個商品
     const productField = form.fields.find(
-      f => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+      (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
     );
     if (productField && mergedItems.length > 0) {
       orderData[productField.name] = mergedItems[0].productName;
@@ -86,16 +86,16 @@ export default async function handler(
 
     // 如果有數量欄位，填入總數量
     const quantityField = form.fields.find(
-      f => f.label.includes('數量') || f.label.includes('訂購數量')
+      (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
     );
     if (quantityField) {
-      const totalQuantity = mergedItems.reduce((sum, item) => sum + item.quantity, 0);
+      const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
       orderData[quantityField.name] = totalQuantity;
     }
 
     // 如果有姓名欄位，填入姓名
     const nameField = form.fields.find(
-      f => f.label.includes('姓名') || f.label.includes('名字')
+      (f: FormField) => f.label.includes('姓名') || f.label.includes('名字')
     );
     if (nameField && finalCustomerName) {
       orderData[nameField.name] = finalCustomerName;
@@ -103,7 +103,7 @@ export default async function handler(
 
     // 如果有電話欄位，填入電話
     const phoneField = form.fields.find(
-      f => f.label.includes('電話') || f.label.includes('手機')
+      (f: FormField) => f.label.includes('電話') || f.label.includes('手機')
     );
     if (phoneField && finalCustomerPhone) {
       orderData[phoneField.name] = finalCustomerPhone;
@@ -112,11 +112,11 @@ export default async function handler(
     // 如果有多個商品，將所有商品資訊存入一個欄位
     if (mergedItems.length > 1) {
       const allItemsText = mergedItems
-        .map(item => `${item.productName} x${item.quantity}`)
+        .map((item: any) => `${item.productName} x${item.quantity}`)
         .join('、');
       // 嘗試找到「備註」或「其他」欄位
       const noteField = form.fields.find(
-        f => f.label.includes('備註') || f.label.includes('其他') || f.label.includes('備註')
+        (f: FormField) => f.label.includes('備註') || f.label.includes('其他') || f.label.includes('備註')
       );
       if (noteField) {
         orderData[noteField.name] = `多項商品：${allItemsText}`;

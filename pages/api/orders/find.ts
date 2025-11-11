@@ -37,7 +37,7 @@ export default async function handler(
     const orders = await getOrdersByFormId(form.id);
 
     // 根據姓名和電話查找訂單
-    const matchedOrder = orders.find(order => {
+    const matchedOrder = orders.find((order: any) => {
       const nameMatch = order.customer_name && 
         order.customer_name.toLowerCase().trim() === customerName.toLowerCase().trim();
       const phoneMatch = order.customer_phone && 
