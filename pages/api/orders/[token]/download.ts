@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getOrderByToken, getFormById, ensureDatabaseInitialized } from '@/lib/db';
+import { getOrderByToken, getFormById, ensureDatabaseInitialized, FormField } from '@/lib/db';
 
 export default async function handler(
   req: NextApiRequest,
@@ -73,7 +73,7 @@ function generateOrderDetailHTML(form: any, order: any): string {
   let itemsHTML = '';
   let totalPrice = 0;
 
-  form.fields.forEach((field: any) => {
+  form.fields.forEach((field: FormField) => {
     const value = order.order_data[field.name];
     if (value === null || value === undefined || value === '') return;
 
@@ -235,7 +235,7 @@ function generateOrderDetailHTML(form: any, order: any): string {
         <tr>
           <th>項目</th>
           <th style="text-align: right;">數量/內容</th>
-          ${form.fields.some((f: any) => f.price && f.price > 0) ? `
+          ${form.fields.some((f: FormField) => f.price && f.price > 0) ? `
           <th style="text-align: right;">單價</th>
           <th style="text-align: right;">小計</th>
           ` : ''}
@@ -245,7 +245,7 @@ function generateOrderDetailHTML(form: any, order: any): string {
         ${itemsHTML}
         ${totalPrice > 0 ? `
         <tr class="total-row">
-          <td colspan="${form.fields.some((f: any) => f.price && f.price > 0) ? '3' : '1'}" style="text-align: right; font-size: 1.2em;">
+          <td colspan="${form.fields.some((f: FormField) => f.price && f.price > 0) ? '3' : '1'}" style="text-align: right; font-size: 1.2em;">
             總計價格：
           </td>
           <td style="text-align: right; font-size: 1.3em; color: #059669;">

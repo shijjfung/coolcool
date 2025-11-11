@@ -94,7 +94,7 @@ export default async function handler(
           (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
         );
         if (quantityField) {
-          const totalQuantity = mergedItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
           orderData[quantityField.name] = totalQuantity;
         }
 

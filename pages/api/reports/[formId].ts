@@ -43,7 +43,8 @@ export default async function handler(
                 count: values.length,
               };
             }
-          // 注意：select 類型已移除，不再處理
+            // 注意：select 類型已移除，不再處理
+          }
         });
       }
     }

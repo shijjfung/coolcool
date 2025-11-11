@@ -36,8 +36,8 @@ export default async function handler(
     const tableInfo = await dbAllSync("PRAGMA table_info(forms)") as any[];
     
     // 檢查是否有 deleted 和 deleted_at 欄位
-    const hasDeleted = tableInfo.some(col => col.name === 'deleted');
-    const hasDeletedAt = tableInfo.some(col => col.name === 'deleted_at');
+    const hasDeleted = tableInfo.some((col: any) => col.name === 'deleted');
+    const hasDeletedAt = tableInfo.some((col: any) => col.name === 'deleted_at');
 
     // 取得一個表單來測試
     const testForm = await dbGetSync('SELECT id, name, deleted, deleted_at FROM forms LIMIT 1') as any;

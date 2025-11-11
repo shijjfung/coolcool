@@ -28,7 +28,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   // 方法2：檢查是否包含相同的關鍵字（至少2個字符）
   const keywords1 = extractKeywords(s1);
   const keywords2 = extractKeywords(s2);
-  const commonKeywords = keywords1.filter(k => keywords2.includes(k));
+  const commonKeywords = keywords1.filter((k: string) => keywords2.includes(k));
   const keywordSimilarity = commonKeywords.length > 0 
     ? commonKeywords.length / Math.max(keywords1.length, keywords2.length)
     : 0;
@@ -67,7 +67,7 @@ function extractKeywords(str: string): string[] {
   // 匹配英文單詞（至少2個字符）
   const englishMatches = str.match(/[a-zA-Z]{2,}/g);
   if (englishMatches) {
-    keywords.push(...englishMatches.map(w => w.toLowerCase()));
+    keywords.push(...englishMatches.map((w: string) => w.toLowerCase()));
   }
   return keywords;
 }
@@ -158,7 +158,7 @@ export default async function handler(
 
     // 轉換為數組格式
     const statistics = Object.entries(itemStatistics)
-      .map(([name, quantity]) => ({ name, quantity }));
+      .map(([name, quantity]: [string, number]) => ({ name, quantity }));
 
     // 智能排序：將相似名稱排列在一起
     const sortedStatistics = smartSortItems(statistics);
