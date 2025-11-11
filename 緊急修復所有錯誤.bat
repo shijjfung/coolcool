@@ -13,6 +13,7 @@ git add pages/_app.tsx 2>&1
 git add pages/api/forms/create.ts 2>&1
 git add pages/api/forms/list.ts 2>&1
 git add pages/api/reports/auto-generate.ts 2>&1
+git add public/manifest.json 2>&1
 git add -A 2>&1
 echo.
 
