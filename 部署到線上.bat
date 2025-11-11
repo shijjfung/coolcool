@@ -7,6 +7,19 @@ echo.
 
 cd /d "%~dp0"
 
+echo [步驟 0] 檢查並設定 Git 用戶身份...
+git config user.name >nul 2>&1
+if %errorlevel% neq 0 (
+    echo 設定 Git 用戶名稱...
+    git config --global user.name "monke"
+)
+git config user.email >nul 2>&1
+if %errorlevel% neq 0 (
+    echo 設定 Git 用戶郵箱...
+    git config --global user.email "monke@example.com"
+)
+echo.
+
 echo [步驟 1] 檢查 Git 狀態...
 git status
 echo.
@@ -16,11 +29,7 @@ git add -A
 echo.
 
 echo [步驟 3] 提交更改...
-git commit -m "修改價格輸入欄位為只接受整數
-
-- 將數字欄位的價格輸入改為只接受整數
-- 移除小數點輸入功能
-- 添加輸入驗證和錯誤提示"
+git commit -m "修改價格輸入欄位為只接受整數 - 將數字欄位的價格輸入改為只接受整數，移除小數點輸入功能，添加輸入驗證和錯誤提示"
 echo.
 
 if %errorlevel% neq 0 (
