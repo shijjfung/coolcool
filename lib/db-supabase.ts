@@ -391,7 +391,7 @@ function mapFormFromDb(row: any): Form {
     deadline: row.deadline,
     order_deadline: row.order_deadline || undefined,
     order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
-    pickupTime: row.pickup_time || undefined,
+    pickup_time: row.pickup_time || undefined,
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     deleted: row.deleted || 0,

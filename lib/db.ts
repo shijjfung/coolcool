@@ -191,6 +191,7 @@ export interface Form {
   deadline: string;
   order_deadline?: string; // 收單截止時間
   order_limit?: number; // 訂單數量限制（可選）
+  pickup_time?: string; // 取貨時間（可選）
   report_generated?: number; // 報表是否已生成 (0/1)
   report_generated_at?: string; // 報表生成時間
   deleted?: number; // 是否已刪除到垃圾桶 (0/1)
