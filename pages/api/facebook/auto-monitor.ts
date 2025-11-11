@@ -8,6 +8,7 @@ import {
   getFormsReadyForReport,
   markReportGenerated,
   getOrdersByFormId,
+  FormField,
 } from '@/lib/db';
 
 /**
@@ -107,14 +108,14 @@ export default async function handler(
         const orderData: Record<string, any> = {};
 
         const productField = form.fields.find(
-          f => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+          (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
         );
         if (productField && mergedItems.length > 0) {
           orderData[productField.name] = mergedItems[0].productName;
         }
 
         const quantityField = form.fields.find(
-          f => f.label.includes('數量') || f.label.includes('訂購數量')
+          (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
         );
         if (quantityField) {
           const totalQuantity = mergedItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -159,8 +160,8 @@ export default async function handler(
       }
     }
 
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.filter(r => !r.success).length;
+    const successCount = results.filter((r: any) => r.success).length;
+    const failCount = results.filter((r: any) => !r.success).length;
 
     return res.status(200).json({
       success: true,
