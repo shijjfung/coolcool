@@ -1,0 +1,53 @@
+{
+  "name": "涼涼冰品團購管理系統",
+  "short_name": "涼涼團購",
+  "description": "輕鬆建立表單，收集客戶訂單，自動生成報表",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "老闆創表單",
+      "short_name": "創表單",
+      "description": "快速建立新的團購表單",
+      "url": "/admin/create",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "老闆儀表板",
+      "short_name": "儀表板",
+      "description": "查看所有表單和管理訂單",
+      "url": "/admin",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
+
