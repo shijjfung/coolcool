@@ -13,24 +13,38 @@ if (DATABASE_TYPE === 'supabase') {
 }
 
 // SQLite 實作（保留作為備用）
-import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
+// 只在 SQLite 模式下動態導入，避免在 Vercel (Supabase) 環境下載入
+let sqlite3: any;
+let promisify: any;
+let path: any;
+let fs: any;
+let db: any;
+let dbPath: string;
+let dbRun: (sql: string, params?: any[]) => Promise<any>;
+let dbGet: (sql: string, params?: any[]) => Promise<any>;
+let dbAll: (sql: string, params?: any[]) => Promise<any>;
 
-const dbPath = path.join(process.cwd(), 'orders.db');
+if (DATABASE_TYPE === 'sqlite') {
+  // 動態導入 SQLite 相關模組（避免在 Supabase 模式下載入）
+  sqlite3 = require('sqlite3');
+  promisify = require('util').promisify;
+  path = require('path');
+  fs = require('fs');
 
-// 確保資料庫檔案存在
-if (!fs.existsSync(dbPath)) {
-  fs.writeFileSync(dbPath, '');
+  dbPath = path.join(process.cwd(), 'orders.db');
+
+  // 確保資料庫檔案存在
+  if (!fs.existsSync(dbPath)) {
+    fs.writeFileSync(dbPath, '');
+  }
+
+  db = new sqlite3.Database(dbPath);
+
+  // 將 callback 風格的函數轉換為 Promise
+  dbRun = promisify(db.run.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
+  dbGet = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
+  dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 }
-
-const db = new sqlite3.Database(dbPath);
-
-// 將 callback 風格的函數轉換為 Promise
-const dbRun = promisify(db.run.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
-const dbGet = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
-const dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 
 // 初始化資料庫表
 async function initDatabaseSQLite() {
