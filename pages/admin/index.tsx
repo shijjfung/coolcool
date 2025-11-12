@@ -68,40 +68,102 @@ export default function AdminDashboard() {
   const [lineGroupId, setLineGroupId] = useState('');
   const [sendingLineNotification, setSendingLineNotification] = useState(false);
   
-  // 群組 ID 列表（從 localStorage 載入）
+  // 群組 ID 列表（從資料庫載入，優先於 localStorage）
   interface SavedGroupId {
     id: string;
     name: string;
     groupId: string;
   }
   
-  const [savedGroupIds, setSavedGroupIds] = useState<SavedGroupId[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('line-group-ids');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          return [];
-        }
-      }
-    }
-    return [];
-  });
+  const [savedGroupIds, setSavedGroupIds] = useState<SavedGroupId[]>([]);
+  const [loadingGroupIds, setLoadingGroupIds] = useState(true);
   
   const [selectedGroupIdId, setSelectedGroupIdId] = useState<string>('');
   const [newGroupIdName, setNewGroupIdName] = useState('');
   
-  // 保存群組 ID 列表到 localStorage
-  const saveGroupIds = (groupIds: SavedGroupId[]) => {
-    setSavedGroupIds(groupIds);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('line-group-ids', JSON.stringify(groupIds));
+  // 從資料庫載入群組 ID 列表
+  const loadGroupIds = async () => {
+    try {
+      const res = await fetch('/api/settings/line-group-ids');
+      const data = await res.json();
+      
+      if (res.ok && data.success && data.groupIds && data.groupIds.length > 0) {
+        // 從資料庫載入
+        setSavedGroupIds(data.groupIds);
+        // 同時更新 localStorage 作為備份
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('line-group-ids', JSON.stringify(data.groupIds));
+        }
+      } else {
+        // 如果資料庫沒有，嘗試從 localStorage 載入（作為備份）
+        if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem('line-group-ids');
+          if (saved) {
+            try {
+              const localGroupIds = JSON.parse(saved);
+              if (localGroupIds && localGroupIds.length > 0) {
+                setSavedGroupIds(localGroupIds);
+                // 將 localStorage 的資料同步到資料庫
+                await saveGroupIdsToDatabase(localGroupIds);
+              }
+            } catch (e) {
+              console.error('解析 localStorage 群組 ID 失敗:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('載入群組 ID 列表錯誤:', error);
+      // 如果 API 失敗，嘗試從 localStorage 載入（作為備份）
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('line-group-ids');
+        if (saved) {
+          try {
+            const localGroupIds = JSON.parse(saved);
+            setSavedGroupIds(localGroupIds || []);
+          } catch (e) {
+            console.error('解析 localStorage 群組 ID 失敗:', e);
+          }
+        }
+      }
+    } finally {
+      setLoadingGroupIds(false);
     }
   };
   
+  // 保存群組 ID 列表到資料庫
+  const saveGroupIdsToDatabase = async (groupIds: SavedGroupId[]) => {
+    try {
+      const res = await fetch('/api/settings/line-group-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupIds }),
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        console.error('保存群組 ID 到資料庫失敗:', data.error);
+      }
+    } catch (error) {
+      console.error('保存群組 ID 到資料庫錯誤:', error);
+    }
+  };
+  
+  // 保存群組 ID 列表（同時保存到資料庫和 localStorage）
+  const saveGroupIds = async (groupIds: SavedGroupId[]) => {
+    setSavedGroupIds(groupIds);
+    
+    // 保存到 localStorage（作為備份）
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('line-group-ids', JSON.stringify(groupIds));
+    }
+    
+    // 保存到資料庫（雲端同步）
+    await saveGroupIdsToDatabase(groupIds);
+  };
+  
   // 新增群組 ID
-  const handleSaveGroupId = () => {
+  const handleSaveGroupId = async () => {
     if (!lineGroupId.trim()) {
       alert('請先輸入群組 ID');
       return;
@@ -117,22 +179,22 @@ export default function AdminDashboard() {
     };
     
     const updated = [...savedGroupIds, newGroupId];
-    saveGroupIds(updated);
+    await saveGroupIds(updated);
     setSelectedGroupIdId(newId);
     setNewGroupIdName('');
-    showToast(`已保存群組 ID：${name}`);
+    showToast(`已保存群組 ID：${name}（已同步到雲端）`);
   };
   
   // 刪除群組 ID
-  const handleDeleteGroupId = (id: string) => {
+  const handleDeleteGroupId = async (id: string) => {
     if (confirm('確定要刪除此群組 ID 嗎？')) {
       const updated = savedGroupIds.filter(g => g.id !== id);
-      saveGroupIds(updated);
+      await saveGroupIds(updated);
       if (selectedGroupIdId === id) {
         setSelectedGroupIdId('');
         setLineGroupId('');
       }
-      showToast('已刪除群組 ID');
+      showToast('已刪除群組 ID（已同步到雲端）');
     }
   };
   
@@ -413,9 +475,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!authChecked) return; // 等待驗證完成
-    
+
     fetchForms();
     checkAutoReports();
+    loadGroupIds(); // 載入群組 ID 列表
     // 每 5 分鐘檢查一次
     const interval = setInterval(checkAutoReports, 5 * 60 * 1000);
     return () => clearInterval(interval);
