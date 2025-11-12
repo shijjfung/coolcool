@@ -341,7 +341,12 @@ export default function OrderSuccess() {
             <div className="flex flex-col items-center sm:items-start">
               <button
                 onClick={downloadAsImage}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
+                onTouchStart={(e) => {
+                  // 確保觸摸事件不會被阻止
+                  e.currentTarget.click();
+                }}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors font-medium shadow-md flex items-center justify-center gap-2 min-h-[44px] min-w-[120px] touch-manipulation"
+                style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
               >
                 📥 下載為圖片
               </button>

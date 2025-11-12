@@ -108,38 +108,278 @@ export default function CustomerForm() {
     }
   };
 
-  // 檢測設備類型
+  // 檢測設備類型（精準版）
   const detectDeviceType = () => {
-    const ua = navigator.userAgent.toLowerCase();
+    const ua = navigator.userAgent;
+    const uaLower = ua.toLowerCase();
+    const platform = (navigator as any).platform?.toLowerCase() || '';
+    const maxTouchPoints = (navigator as any).maxTouchPoints || 0;
+    const isTouchDevice = 'ontouchstart' in window || maxTouchPoints > 0;
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    
     let device = '其他';
+    let browser = '';
+    let osVersion = '';
+    let deviceModel = '';
 
-    // 檢測作業系統
-    if (ua.includes('mac os x') || ua.includes('macintosh')) {
-      // 檢測是 Mac 還是 iPad（iPadOS 13+ 會顯示為 Mac）
-      if (ua.includes('ipad') || (ua.includes('mac') && 'ontouchend' in document)) {
-        device = '📱 平板 (iPad)';
-      } else {
-        device = '💻 Mac';
+    // 檢測瀏覽器
+    if (uaLower.includes('edg/')) {
+      browser = 'Edge';
+      const match = ua.match(/edg\/([\d.]+)/i);
+      if (match) browser += ` ${match[1]}`;
+    } else if (uaLower.includes('chrome/') && !uaLower.includes('edg/')) {
+      browser = 'Chrome';
+      const match = ua.match(/chrome\/([\d.]+)/i);
+      if (match) browser += ` ${match[1]}`;
+    } else if (uaLower.includes('safari/') && !uaLower.includes('chrome/')) {
+      browser = 'Safari';
+      const match = ua.match(/version\/([\d.]+)/i);
+      if (match) browser += ` ${match[1]}`;
+    } else if (uaLower.includes('firefox/')) {
+      browser = 'Firefox';
+      const match = ua.match(/firefox\/([\d.]+)/i);
+      if (match) browser += ` ${match[1]}`;
+    } else if (uaLower.includes('opera/') || uaLower.includes('opr/')) {
+      browser = 'Opera';
+      const match = ua.match(/(?:opera|opr)\/([\d.]+)/i);
+      if (match) browser += ` ${match[1]}`;
+    }
+
+    // 1. 優先檢測 iPhone（最明確）
+    if (uaLower.includes('iphone')) {
+      // 嘗試提取 iPhone 型號
+      const modelMatch = ua.match(/iphone\s*os\s*([\d_]+)/i);
+      if (modelMatch) {
+        const iosVersion = modelMatch[1].replace(/_/g, '.');
+        osVersion = `iOS ${iosVersion}`;
       }
-    } else if (ua.includes('windows')) {
-      device = '💻 Windows PC';
-    } else if (ua.includes('linux') && !ua.includes('android')) {
-      device = '💻 Linux PC';
-    } else if (ua.includes('android')) {
-      // Android 設備
-      if (ua.includes('mobile')) {
-        device = '📱 Android 手機';
+      
+      // 嘗試從 User-Agent 中提取更具體的型號資訊
+      if (uaLower.includes('iphone15,2') || uaLower.includes('iphone15,3')) {
+        deviceModel = 'iPhone 14 Pro';
+      } else if (uaLower.includes('iphone15,4') || uaLower.includes('iphone15,5')) {
+        deviceModel = 'iPhone 14 Pro Max';
+      } else if (uaLower.includes('iphone14,2') || uaLower.includes('iphone14,3')) {
+        deviceModel = 'iPhone 13 Pro';
+      } else if (uaLower.includes('iphone14,4') || uaLower.includes('iphone14,5')) {
+        deviceModel = 'iPhone 13 Pro Max';
+      } else if (uaLower.includes('iphone13,1') || uaLower.includes('iphone13,2')) {
+        deviceModel = 'iPhone 12 mini';
+      } else if (uaLower.includes('iphone13,3') || uaLower.includes('iphone13,4')) {
+        deviceModel = 'iPhone 12 Pro';
+      } else if (uaLower.includes('iphone12,1') || uaLower.includes('iphone12,3')) {
+        deviceModel = 'iPhone 11';
+      } else if (uaLower.includes('iphone12,5') || uaLower.includes('iphone12,8')) {
+        deviceModel = 'iPhone 11 Pro';
+      } else if (uaLower.includes('iphone11,2') || uaLower.includes('iphone11,4') || uaLower.includes('iphone11,6') || uaLower.includes('iphone11,8')) {
+        deviceModel = 'iPhone XS/XS Max/XR';
+      } else if (uaLower.includes('iphone10,1') || uaLower.includes('iphone10,2') || uaLower.includes('iphone10,3') || uaLower.includes('iphone10,4') || uaLower.includes('iphone10,5') || uaLower.includes('iphone10,6')) {
+        deviceModel = 'iPhone 8/X';
       } else {
-        device = '📱 Android 平板';
+        deviceModel = 'iPhone';
       }
-    } else if (ua.includes('iphone')) {
-      device = '📱 iPhone';
-    } else if (ua.includes('ipad')) {
-      device = '📱 iPad';
-    } else if (ua.includes('mobile')) {
-      device = '📱 手機';
-    } else {
-      device = '💻 電腦';
+      
+      device = `📱 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
+    }
+    // 2. 檢測 iPad（包括 iPadOS 13+）
+    else if (
+      uaLower.includes('ipad') ||
+      (platform === 'macintel' && maxTouchPoints > 1 && isTouchDevice) ||
+      (uaLower.includes('mac') && maxTouchPoints > 1 && isTouchDevice && screenWidth >= 768)
+    ) {
+      const modelMatch = ua.match(/os\s*([\d_]+)/i);
+      if (modelMatch) {
+        const iosVersion = modelMatch[1].replace(/_/g, '.');
+        osVersion = `iPadOS ${iosVersion}`;
+      }
+      
+      // 嘗試識別 iPad 型號
+      if (uaLower.includes('ipad13,1') || uaLower.includes('ipad13,2')) {
+        deviceModel = 'iPad Air 4';
+      } else if (uaLower.includes('ipad13,16') || uaLower.includes('ipad13,17')) {
+        deviceModel = 'iPad Air 5';
+      } else if (uaLower.includes('ipad14,1') || uaLower.includes('ipad14,2')) {
+        deviceModel = 'iPad mini 6';
+      } else if (uaLower.includes('ipad11,1') || uaLower.includes('ipad11,2')) {
+        deviceModel = 'iPad 10.2"';
+      } else if (uaLower.includes('ipad8,1') || uaLower.includes('ipad8,2') || uaLower.includes('ipad8,3') || uaLower.includes('ipad8,4')) {
+        deviceModel = 'iPad Pro 11"';
+      } else if (uaLower.includes('ipad8,5') || uaLower.includes('ipad8,6') || uaLower.includes('ipad8,7') || uaLower.includes('ipad8,8')) {
+        deviceModel = 'iPad Pro 12.9"';
+      } else {
+        deviceModel = 'iPad';
+      }
+      
+      device = `📱 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
+    }
+    // 3. 檢測 Android 設備
+    else if (uaLower.includes('android')) {
+      // 提取 Android 版本
+      const androidMatch = ua.match(/android\s*([\d.]+)/i);
+      if (androidMatch) {
+        osVersion = `Android ${androidMatch[1]}`;
+      }
+      
+      // 檢測品牌和型號
+      let brand = '';
+      let model = '';
+      
+      // Samsung
+      if (uaLower.includes('samsung') || uaLower.includes('sm-')) {
+        brand = 'Samsung';
+        const smMatch = ua.match(/sm-([a-z0-9]+)/i);
+        if (smMatch) {
+          model = smMatch[1].toUpperCase();
+        } else if (uaLower.includes('galaxy s')) {
+          model = 'Galaxy S';
+          const sMatch = ua.match(/galaxy\s*s(\d+)/i);
+          if (sMatch) model += sMatch[1];
+        } else if (uaLower.includes('galaxy note')) {
+          model = 'Galaxy Note';
+          const noteMatch = ua.match(/galaxy\s*note\s*(\d+)/i);
+          if (noteMatch) model += noteMatch[1];
+        } else if (uaLower.includes('galaxy a')) {
+          model = 'Galaxy A';
+          const aMatch = ua.match(/galaxy\s*a(\d+)/i);
+          if (aMatch) model += aMatch[1];
+        }
+      }
+      // Xiaomi
+      else if (uaLower.includes('xiaomi') || uaLower.includes('redmi') || uaLower.includes('mi\s')) {
+        brand = 'Xiaomi';
+        if (uaLower.includes('redmi')) {
+          model = 'Redmi';
+          const redmiMatch = ua.match(/redmi\s*(\w+)/i);
+          if (redmiMatch) model += ` ${redmiMatch[1]}`;
+        } else if (uaLower.includes('mi\s')) {
+          model = 'Mi';
+          const miMatch = ua.match(/mi\s*(\d+)/i);
+          if (miMatch) model += miMatch[1];
+        }
+      }
+      // Huawei
+      else if (uaLower.includes('huawei') || uaLower.includes('honor')) {
+        brand = uaLower.includes('honor') ? 'Honor' : 'Huawei';
+        const huaweiMatch = ua.match(/(?:huawei|honor)\s*([a-z0-9\s]+)/i);
+        if (huaweiMatch) model = huaweiMatch[1];
+      }
+      // OPPO
+      else if (uaLower.includes('oppo')) {
+        brand = 'OPPO';
+        const oppoMatch = ua.match(/oppo\s*([a-z0-9\s]+)/i);
+        if (oppoMatch) model = oppoMatch[1];
+      }
+      // vivo
+      else if (uaLower.includes('vivo')) {
+        brand = 'vivo';
+        const vivoMatch = ua.match(/vivo\s*([a-z0-9\s]+)/i);
+        if (vivoMatch) model = vivoMatch[1];
+      }
+      // OnePlus
+      else if (uaLower.includes('oneplus')) {
+        brand = 'OnePlus';
+        const oneplusMatch = ua.match(/oneplus\s*([a-z0-9\s]+)/i);
+        if (oneplusMatch) model = oneplusMatch[1];
+      }
+      // Google Pixel
+      else if (uaLower.includes('pixel')) {
+        brand = 'Google';
+        model = 'Pixel';
+        const pixelMatch = ua.match(/pixel\s*(\d+)/i);
+        if (pixelMatch) model += ` ${pixelMatch[1]}`;
+      }
+      // 其他 Android 品牌
+      else {
+        const brandMatch = ua.match(/android.*?;\s*([a-z]+)\s*/i);
+        if (brandMatch) {
+          brand = brandMatch[1].charAt(0).toUpperCase() + brandMatch[1].slice(1);
+        }
+      }
+      
+      // 判斷是手機還是平板
+      const isTablet = !uaLower.includes('mobile') && (screenWidth >= 600 || uaLower.includes('tablet'));
+      
+      if (isTablet) {
+        device = `📱 ${brand || 'Android'} 平板${model ? ` ${model}` : ''}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
+      } else {
+        device = `📱 ${brand || 'Android'} 手機${model ? ` ${model}` : ''}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
+      }
+    }
+    // 4. 檢測 Windows 設備
+    else if (uaLower.includes('windows')) {
+      // 檢測 Windows 版本
+      if (uaLower.includes('windows nt 10.0')) {
+        osVersion = 'Windows 10/11';
+      } else if (uaLower.includes('windows nt 6.3')) {
+        osVersion = 'Windows 8.1';
+      } else if (uaLower.includes('windows nt 6.2')) {
+        osVersion = 'Windows 8';
+      } else if (uaLower.includes('windows nt 6.1')) {
+        osVersion = 'Windows 7';
+      } else if (uaLower.includes('windows nt 6.0')) {
+        osVersion = 'Windows Vista';
+      } else if (uaLower.includes('windows nt 5.1')) {
+        osVersion = 'Windows XP';
+      } else {
+        osVersion = 'Windows';
+      }
+      
+      if (uaLower.includes('phone') || (isTouchDevice && screenWidth < 1024)) {
+        device = `📱 Windows Phone${browser ? ` - ${browser}` : ''}`;
+      } else if (uaLower.includes('tablet') || (isTouchDevice && screenWidth < 1366 && screenWidth >= 768)) {
+        device = `📱 Windows 平板 (${osVersion})${browser ? ` - ${browser}` : ''}`;
+      } else {
+        device = `💻 Windows PC (${osVersion})${browser ? ` - ${browser}` : ''}`;
+      }
+    }
+    // 5. 檢測 macOS（排除 iPad）
+    else if (uaLower.includes('mac os x') || uaLower.includes('macintosh')) {
+      // 再次確認不是 iPad（iPadOS 13+ 會偽裝成 Mac）
+      if (maxTouchPoints > 1 && isTouchDevice && screenWidth >= 768) {
+        device = `📱 iPad (偽裝為 Mac)${browser ? ` - ${browser}` : ''}`;
+      } else {
+        // 提取 macOS 版本
+        const macMatch = ua.match(/mac\s*os\s*x\s*([\d_]+)/i);
+        if (macMatch) {
+          const version = macMatch[1].replace(/_/g, '.');
+          osVersion = `macOS ${version}`;
+        }
+        
+        // 嘗試檢測 Mac 型號
+        if (uaLower.includes('intel')) {
+          deviceModel = 'Mac (Intel)';
+        } else if (uaLower.includes('arm') || uaLower.includes('apple silicon')) {
+          deviceModel = 'Mac (Apple Silicon)';
+        } else {
+          deviceModel = 'Mac';
+        }
+        
+        device = `💻 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
+      }
+    }
+    // 6. 檢測 Linux
+    else if (uaLower.includes('linux') && !uaLower.includes('android')) {
+      if (uaLower.includes('ubuntu')) {
+        osVersion = 'Ubuntu';
+      } else if (uaLower.includes('fedora')) {
+        osVersion = 'Fedora';
+      } else if (uaLower.includes('debian')) {
+        osVersion = 'Debian';
+      } else if (uaLower.includes('arch')) {
+        osVersion = 'Arch Linux';
+      } else {
+        osVersion = 'Linux';
+      }
+      device = `💻 ${osVersion}${browser ? ` - ${browser}` : ''}`;
+    }
+    // 7. 檢測其他移動設備
+    else if (uaLower.includes('mobile') || (isTouchDevice && screenWidth < 768)) {
+      device = `📱 手機${browser ? ` - ${browser}` : ''}`;
+    }
+    // 8. 默認為電腦
+    else {
+      device = `💻 電腦${browser ? ` - ${browser}` : ''}`;
     }
 
     setDeviceType(device);
@@ -821,15 +1061,15 @@ export default function CustomerForm() {
 
           <form onSubmit={handleSubmit}>
             {/* 試算表風格的表單 */}
-            <div className="mb-6 overflow-x-auto">
+            <div className="mb-6 overflow-x-auto -mx-2 sm:mx-0">
               <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
                 <table className="w-full min-w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b border-gray-200">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
                         欄位
                       </th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b border-gray-200">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
                         內容
                       </th>
                     </tr>
@@ -837,17 +1077,17 @@ export default function CustomerForm() {
                   <tbody className="divide-y divide-gray-200">
                     {/* 姓名欄位 */}
                     <tr className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
                         姓名
                         <span className="text-red-500 text-xs ml-1">*</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <input
                           type="text"
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
                           onFocus={handleNameFocus}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                          className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                           placeholder={namePlaceholder}
                           required
                         />
@@ -856,17 +1096,17 @@ export default function CustomerForm() {
                     
                     {/* 電話欄位 */}
                     <tr className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
                         電話
                         <span className="text-red-500 text-xs ml-1">*</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <input
                           type="tel"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
                           onFocus={handlePhoneFocus}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                          className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                           placeholder={phonePlaceholder}
                           required
                         />
@@ -876,10 +1116,10 @@ export default function CustomerForm() {
                     {/* 動態欄位 */}
                     {form.fields.map((field) => (
                       <tr key={field.name} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
                           {field.label}
                           {field.price !== undefined && field.price !== null && (
-                            <span className="text-blue-600 font-semibold ml-1">
+                            <span className="text-blue-600 font-semibold ml-1 text-xs sm:text-sm">
                               ({field.price}元)
                             </span>
                           )}
@@ -887,7 +1127,7 @@ export default function CustomerForm() {
                             <span className="text-red-500 ml-1">*</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3">
                           {field.type === 'costco' && (() => {
                             // 將數據轉換為數組格式（如果還沒有）
                             const items = Array.isArray(order.order_data[field.name])
@@ -925,7 +1165,7 @@ export default function CustomerForm() {
                                         type="text"
                                         value={item.name}
                                         onChange={(e) => updateItem(index, 'name', e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        className="px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                                         placeholder="物品名稱"
                                         required={field.required && index === 0}
                                       />
@@ -947,7 +1187,7 @@ export default function CustomerForm() {
                                             alert('數量只能輸入整數');
                                           }
                                         }}
-                                        className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        className="px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                                         placeholder="數量"
                                         min="0"
                                         step="1"
@@ -1043,14 +1283,14 @@ export default function CustomerForm() {
                                     alert('只能輸入整數，請勿輸入小數點');
                                   }
                                 }}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                                 required={field.required}
                                 min="0"
                                 step="1"
                                 placeholder="0"
                               />
                               {field.price !== undefined && field.price !== null && field.price > 0 && (
-                                <div className="text-sm text-gray-600 min-w-[80px] text-right">
+                                <div className="text-xs sm:text-sm text-gray-600 min-w-[60px] sm:min-w-[80px] text-right">
                                   {(() => {
                                     const quantity = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
                                     const itemTotal = quantity * field.price;
@@ -1070,10 +1310,10 @@ export default function CustomerForm() {
                     {/* 總計價格行 */}
                     {form.fields.some(f => f.price !== undefined && f.price !== null && f.price > 0) && (
                       <tr className="bg-green-50 border-t-2 border-green-200">
-                        <td className="px-4 py-3 text-sm font-bold text-gray-800 bg-green-50" colSpan={2}>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-gray-800 bg-green-50" colSpan={2}>
                           <div className="flex justify-between items-center">
                             <span>總計價格：</span>
-                            <span className="text-green-600 text-lg font-bold">
+                            <span className="text-green-600 text-base sm:text-lg font-bold">
                               {calculateTotal().toFixed(0)} 元
                             </span>
                           </div>

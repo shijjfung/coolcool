@@ -169,8 +169,8 @@ export default async function handler(
       console.warn('取得群組成員時發生錯誤（將使用普通訊息）:', error);
     }
 
-    // 根據客戶名稱匹配群組成員的 userId
-    const mentionees: LineMention[] = [];
+    // 根據客戶名稱匹配群組成員的 userId（用於 @ 標註）
+    const mentionees: Array<{ userId: string; displayName: string }> = [];
     const matchedNames: string[] = [];
 
     for (const customerName of customerNames) {
@@ -183,35 +183,36 @@ export default async function handler(
       );
 
       if (matchedMember) {
-        // 注意：這裡先收集 userId，稍後會建立完整的 LineMention（包含 index 和 length）
-        mentionees.push({ 
-          index: 0, // 稍後會重新計算
-          length: 0, // 稍後會重新計算
-          type: 'user', 
-          userId: matchedMember.userId 
+        mentionees.push({
+          userId: matchedMember.userId,
+          displayName: matchedMember.displayName,
         });
+        matchedNames.push(matchedMember.displayName);
+      } else {
+        // 如果沒有匹配到，使用資料庫中的客戶名稱
         matchedNames.push(customerName);
       }
     }
 
-    // 構建訊息
-    // 注意：LINE Messaging API 的 push message 可能不支援 mention 功能
-    // mention 主要用於 reply message
-    // 我們改為在訊息中直接提及客戶名稱，並嘗試使用 @ 符號
+    // 構建訊息並嘗試使用 mention 功能
+    // 注意：根據 LINE API 文件，mention 功能可能只在 reply message 中支援
+    // 但我們仍然嘗試在 push message 中使用，看看是否有效
+    let finalMessage: string;
+    let mentioneesWithIndex: LineMention[] = [];
     
-    // 如果有匹配到的成員，嘗試使用 @ 功能
     if (mentionees.length > 0) {
-      // 構建包含 @ 符號的訊息
+      // 嘗試使用真正的 @ 標註功能
+      // 重要：訊息文字中必須包含 @ 符號，且 mention 的 index 和 length 必須對應文字中的位置
       const mentionTexts: string[] = [];
-      const mentioneesWithIndex: LineMention[] = [];
       let currentIndex = 0;
 
-      for (let i = 0; i < matchedNames.length; i++) {
-        const name = matchedNames[i];
-        const mentionText = `@${name}`;
+      for (let i = 0; i < mentionees.length; i++) {
+        const displayName = mentionees[i].displayName;
+        // 在訊息文字中使用 @ 符號加上顯示名稱
+        const mentionText = `@${displayName}`;
         mentionTexts.push(mentionText);
         
-        // 計算 mention 的位置
+        // 計算 mention 的位置（在最終訊息中的位置，從 0 開始）
         const mentionStart = currentIndex;
         const mentionLength = mentionText.length;
         
@@ -223,17 +224,34 @@ export default async function handler(
         });
         
         currentIndex += mentionLength;
-        if (i < matchedNames.length - 1) {
-          currentIndex += 2; // 加上「、」的長度
+        if (i < mentionees.length - 1) {
+          currentIndex += 2; // 加上「、」的長度（2 個字元）
         }
       }
 
       const mentionedNames = mentionTexts.join('、');
-      const finalMessage = `${mentionedNames}\n${message}`;
+      finalMessage = `${mentionedNames}\n\n${message}`;
+      
+      console.log('嘗試使用 mention 功能:', {
+        finalMessage,
+        mentioneesCount: mentioneesWithIndex.length,
+        mentionees: mentioneesWithIndex.map(m => ({ userId: m.userId, index: m.index, length: m.length })),
+      });
+    } else {
+      // 如果沒有匹配到成員，使用 @ 符號加上客戶名稱（視覺標註）
+      const allNames = customerNames.map((name: string) => `@${name}`).join('、');
+      finalMessage = `${allNames}\n\n${message}`;
+    }
 
-      // 嘗試使用 mention 功能發送（注意：push message 可能不支援）
-      try {
-        const pushResponse = await fetch('https://api.line.me/v2/bot/message/push', {
+    // 發送訊息（嘗試使用 mention 功能）
+    {
+
+      // 嘗試使用 mention 功能發送（如果有的話）
+      let pushResponse: Response;
+      
+      if (mentioneesWithIndex.length > 0) {
+        // 使用 mention 功能
+        pushResponse = await fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -252,31 +270,46 @@ export default async function handler(
             ],
           } as LinePushMessage),
         });
-
-        if (pushResponse.ok) {
+        
+        // 檢查 mention 是否成功
+        if (!pushResponse.ok) {
+          const errorText = await pushResponse.text();
+          const errorData = await pushResponse.json().catch(() => ({ message: errorText }));
+          console.error('使用 mention 功能失敗:', {
+            status: pushResponse.status,
+            statusText: pushResponse.statusText,
+            error: errorData,
+            requestBody: {
+              to: groupId,
+              messages: [{
+                type: 'text',
+                text: finalMessage.substring(0, 50) + '...',
+                mention: { mentionees: mentioneesWithIndex.length },
+              }],
+            },
+          });
+          // 繼續使用普通訊息發送
+        } else {
+          // mention 成功（或至少 API 接受了請求）
+          const responseData = await pushResponse.json().catch(() => ({}));
+          console.log('mention 功能請求成功:', responseData);
+          
           return res.status(200).json({ 
             success: true,
             message: `已成功 @ ${matchedNames.length} 位客戶並發送訊息`,
             matchedNames,
             unmatchedNames: customerNames.filter((name: string) => !matchedNames.includes(name)),
+            note: '已使用 @ 標註功能，請檢查客戶是否收到被提及的通知',
+            debug: {
+              mentioneesCount: mentioneesWithIndex.length,
+              apiResponse: responseData,
+            },
           });
-        } else {
-          // 如果 mention 失敗，改用普通訊息
-          const errorText = await pushResponse.text();
-          console.warn('使用 mention 功能失敗，改用普通訊息:', errorText);
         }
-      } catch (error) {
-        console.warn('使用 mention 功能時發生錯誤，改用普通訊息:', error);
       }
-    }
-
-    // 如果沒有匹配到成員，或 mention 功能失敗，使用普通訊息
-    {
-      // 如果沒有匹配到成員，直接發送訊息並在開頭提及客戶名稱
-      const allNames = customerNames.join('、');
-      const finalMessage = `${allNames}\n${message}`;
-
-      const pushResponse = await fetch('https://api.line.me/v2/bot/message/push', {
+      
+      // 如果沒有 mention 或 mention 失敗，使用普通訊息
+      pushResponse = await fetch('https://api.line.me/v2/bot/message/push', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -304,8 +337,10 @@ export default async function handler(
 
       return res.status(200).json({ 
         success: true,
-        message: '訊息已發送（無法匹配群組成員，已改為直接提及客戶名稱）',
+        message: `訊息已發送給 ${customerNames.length} 位客戶${matchedNames.length > 0 ? `（已匹配 ${matchedNames.length} 位群組成員）` : '（無法匹配群組成員，已改為直接提及客戶名稱）'}`,
         customerNames,
+        matchedNames: matchedNames.length > 0 ? matchedNames : [],
+        note: '注意：LINE Bot 在群組中無法使用真正的 @ 標註功能（LINE API 限制），已使用 @ 符號標註客戶名稱讓訊息更明顯',
       });
     }
   } catch (error: any) {

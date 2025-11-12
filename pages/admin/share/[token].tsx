@@ -60,7 +60,7 @@ export default function ShareForm() {
         document.execCommand('copy');
         document.body.removeChild(textArea);
       }
-
+      
       setCopied(true);
       setCopiedTarget(target);
       setTimeout(() => {
@@ -143,32 +143,32 @@ export default function ShareForm() {
 
             <div className="mb-6 sm:mb-8 grid gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
                   Facebook 分享網址（自動帶上來源識別）
-                </label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
                     value={facebookUrl}
-                    readOnly
-                    onClick={(e) => {
-                      (e.target as HTMLInputElement).select();
+                  readOnly
+                  onClick={(e) => {
+                    (e.target as HTMLInputElement).select();
                       copyUrl(facebookUrl, 'facebook');
-                    }}
-                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <button
+                  }}
+                  className="flex-1 px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                />
+                <button
                     onClick={() => copyUrl(facebookUrl, 'facebook')}
-                    className={`px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg transition-colors text-sm sm:text-base font-medium touch-manipulation min-h-[44px] ${
+                  className={`px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg transition-colors text-sm sm:text-base font-medium touch-manipulation min-h-[44px] ${
                       copied && copiedTarget === 'facebook'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
-                    }`}
-                  >
+                      ? 'bg-green-600 text-white'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                  }`}
+                >
                     {copied && copiedTarget === 'facebook' ? '✓ 已複製' : '📋 複製連結'}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2 text-left">
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2 text-left">
                   🔗 建議貼在 Facebook 團購貼文，客戶填單完成後可返回貼文留言。
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function ShareForm() {
                 </div>
                 <p className="text-xs text-gray-500 mt-2 text-left">
                   🔗 建議貼在 LINE 群組公告或聊天室，客戶填單完成後可快速回到群組留言。
-                </p>
+              </p>
               </div>
             </div>
 
