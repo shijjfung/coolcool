@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
 
@@ -33,8 +34,10 @@ interface ButtonConfig {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [checkingReports, setCheckingReports] = useState(false);
   const [selectedForms, setSelectedForms] = useState<Set<number>>(new Set());
@@ -395,13 +398,28 @@ export default function AdminDashboard() {
     }
   }, [contextMenu, buttonContextMenu, editingButtonId, editingButtonLabel, editingButtonFontSize, buttons]);
 
+  // 驗證管理員身份
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const authStatus = sessionStorage.getItem('admin_authenticated');
+      if (authStatus !== 'true') {
+        // 未驗證，導向首頁
+        router.push('/');
+        return;
+      }
+      setAuthChecked(true);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!authChecked) return; // 等待驗證完成
+    
     fetchForms();
     checkAutoReports();
     // 每 5 分鐘檢查一次
     const interval = setInterval(checkAutoReports, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [authChecked]);
 
   const fetchForms = async () => {
     try {
@@ -717,6 +735,15 @@ export default function AdminDashboard() {
       setSendingLineNotification(false);
     }
   };
+
+  // 如果尚未驗證，顯示載入中
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center py-12">驗證中...</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

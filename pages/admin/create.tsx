@@ -14,6 +14,19 @@ export default function CreateForm() {
   const router = useRouter();
   const { id } = router.query;
   const isEditMode = !!id;
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // 驗證管理員身份
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const authStatus = sessionStorage.getItem('admin_authenticated');
+      if (authStatus !== 'true') {
+        router.push('/');
+        return;
+      }
+      setAuthChecked(true);
+    }
+  }, [router]);
   const [formName, setFormName] = useState('');
   const [deadlineDate, setDeadlineDate] = useState<string>(''); // 截止日期
   const [deadlineTime, setDeadlineTime] = useState<string>(''); // 截止時間
@@ -302,6 +315,15 @@ export default function CreateForm() {
       setSaving(false);
     }
   };
+
+  // 如果尚未驗證，顯示載入中
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center py-12">驗證中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 sm:py-8">

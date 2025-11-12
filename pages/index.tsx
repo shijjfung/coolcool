@@ -1,7 +1,52 @@
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 
+const ADMIN_PASSWORD = '690921';
+
 export default function Home() {
+  const router = useRouter();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // 檢查是否已經驗證過
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const authStatus = sessionStorage.getItem('admin_authenticated');
+      if (authStatus === 'true') {
+        setIsAuthenticated(true);
+      }
+    }
+  }, []);
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (password === ADMIN_PASSWORD) {
+      // 保存驗證狀態到 sessionStorage
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('admin_authenticated', 'true');
+      }
+      setIsAuthenticated(true);
+      // 導向管理頁面
+      router.push('/admin');
+    } else {
+      setError('密碼錯誤，請重新輸入');
+      setPassword('');
+    }
+  };
+
+  const handleEnterAdmin = () => {
+    if (!isAuthenticated) {
+      // 如果未驗證，顯示錯誤提示
+      setError('請先輸入正確的密碼');
+      return;
+    }
+    router.push('/admin');
+  };
+
   return (
     <>
       <Head>
@@ -47,17 +92,57 @@ export default function Home() {
             </p>
 
             <div className="flex justify-center mt-16">
-              <Link href="/admin">
-                <div className="bg-white rounded-lg shadow-lg p-8 hover:shadow-xl transition-shadow cursor-pointer">
-                  <div className="text-6xl mb-4">👔</div>
-                  <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-                    賺錢開單囉
-                  </h2>
-                  <p className="text-gray-600">
-                    建立表單、查看報表、管理訂單
-                  </p>
-                </div>
-              </Link>
+              <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+                <div className="text-6xl mb-4">👔</div>
+                <h2 className="text-2xl font-semibold text-gray-800 mb-4">
+                  賺錢開單囉
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  建立表單、查看報表、管理訂單
+                </p>
+
+                {/* 密碼輸入欄位 */}
+                <form onSubmit={handlePasswordSubmit} className="mb-4">
+                  <div className="mb-4">
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                      請輸入管理密碼
+                    </label>
+                    <input
+                      type="password"
+                      id="password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setError('');
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg"
+                      placeholder="輸入密碼"
+                      required
+                    />
+                  </div>
+                  {error && (
+                    <div className="mb-4 text-red-600 text-sm">
+                      {error}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    驗證並進入
+                  </button>
+                </form>
+
+                {/* 如果已驗證，顯示直接進入按鈕 */}
+                {isAuthenticated && (
+                  <button
+                    onClick={handleEnterAdmin}
+                    className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium mt-2"
+                  >
+                    ✓ 已驗證，直接進入
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

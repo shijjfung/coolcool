@@ -1,15 +1,31 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [folderPath, setFolderPath] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // 驗證管理員身份
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const authStatus = sessionStorage.getItem('admin_authenticated');
+      if (authStatus !== 'true') {
+        router.push('/');
+        return;
+      }
+      setAuthChecked(true);
+    }
+  }, [router]);
 
   useEffect(() => {
+    if (!authChecked) return;
     fetchSettings();
-  }, []);
+  }, [authChecked]);
 
   const fetchSettings = async () => {
     try {
@@ -58,6 +74,15 @@ export default function SettingsPage() {
     // 所以提供說明文字
     alert('請手動輸入資料夾的完整路徑，例如：\nC:\\Users\\您的名字\\Documents\\報表\n\n或留空表示不自動保存（僅在網頁上下載）');
   };
+
+  // 如果尚未驗證，顯示載入中
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center py-12">驗證中...</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

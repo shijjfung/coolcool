@@ -221,14 +221,49 @@ export default function OrderSuccess() {
         height: printRef.current.scrollHeight,
       });
 
-      // 轉換為圖片並下載
-      const link = document.createElement('a');
       const dateStr = new Date().toISOString().split('T')[0];
-      link.download = `訂單明細_${order?.order_token.substring(0, 8)}_${dateStr}.png`;
-      link.href = canvas.toDataURL('image/png');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const fileName = `訂單明細_${order?.order_token.substring(0, 8)}_${dateStr}.png`;
+
+      // 檢測是否為移動設備
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // 移動設備：使用 Blob 和分享 API 或新窗口打開
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            alert('生成圖片失敗，請稍後再試');
+            return;
+          }
+
+          // 嘗試使用 Web Share API（如果支持）
+          if (navigator.share && navigator.canShare) {
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              navigator.share({
+                files: [file],
+                title: '訂單明細',
+                text: '我的訂單明細'
+              }).catch((err) => {
+                // 如果分享失敗，使用備用方法
+                console.log('分享失敗，使用備用方法:', err);
+                openImageInNewWindow(blob);
+              });
+              return;
+            }
+          }
+
+          // 備用方法：在新窗口中打開圖片，讓用戶長按保存
+          openImageInNewWindow(blob);
+        }, 'image/png');
+      } else {
+        // PC：使用傳統下載方式
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     } catch (error: any) {
       console.error('下載圖片錯誤:', error);
       if (error.message && error.message.includes('html2canvas')) {
@@ -236,6 +271,34 @@ export default function OrderSuccess() {
       } else {
         alert('下載圖片失敗：' + (error.message || '未知錯誤'));
       }
+    }
+  };
+
+  // 在移動設備上打開圖片（讓用戶長按保存）
+  const openImageInNewWindow = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const newWindow = window.open(url, '_blank');
+    
+    if (!newWindow) {
+      // 如果彈出窗口被阻止，顯示提示
+      alert('請允許彈出窗口，或長按下方按鈕選擇「在新標籤頁中打開」');
+      
+      // 創建一個臨時的下載按鈕
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+    } else {
+      // 清理 URL（延遲執行，確保圖片已載入）
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
     }
   };
 
