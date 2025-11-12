@@ -13,6 +13,8 @@ interface Form {
   deleted_at?: string;
   created_at: string;
   form_token: string;
+  facebook_comment_url?: string;
+  line_comment_url?: string;
 }
 
 export default function Trash() {

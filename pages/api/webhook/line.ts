@@ -65,6 +65,32 @@ export default async function handler(
 ) {
   await ensureDatabaseInitialized();
 
+  // 如果是 GET 請求，返回 Webhook 設定資訊（用於測試）
+  if (req.method === 'GET') {
+    const channelSecret = process.env.LINE_CHANNEL_SECRET;
+    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const formToken = process.env.LINE_FORM_TOKEN;
+
+    return res.status(200).json({
+      message: 'LINE Webhook API 已設定',
+      note: '此端點只接受 POST 請求（由 LINE 伺服器發送）',
+      status: {
+        webhookUrl: 'https://coolcool-ten.vercel.app/api/webhook/line',
+        channelSecret: channelSecret ? '✅ 已設定' : '❌ 未設定',
+        channelAccessToken: channelAccessToken ? '✅ 已設定' : '❌ 未設定',
+        formToken: formToken || '❌ 未設定（選填）',
+      },
+      instructions: [
+        '1. 在 LINE Developers Console 中設定 Webhook URL',
+        '2. 確保 "Use webhook" 已啟用',
+        '3. LINE 伺服器會自動發送 POST 請求到此端點',
+        '4. 您無法用瀏覽器直接測試（瀏覽器使用 GET 請求）',
+        '5. 要測試 Webhook，請在 LINE 中發送訊息給 Bot'
+      ],
+      testMethod: '在 LINE 中發送訊息給 Bot 來測試 Webhook 功能'
+    });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -91,6 +117,43 @@ export default async function handler(
 
       const messageText = event.message.text;
       if (!messageText) continue;
+
+      // 優先處理群組 ID 查詢指令（必須在訂單處理之前）
+      // 檢查訊息是否為群組 ID 查詢指令（支援多種格式）
+      const trimmedMessage = messageText.trim();
+      // 匹配：群組ID、群組 ID、groupId、group id、群組id 等（不區分大小寫，允許空格）
+      const isGroupIdQuery = /^(群組[\s_]?id|group[\s_]?id)$/i.test(trimmedMessage);
+      
+      if (isGroupIdQuery) {
+        const groupId = event.source.groupId;
+        const sourceType = event.source.type;
+        
+        console.log('群組 ID 查詢請求:', { messageText, trimmedMessage, groupId, sourceType });
+        
+        if (groupId) {
+          await replyMessage(
+            event.replyToken!,
+            `📋 群組 ID：\n${groupId}\n\n💡 提示：複製此 ID 並貼到管理後台的「LINE 群組 ID」欄位中`,
+            channelAccessToken
+          );
+          continue; // 重要：處理完群組 ID 查詢後，不再處理訂單邏輯
+        } else if (sourceType === 'user') {
+          await replyMessage(
+            event.replyToken!,
+            '⚠️ 此訊息不是在群組中發送的。\n\n請在群組中發送「群組ID」來取得群組 ID。',
+            channelAccessToken
+          );
+          continue; // 重要：處理完後不再繼續
+        } else {
+          // 如果在群組中但沒有 groupId（不應該發生，但以防萬一）
+          await replyMessage(
+            event.replyToken!,
+            '⚠️ 無法取得群組 ID。請確認 Bot 已正確加入群組。',
+            channelAccessToken
+          );
+          continue;
+        }
+      }
 
       // 取得表單（如果沒有設定預設表單，需要從訊息中提取）
       let targetFormToken = formToken;
@@ -182,7 +245,11 @@ export default async function handler(
         form.id,
         orderData,
         parsed.customerName,
-        parsed.customerPhone
+        parsed.customerPhone,
+        undefined,
+        undefined,
+        'line',
+        form
       );
 
       // 回覆確認訊息

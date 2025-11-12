@@ -24,6 +24,8 @@ export default function CreateForm() {
   const [pickupStartTime, setPickupStartTime] = useState<string>(''); // 取貨開始時間
   const [pickupEndTime, setPickupEndTime] = useState<string>(''); // 取貨結束時間
   const [pickupTimeMode, setPickupTimeMode] = useState<'single' | 'range'>('single'); // 單一時間或時間範圍
+  const [facebookCommentUrl, setFacebookCommentUrl] = useState('');
+  const [lineCommentUrl, setLineCommentUrl] = useState('');
   // 表單頁面會自動顯示「姓名」和「電話」欄位，所以這裡不需要預設欄位
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
@@ -78,6 +80,8 @@ export default function CreateForm() {
           }
         }
         setFields(form.fields || []);
+        setFacebookCommentUrl(form.facebook_comment_url || '');
+        setLineCommentUrl(form.line_comment_url || '');
       } else {
         alert('載入表單失敗');
         router.push('/admin');
@@ -208,6 +212,8 @@ export default function CreateForm() {
                 return undefined;
               }
             })(), // 取貨時間（可選）
+            facebookCommentUrl: facebookCommentUrl.trim() || undefined,
+            lineCommentUrl: lineCommentUrl.trim() || undefined,
           }),
         });
 
@@ -248,6 +254,8 @@ export default function CreateForm() {
                 return undefined;
               }
             })(), // 取貨時間（可選）
+            facebookCommentUrl: facebookCommentUrl.trim() || undefined,
+            lineCommentUrl: lineCommentUrl.trim() || undefined,
           }),
         });
 
@@ -553,6 +561,46 @@ export default function CreateForm() {
             <p className="text-xs text-gray-500 mt-1">
               💡 填寫取貨時間後，客戶下單成功後可看到此資訊
             </p>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-base font-bold text-gray-700 mb-2">
+              社群留言連結（選填）
+            </label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Facebook 貼文連結
+                </label>
+                <input
+                  type="url"
+                  value={facebookCommentUrl}
+                  onChange={(e) => setFacebookCommentUrl(e.target.value)}
+                  className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder="貼上本次團購的 Facebook 貼文網址"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 客戶下單完成後會看到「臉書留言 +1」按鈕，導向這個貼文。
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  LINE 群組連結
+                </label>
+                <input
+                  type="url"
+                  value={lineCommentUrl}
+                  onChange={(e) => setLineCommentUrl(e.target.value)}
+                  className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder="貼上 LINE 群組或官方帳號連結"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 客戶下單完成後會看到「LINE 留言 +1」按鈕，導向這個群組。
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="mb-6">

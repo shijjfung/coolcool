@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
@@ -19,6 +19,8 @@ interface Form {
   pickup_time?: string;
   created_at: string;
   form_token: string;
+  facebook_comment_url?: string;
+  line_comment_url?: string;
 }
 
 interface Order {
@@ -38,12 +40,119 @@ export default function OrderSuccess() {
   const [form, setForm] = useState<Form | null>(null);
   const [loading, setLoading] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
+  const [source, setSource] = useState<string | undefined>(undefined);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [downloadHintShown, setDownloadHintShown] = useState(false);
 
   useEffect(() => {
     if (token && typeof token === 'string') {
       fetchOrderData();
     }
-  }, [token]);
+    if (router.isReady) {
+      const sourceParam = Array.isArray(router.query.source) ? router.query.source[0] : router.query.source;
+      if (sourceParam && typeof sourceParam === 'string') {
+        setSource(sourceParam);
+      }
+    }
+  }, [token, router]);
+
+  const commentMessage = useMemo(() => {
+    if (!form || !order) return '';
+
+    const lines: string[] = [];
+
+    form.fields.forEach((field) => {
+      const value = order.order_data[field.name];
+
+      if (field.type === 'number') {
+        const quantity = Number(value);
+        if (!Number.isNaN(quantity) && quantity > 0) {
+          lines.push(`${field.label}+${quantity}`);
+        }
+      } else if (field.type === 'costco') {
+        if (Array.isArray(value)) {
+          value.forEach((item: any) => {
+            if (!item) return;
+            const name = typeof item.name === 'string' ? item.name.trim() : '';
+            const qtyRaw = item.quantity ?? '';
+            const qtyNum = Number(qtyRaw);
+            const quantity = !qtyRaw && qtyRaw !== 0 ? 1 : Number.isNaN(qtyNum) ? 1 : qtyNum;
+            if (name && quantity > 0) {
+              lines.push(`${name}+${quantity}`);
+            }
+          });
+        }
+      }
+    });
+
+    return lines.join('，');
+  }, [form, order]);
+
+  const copyToClipboard = async (text: string) => {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      console.error('navigator.clipboard 寫入失敗', err);
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return true;
+    } catch (err) {
+      console.error('使用備援複製方式失敗', err);
+      return false;
+    }
+  };
+
+  const showCopyToast = (platform: 'facebook' | 'line') => {
+    const label = platform === 'facebook' ? 'Facebook' : 'LINE';
+    setCopyToast(`已幫你把內容打好了，請到 ${label} 貼上並送出即可！`);
+    setTimeout(() => setCopyToast(null), 3000);
+  };
+
+  useEffect(() => {
+    if (!downloadHintShown && !loading && order && form) {
+      setCopyToast('下載圖片出示取貨更快速');
+      setDownloadHintShown(true);
+      setTimeout(() => setCopyToast(null), 3000);
+    }
+  }, [downloadHintShown, loading, order, form]);
+
+  const handleShareClick = async (platform: 'facebook' | 'line') => {
+    if (!form) return;
+    const targetUrl = platform === 'facebook' ? form.facebook_comment_url : form.line_comment_url;
+    if (!targetUrl) return;
+
+    let copied = false;
+    if (commentMessage) {
+      copied = await copyToClipboard(commentMessage);
+      if (copied) {
+        showCopyToast(platform);
+      } else {
+        alert(`複製留言內容失敗，請手動複製：\n${commentMessage}`);
+      }
+    }
+
+    if (!commentMessage && !copied) {
+      alert('目前沒有可複製的購買項目，請自行留言補充。');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const fetchOrderData = async () => {
     try {
@@ -180,6 +289,26 @@ export default function OrderSuccess() {
       <Head>
         <title>訂單確認 - {form.name}</title>
         <style>{`
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translate3d(-50%, -10px, 0);
+            }
+            to {
+              opacity: 1;
+              transform: translate3d(-50%, 0, 0);
+            }
+          }
+
+          @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+          }
+
+          .animate-fade-in-down {
+            animation: fadeInDown 0.3s ease-out;
+          }
+
           @media print {
             body * {
               visibility: hidden;
@@ -209,12 +338,14 @@ export default function OrderSuccess() {
             >
               🖨️ 列印訂單
             </button>
-            <button
-              onClick={downloadAsImage}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
-            >
-              📥 下載為圖片
-            </button>
+            <div className="flex flex-col items-center sm:items-start">
+              <button
+                onClick={downloadAsImage}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
+              >
+                📥 下載為圖片
+              </button>
+            </div>
             <button
               onClick={() => router.push(`/form/${form.form_token}`)}
               className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
@@ -222,6 +353,69 @@ export default function OrderSuccess() {
               ← 返回表單
             </button>
           </div>
+
+          {copyToast && (
+            <div className="no-print fixed left-1/2 top-6 z-50 -translate-x-1/2 animate-fade-in-down">
+              <div className="bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm sm:text-base">
+                {copyToast}
+              </div>
+            </div>
+          )}
+
+          {/* 社群留言引導（不列印） */}
+          {(form.facebook_comment_url || form.line_comment_url) && (
+            <div className="no-print mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-5">
+              <h2 className="text-base sm:text-lg font-semibold text-blue-800 mb-3">
+                ✨ 幫闆娘衝人氣！完成下單後也別忘記留言打卡
+              </h2>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {form.facebook_comment_url && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleShareClick('facebook');
+                    }}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm sm:text-base font-medium min-h-[44px] transition-colors shadow ${
+                      source === 'facebook'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    <span>👍 臉書留言 +1</span>
+                    <span
+                      className={`text-xs sm:text-sm font-normal ${
+                        source === 'facebook' ? 'text-blue-100 sm:text-blue-200' : 'text-blue-500'
+                      }`}
+                    >
+                      幫闆娘衝人氣
+                    </span>
+                  </button>
+                )}
+                {form.line_comment_url && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleShareClick('line');
+                    }}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm sm:text-base font-medium min-h-[44px] transition-colors shadow ${
+                      source === 'line'
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-white text-green-700 border border-green-300 hover:bg-green-100'
+                    }`}
+                  >
+                    <span>💬 LINE 留言 +1</span>
+                    <span
+                      className={`text-xs sm:text-sm font-normal ${
+                        source === 'line' ? 'text-green-100 sm:text-green-200' : 'text-green-500'
+                      }`}
+                    >
+                      幫闆娘衝人氣
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 訂單明細內容（可列印） */}
           <div ref={printRef} className="print-content bg-white rounded-lg shadow-lg p-6 sm:p-8">

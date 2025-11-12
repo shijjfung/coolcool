@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Head from 'next/head';
 
 interface Form {
   id: number;
@@ -11,6 +12,16 @@ interface Form {
   report_generated_at?: string;
   created_at: string;
   form_token: string;
+  facebook_comment_url?: string;
+  line_comment_url?: string;
+}
+
+interface OrderSummary {
+  id: number;
+  customer_name?: string;
+  customer_phone?: string;
+  order_source?: string;
+  items_summary?: Array<{ name: string; quantity: number }>;
 }
 
 interface ButtonConfig {
@@ -38,6 +49,98 @@ export default function AdminDashboard() {
   const [editingButtonId, setEditingButtonId] = useState<string | null>(null);
   const [editingButtonLabel, setEditingButtonLabel] = useState('');
   const [editingButtonFontSize, setEditingButtonFontSize] = useState(12); // 使用數字（px）
+  const [ordersCache, setOrdersCache] = useState<Record<number, OrderSummary[]>>({});
+  const [notificationPreview, setNotificationPreview] = useState<
+    { formId: number; formName: string; type: 'facebook' | 'line'; message: string }
+  | null>(null);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [generatingNotification, setGeneratingNotification] = useState<number | null>(null);
+  const [lineNotificationModal, setLineNotificationModal] = useState<{
+    formId: number;
+    formName: string;
+    customerNames: string[];
+  } | null>(null);
+  const [lineNotificationMessage, setLineNotificationMessage] = useState('');
+  const [lineGroupId, setLineGroupId] = useState('');
+  const [sendingLineNotification, setSendingLineNotification] = useState(false);
+  
+  // 群組 ID 列表（從 localStorage 載入）
+  interface SavedGroupId {
+    id: string;
+    name: string;
+    groupId: string;
+  }
+  
+  const [savedGroupIds, setSavedGroupIds] = useState<SavedGroupId[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('line-group-ids');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          return [];
+        }
+      }
+    }
+    return [];
+  });
+  
+  const [selectedGroupIdId, setSelectedGroupIdId] = useState<string>('');
+  const [newGroupIdName, setNewGroupIdName] = useState('');
+  
+  // 保存群組 ID 列表到 localStorage
+  const saveGroupIds = (groupIds: SavedGroupId[]) => {
+    setSavedGroupIds(groupIds);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('line-group-ids', JSON.stringify(groupIds));
+    }
+  };
+  
+  // 新增群組 ID
+  const handleSaveGroupId = () => {
+    if (!lineGroupId.trim()) {
+      alert('請先輸入群組 ID');
+      return;
+    }
+    
+    const name = newGroupIdName.trim() || `群組 ${savedGroupIds.length + 1}`;
+    const newId = Date.now().toString();
+    
+    const newGroupId: SavedGroupId = {
+      id: newId,
+      name,
+      groupId: lineGroupId.trim(),
+    };
+    
+    const updated = [...savedGroupIds, newGroupId];
+    saveGroupIds(updated);
+    setSelectedGroupIdId(newId);
+    setNewGroupIdName('');
+    showToast(`已保存群組 ID：${name}`);
+  };
+  
+  // 刪除群組 ID
+  const handleDeleteGroupId = (id: string) => {
+    if (confirm('確定要刪除此群組 ID 嗎？')) {
+      const updated = savedGroupIds.filter(g => g.id !== id);
+      saveGroupIds(updated);
+      if (selectedGroupIdId === id) {
+        setSelectedGroupIdId('');
+        setLineGroupId('');
+      }
+      showToast('已刪除群組 ID');
+    }
+  };
+  
+  // 選擇群組 ID
+  const handleSelectGroupId = (id: string) => {
+    setSelectedGroupIdId(id);
+    const selected = savedGroupIds.find(g => g.id === id);
+    if (selected) {
+      setLineGroupId(selected.groupId);
+    }
+  };
 
   // 預設按鈕配置
   const defaultButtons: ButtonConfig[] = [
@@ -437,9 +540,220 @@ export default function AdminDashboard() {
     }
   };
 
+  const copyToClipboard = async (text: string) => {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (error) {
+      console.error('navigator.clipboard 寫入失敗', error);
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return true;
+    } catch (error) {
+      console.error('使用備援複製方式失敗', error);
+      return false;
+    }
+  };
+
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setCopyToast(message);
+    toastTimeoutRef.current = setTimeout(() => {
+      setCopyToast(null);
+      toastTimeoutRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const loadOrdersForForm = async (formId: number): Promise<OrderSummary[]> => {
+    if (ordersCache[formId]) {
+      return ordersCache[formId];
+    }
+
+    const res = await fetch(`/api/reports/${formId}`);
+    if (!res.ok) {
+      throw new Error(`無法載入訂單（HTTP ${res.status}）`);
+    }
+    const data = await res.json();
+    const normalized: OrderSummary[] = (data.orders || []).map((order: any) => ({
+      id: order.id,
+      customer_name: order.customer_name || order.order_data?.customer_name || undefined,
+      customer_phone: order.customer_phone || undefined,
+      order_source: (order.order_source || order.source || '').toLowerCase() || undefined,
+      items_summary: order.items_summary,
+    }));
+
+    setOrdersCache((prev) => ({ ...prev, [formId]: normalized }));
+    return normalized;
+  };
+
+  const handleGeneratePickupNotification = async (form: Form, type: 'facebook' | 'line') => {
+    try {
+      setGeneratingNotification(form.id);
+      const orders = await loadOrdersForForm(form.id);
+      const filtered = orders.filter((order) => (order.order_source || '').toLowerCase() === type);
+
+      if (filtered.length === 0) {
+        alert(`目前沒有從 ${type === 'facebook' ? 'Facebook' : 'LINE'} 入口下單的客戶。`);
+        return;
+      }
+
+      const names = filtered
+        .map((order) => order.customer_name?.trim())
+        .filter((name): name is string => !!name && name.length > 0);
+
+      if (names.length === 0) {
+        alert('這些訂單尚未填寫姓名，請先到報表補齊後再通知客戶。');
+        return;
+      }
+
+      const uniqueNames = Array.from(new Set(names));
+
+      // 如果是 LINE，顯示輸入視窗
+      if (type === 'line') {
+        setLineNotificationModal({
+          formId: form.id,
+          formName: form.name,
+          customerNames: uniqueNames,
+        });
+        // 設定預設訊息
+        const displayNames = uniqueNames.join('、');
+        setLineNotificationMessage(`親愛的 ${displayNames} 您好，您購買的商品已經到貨囉～可以來涼涼取貨啦！`);
+        return;
+      }
+
+      // Facebook 維持原本的複製功能
+      const nameLine = uniqueNames.join(' ');
+      const displayNames = uniqueNames.join('、');
+      const message = `${nameLine}
+親愛的 ${displayNames} 您好，您購買的商品已經到貨囉～可以來涼涼取貨啦！`;
+
+      const copied = await copyToClipboard(message);
+      if (copied) {
+        showToast(`${type === 'facebook' ? 'Facebook' : 'LINE'} 取貨通知已複製，請貼到對應入口！`);
+      } else {
+        alert('複製失敗，請手動複製通知內容。');
+      }
+
+      setNotificationPreview({
+        formId: form.id,
+        formName: form.name,
+        type,
+        message,
+      });
+    } catch (error: any) {
+      console.error('生成取貨通知錯誤:', error);
+      alert(error?.message || '生成取貨通知時發生錯誤，請稍後再試。');
+    } finally {
+      setGeneratingNotification(null);
+    }
+  };
+
+  const handleSendLineNotification = async () => {
+    if (!lineNotificationModal) return;
+
+    if (!lineNotificationMessage.trim()) {
+      alert('請輸入通知訊息');
+      return;
+    }
+
+    if (!lineGroupId.trim()) {
+      alert('請輸入 LINE 群組 ID');
+      return;
+    }
+
+    try {
+      setSendingLineNotification(true);
+
+      const response = await fetch('/api/line/send-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          formId: lineNotificationModal.formId,
+          message: lineNotificationMessage.trim(),
+          groupId: lineGroupId.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '發送失敗');
+      }
+
+      showToast(data.message || 'LINE 通知已成功發送！');
+      setLineNotificationModal(null);
+      setLineNotificationMessage('');
+      // 不清空群組 ID，保留已選擇的，方便下次使用
+      setNewGroupIdName('');
+    } catch (error: any) {
+      console.error('發送 LINE 通知錯誤:', error);
+      alert(error?.message || '發送 LINE 通知時發生錯誤，請稍後再試。');
+    } finally {
+      setSendingLineNotification(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center py-12">載入中...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+    <div className="min-h-screen bg-gray-100">
+      <Head>
+        <style>{`
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translate3d(-50%, -10px, 0);
+            }
+            to {
+              opacity: 1;
+              transform: translate3d(-50%, 0, 0);
+            }
+          }
+
+          .toast-enter {
+            animation: fadeInDown 0.3s ease-out;
+          }
+        `}</style>
+      </Head>
+      {copyToast && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2 toast-enter">
+          <div className="bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm sm:text-base">
+            {copyToast}
+          </div>
+        </div>
+      )}
+      <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4">表單管理</h1>
           <div className="w-full flex justify-center">
@@ -788,6 +1102,28 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGeneratePickupNotification(form, 'facebook');
+                    }}
+                    disabled={generatingNotification === form.id}
+                    className="flex-1 bg-blue-500 text-white text-center py-2 rounded hover:bg-blue-600 transition-colors text-sm sm:text-base flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    📣 Facebook 取貨通知
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGeneratePickupNotification(form, 'line');
+                    }}
+                    disabled={generatingNotification === form.id}
+                    className="flex-1 bg-green-500 text-white text-center py-2 rounded hover:bg-green-600 transition-colors text-sm sm:text-base flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    💬 LINE 取貨通知
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
                   <Link
                     href={`/admin/forms/${form.id}`}
                     className="flex-1 bg-blue-600 text-white text-center py-2 rounded hover:bg-blue-700 transition-colors text-sm sm:text-base flex items-center justify-center"
@@ -861,6 +1197,249 @@ export default function AdminDashboard() {
                 >
                   ✏️ 修改名稱
                 </button>
+              </div>
+            )}
+            {notificationPreview && (
+              <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      {notificationPreview.type === 'facebook' ? 'Facebook' : 'LINE'} 取貨通知預覽
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1 truncate">{notificationPreview.formName}</p>
+                  </div>
+                  <button
+                    onClick={() => setNotificationPreview(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                    aria-label="關閉預覽"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  value={notificationPreview.message}
+                  className="w-full h-32 resize-none border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-gray-50 focus:outline-none"
+                />
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={async () => {
+                      const copied = await copyToClipboard(notificationPreview.message);
+                      if (copied) {
+                        showToast('通知內容已複製！');
+                      } else {
+                        alert('複製失敗，請手動複製。');
+                      }
+                    }}
+                    className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    再次複製
+                  </button>
+                  <button
+                    onClick={() => setNotificationPreview(null)}
+                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* LINE 通知彈窗 */}
+            {lineNotificationModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-gray-800">
+                        💬 LINE 取貨通知
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setLineNotificationModal(null);
+                          setLineNotificationMessage('');
+                          // 不清空群組 ID，保留已選擇的
+                          setNewGroupIdName('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 text-2xl"
+                        aria-label="關閉"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong>表單：</strong>{lineNotificationModal.formName}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong>將通知的客戶：</strong>
+                      </p>
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200 max-h-32 overflow-y-auto">
+                        <p className="text-sm text-gray-700">
+                          {lineNotificationModal.customerNames.join('、')}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          共 {lineNotificationModal.customerNames.length} 位客戶
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        LINE 群組 ID <span className="text-red-500">*</span>
+                      </label>
+                      
+                      {/* 已保存的群組 ID 列表 */}
+                      {savedGroupIds.length > 0 && (
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            選擇已保存的群組 ID：
+                          </label>
+                          <div className="flex gap-2 mb-2">
+                            <select
+                              value={selectedGroupIdId}
+                              onChange={(e) => handleSelectGroupId(e.target.value)}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white"
+                            >
+                              <option value="">-- 選擇群組 ID --</option>
+                              {savedGroupIds.map((group) => (
+                                <option key={group.id} value={group.id}>
+                                  {group.name} ({group.groupId.substring(0, 20)}...)
+                                </option>
+                              ))}
+                            </select>
+                            {selectedGroupIdId && (
+                              <button
+                                onClick={() => handleDeleteGroupId(selectedGroupIdId)}
+                                className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+                                title="刪除此群組 ID"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 輸入群組 ID */}
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={lineGroupId}
+                          onChange={(e) => setLineGroupId(e.target.value)}
+                          placeholder="請輸入或選擇 LINE 群組 ID"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                        />
+                        <button
+                          onClick={handleSaveGroupId}
+                          disabled={!lineGroupId.trim()}
+                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                          title="保存此群組 ID"
+                        >
+                          💾 保存
+                        </button>
+                      </div>
+                      
+                      {/* 群組 ID 名稱（選填） */}
+                      {lineGroupId.trim() && (
+                        <div className="mb-2">
+                          <input
+                            type="text"
+                            value={newGroupIdName}
+                            onChange={(e) => setNewGroupIdName(e.target.value)}
+                            placeholder="為此群組 ID 命名（選填，例如：測試群組、正式群組）"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* 已保存的群組 ID 列表（顯示所有） */}
+                      {savedGroupIds.length > 0 && (
+                        <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                          <p className="text-xs font-medium text-gray-700 mb-1">
+                            已保存的群組 ID：
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {savedGroupIds.map((group) => (
+                              <button
+                                key={group.id}
+                                onClick={() => handleSelectGroupId(group.id)}
+                                className={`px-2 py-1 rounded text-xs transition-colors ${
+                                  selectedGroupIdId === group.id
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                                }`}
+                              >
+                                {group.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs font-medium text-blue-800 mb-1">
+                          💡 如何取得群組 ID？
+                        </p>
+                        <p className="text-xs text-blue-700 mb-2">
+                          <strong>最簡單的方法：</strong>在群組中發送「群組ID」給 Bot，Bot 會自動回覆群組 ID
+                        </p>
+                        <ol className="text-xs text-blue-700 list-decimal list-inside space-y-1">
+                          <li>確保 Bot 已加入您的 LINE 群組</li>
+                          <li>在群組中發送訊息：「群組ID」或「groupId」</li>
+                          <li>Bot 會自動回覆群組 ID</li>
+                          <li>複製 Bot 回覆的群組 ID 並貼到上方欄位</li>
+                          <li>點擊「保存」按鈕保存群組 ID，方便下次使用</li>
+                        </ol>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        通知訊息 <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={lineNotificationMessage}
+                        onChange={(e) => setLineNotificationMessage(e.target.value)}
+                        placeholder="請輸入要發送的通知訊息"
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          setLineNotificationModal(null);
+                          setLineNotificationMessage('');
+                          // 不清空群組 ID，保留已選擇的
+                          setNewGroupIdName('');
+                        }}
+                        className="flex-1 bg-gray-200 text-gray-700 py-2 rounded hover:bg-gray-300 transition-colors text-sm font-medium"
+                        disabled={sendingLineNotification}
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleSendLineNotification}
+                        disabled={sendingLineNotification || !lineNotificationMessage.trim() || !lineGroupId.trim()}
+                        className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {sendingLineNotification ? (
+                          <>
+                            <span className="animate-spin">⏳</span>
+                            發送中...
+                          </>
+                        ) : (
+                          <>
+                            📤 發送通知
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </>

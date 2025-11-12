@@ -133,7 +133,11 @@ export default async function handler(
           form.id,
           orderData,
           customerName,
-          parsed.customerPhone
+          parsed.customerPhone,
+          undefined,
+          undefined,
+          'facebook',
+          form
         );
 
         console.log('Facebook 訂單已建立:', {

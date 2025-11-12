@@ -12,7 +12,7 @@ export default async function handler(
   }
 
   try {
-    const { formToken, orderData, customerName, customerPhone, sessionId } = req.body;
+    const { formToken, orderData, customerName, customerPhone, sessionId, source } = req.body;
 
     if (!formToken || !orderData) {
       return res.status(400).json({ error: '缺少必要欄位' });
@@ -63,6 +63,7 @@ export default async function handler(
       customerPhone,
       clientIp,
       userAgent,
+      source,
       form // 傳入 form 以便提取物品清單
     );
 

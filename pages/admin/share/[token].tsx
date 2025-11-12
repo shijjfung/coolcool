@@ -7,13 +7,21 @@ export default function ShareForm() {
   const [qrCode, setQrCode] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [formUrl, setFormUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [lineUrl, setLineUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<'form' | 'facebook' | 'line' | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
 
   useEffect(() => {
     if (token && typeof token === 'string') {
-      const url = `${window.location.origin}/form/${token}`;
+      const origin = window.location.origin;
+      const url = `${origin}/form/${token}`;
+      const fb = `${origin}/form/${token}?source=facebook`;
+      const line = `${origin}/form/${token}?source=line`;
       setFormUrl(url);
+      setFacebookUrl(fb);
+      setLineUrl(line);
       generateQRCode(url);
     }
   }, [token]);
@@ -36,15 +44,15 @@ export default function ShareForm() {
     }
   };
 
-  const copyUrl = async () => {
+  const copyUrl = async (value: string, target: 'form' | 'facebook' | 'line') => {
     try {
       // 嘗試使用現代 API
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(formUrl);
+        await navigator.clipboard.writeText(value);
       } else {
         // 降級方案：使用傳統方法
         const textArea = document.createElement('textarea');
-        textArea.value = formUrl;
+        textArea.value = value;
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
         document.body.appendChild(textArea);
@@ -52,17 +60,15 @@ export default function ShareForm() {
         document.execCommand('copy');
         document.body.removeChild(textArea);
       }
-      
+
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedTarget(target);
+      setTimeout(() => {
+        setCopied(false);
+        setCopiedTarget(null);
+      }, 2000);
     } catch (error) {
       console.error('複製失敗:', error);
-      // 如果複製失敗，讓用戶可以手動選擇
-      const input = document.querySelector('input[readonly]') as HTMLInputElement;
-      if (input) {
-        input.select();
-        input.setSelectionRange(0, formUrl.length);
-      }
       alert('請手動選擇並複製網址');
     }
   };
@@ -135,36 +141,68 @@ export default function ShareForm() {
               </div>
             )}
 
-            <div className="mb-4 sm:mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
-                表單網址
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={formUrl}
-                  readOnly
-                  onClick={(e) => {
-                    (e.target as HTMLInputElement).select();
-                    copyUrl();
-                  }}
-                  className="flex-1 px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  title="點擊選擇全部並複製"
-                />
-                <button
-                  onClick={copyUrl}
-                  className={`px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg transition-colors text-sm sm:text-base font-medium touch-manipulation min-h-[44px] ${
-                    copied
-                      ? 'bg-green-600 text-white'
-                      : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
-                  }`}
-                >
-                  {copied ? '✓ 已複製' : '📋 複製連結'}
-                </button>
+            <div className="mb-6 sm:mb-8 grid gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
+                  Facebook 分享網址（自動帶上來源識別）
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={facebookUrl}
+                    readOnly
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).select();
+                      copyUrl(facebookUrl, 'facebook');
+                    }}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <button
+                    onClick={() => copyUrl(facebookUrl, 'facebook')}
+                    className={`px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg transition-colors text-sm sm:text-base font-medium touch-manipulation min-h-[44px] ${
+                      copied && copiedTarget === 'facebook'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                    }`}
+                  >
+                    {copied && copiedTarget === 'facebook' ? '✓ 已複製' : '📋 複製連結'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 text-left">
+                  🔗 建議貼在 Facebook 團購貼文，客戶填單完成後可返回貼文留言。
+                </p>
               </div>
-              <p className="text-xs text-gray-500 mt-2 text-left">
-                💡 提示：點擊網址框可快速選擇並複製
-              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
+                  LINE 分享網址（自動帶上來源識別）
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={lineUrl}
+                    readOnly
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).select();
+                      copyUrl(lineUrl, 'line');
+                    }}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <button
+                    onClick={() => copyUrl(lineUrl, 'line')}
+                    className={`px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg transition-colors text-sm sm:text-base font-medium touch-manipulation min-h-[44px] ${
+                      copied && copiedTarget === 'line'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                    }`}
+                  >
+                    {copied && copiedTarget === 'line' ? '✓ 已複製' : '📋 複製連結'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 text-left">
+                  🔗 建議貼在 LINE 群組公告或聊天室，客戶填單完成後可快速回到群組留言。
+                </p>
+              </div>
             </div>
 
             {/* 分享按鈕區 */}

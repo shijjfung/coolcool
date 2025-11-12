@@ -103,6 +103,16 @@ async function initDatabaseSQLite() {
   } catch (e: any) {
     // 欄位已存在，忽略錯誤
   }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_comment_url TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN line_comment_url TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
 
   // 訂單表
   await dbRun(`
@@ -111,6 +121,7 @@ async function initDatabaseSQLite() {
       form_id INTEGER NOT NULL,
       customer_name TEXT,
       customer_phone TEXT,
+      order_source TEXT,
       order_data TEXT NOT NULL,
       items_summary TEXT,
       client_ip TEXT,
@@ -135,6 +146,11 @@ async function initDatabaseSQLite() {
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN items_summary TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN order_source TEXT`);
   } catch (e: any) {
     // 欄位已存在，忽略錯誤
   }
@@ -198,6 +214,8 @@ export interface Form {
   deleted_at?: string; // 刪除時間
   created_at: string;
   form_token: string;
+  facebook_comment_url?: string;
+  line_comment_url?: string;
 }
 
 async function createFormSQLite(
@@ -206,12 +224,24 @@ async function createFormSQLite(
   deadline: string,
   orderDeadline?: string,
   orderLimit?: number,
-  pickupTime?: string
+  pickupTime?: string,
+  facebookCommentUrl?: string,
+  lineCommentUrl?: string
 ): Promise<number> {
   const formToken = generateToken();
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, form_token) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [name, JSON.stringify(fields), deadline, orderDeadline || null, orderLimit || null, pickupTime || null, formToken]
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      name,
+      JSON.stringify(fields),
+      deadline,
+      orderDeadline || null,
+      orderLimit || null,
+      pickupTime || null,
+      facebookCommentUrl || null,
+      lineCommentUrl || null,
+      formToken,
+    ]
   );
   const result = await dbGet('SELECT last_insert_rowid() as id') as { id: number };
   return result.id;
@@ -234,6 +264,8 @@ async function getFormByTokenSQLite(token: string): Promise<Form | null> {
     deleted_at: row.deleted_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   };
 }
 
@@ -257,6 +289,8 @@ async function getFormByIdSQLite(id: number, includeDeleted: boolean = false): P
     deleted_at: row.deleted_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   };
 }
 
@@ -277,6 +311,8 @@ async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[
     deleted_at: row.deleted_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   }));
 }
 
@@ -299,6 +335,8 @@ async function getDeletedFormsSQLite(): Promise<Form[]> {
     deleted_at: row.deleted_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   }));
 }
 
@@ -312,11 +350,23 @@ async function updateFormSQLite(
   deadline: string,
   orderDeadline?: string,
   orderLimit?: number,
-  pickupTime?: string
+  pickupTime?: string,
+  facebookCommentUrl?: string,
+  lineCommentUrl?: string
 ): Promise<boolean> {
   await dbRun(
-    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ? WHERE id = ?',
-    [name, JSON.stringify(fields), deadline, orderDeadline || null, orderLimit || null, pickupTime || null, formId]
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ? WHERE id = ?',
+    [
+      name,
+      JSON.stringify(fields),
+      deadline,
+      orderDeadline || null,
+      orderLimit || null,
+      pickupTime || null,
+      facebookCommentUrl || null,
+      lineCommentUrl || null,
+      formId,
+    ]
   );
   return true;
 }
@@ -370,6 +420,8 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
     report_generated_at: row.report_generated_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   }));
 }
 
@@ -533,6 +585,7 @@ export interface Order {
   form_id: number;
   customer_name?: string;
   customer_phone?: string;
+  order_source?: string;
   order_data: Record<string, any>;
   items_summary?: Array<{ name: string; quantity: number }>; // 物品清單（從好事多代購欄位提取）
   client_ip?: string;
@@ -577,6 +630,7 @@ async function createOrderSQLite(
   customerPhone?: string,
   clientIp?: string,
   userAgent?: string,
+  orderSource?: string,
   form?: Form // 新增 form 參數用於提取物品清單
 ): Promise<string> {
   const orderToken = generateToken();
@@ -591,8 +645,18 @@ async function createOrderSQLite(
   }
   
   await dbRun(
-    'INSERT INTO orders (form_id, customer_name, customer_phone, order_data, items_summary, client_ip, user_agent, order_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [formId, customerName || null, customerPhone || null, JSON.stringify(orderData), itemsSummary, clientIp || null, userAgent || null, orderToken]
+    'INSERT INTO orders (form_id, customer_name, customer_phone, order_source, order_data, items_summary, client_ip, user_agent, order_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      formId,
+      customerName || null,
+      customerPhone || null,
+      orderSource || null,
+      JSON.stringify(orderData),
+      itemsSummary,
+      clientIp || null,
+      userAgent || null,
+      orderToken,
+    ]
   );
   return orderToken;
 }
@@ -653,7 +717,9 @@ async function getOrderByTokenSQLite(token: string): Promise<Order | null> {
     form_id: row.form_id,
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
+    order_source: row.order_source || undefined,
     order_data: JSON.parse(row.order_data),
+    items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
     client_ip: row.client_ip || undefined,
     user_agent: row.user_agent || undefined,
     created_at: row.created_at,
@@ -669,6 +735,7 @@ async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
     form_id: row.form_id,
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
+    order_source: row.order_source || undefined,
     order_data: JSON.parse(row.order_data),
     items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
     client_ip: row.client_ip || undefined,

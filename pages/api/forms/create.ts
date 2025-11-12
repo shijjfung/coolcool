@@ -45,7 +45,7 @@ export default async function handler(
     // 處理請求
     if (dbInitialized) {
       try {
-        const { name, fields, deadline, orderDeadline, orderLimit, pickupTime } = req.body;
+        const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl } = req.body;
 
         if (!name || !fields || !deadline) {
           setJsonHeaders(res);
@@ -66,7 +66,16 @@ export default async function handler(
           }
         }
 
-        const formId = await createForm(name, fields as FormField[], deadline, orderDeadline, orderLimit ? parseInt(String(orderLimit)) : undefined, pickupTime);
+        const formId = await createForm(
+          name,
+          fields as FormField[],
+          deadline,
+          orderDeadline,
+          orderLimit ? parseInt(String(orderLimit)) : undefined,
+          pickupTime,
+          facebookCommentUrl,
+          lineCommentUrl
+        );
         const form = await getFormById(formId);
 
         setJsonHeaders(res);

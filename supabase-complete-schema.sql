@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS orders (
   form_id BIGINT NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
   customer_name TEXT,
   customer_phone TEXT,
+  order_source TEXT,
   order_data JSONB NOT NULL,
   items_summary JSONB,
   client_ip TEXT,
@@ -132,6 +133,29 @@ END $$;
          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                         WHERE table_name = 'orders' AND column_name = 'items_summary') THEN
            ALTER TABLE orders ADD COLUMN items_summary JSONB;
+         END IF;
+       END $$;
+
+       -- 添加 facebook_comment_url 與 line_comment_url 到 forms 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_comment_url') THEN
+           ALTER TABLE forms ADD COLUMN facebook_comment_url TEXT;
+         END IF;
+
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'line_comment_url') THEN
+           ALTER TABLE forms ADD COLUMN line_comment_url TEXT;
+         END IF;
+       END $$;
+
+       -- 添加 order_source 到 orders 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'orders' AND column_name = 'order_source') THEN
+           ALTER TABLE orders ADD COLUMN order_source TEXT;
          END IF;
        END $$;
 

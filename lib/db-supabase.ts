@@ -24,7 +24,9 @@ export async function createForm(
   deadline: string,
   orderDeadline?: string,
   orderLimit?: number,
-  pickupTime?: string
+  pickupTime?: string,
+  facebookCommentUrl?: string,
+  lineCommentUrl?: string
 ): Promise<number> {
   const formToken = generateToken();
   const { data, error } = await getSupabase()
@@ -36,6 +38,8 @@ export async function createForm(
       order_deadline: orderDeadline || null,
       order_limit: orderLimit || null,
       pickup_time: pickupTime || null,
+      facebook_comment_url: facebookCommentUrl || null,
+      line_comment_url: lineCommentUrl || null,
       form_token: formToken,
     })
     .select('id')
@@ -115,7 +119,9 @@ export async function updateForm(
   deadline: string,
   orderDeadline?: string,
   orderLimit?: number,
-  pickupTime?: string
+  pickupTime?: string,
+  facebookCommentUrl?: string,
+  lineCommentUrl?: string
 ): Promise<boolean> {
   const { error } = await getSupabase()
     .from('forms')
@@ -126,6 +132,8 @@ export async function updateForm(
       order_deadline: orderDeadline || null,
       order_limit: orderLimit || null,
       pickup_time: pickupTime || null,
+      facebook_comment_url: facebookCommentUrl || null,
+      line_comment_url: lineCommentUrl || null,
     })
     .eq('id', formId);
 
@@ -280,6 +288,7 @@ export async function createOrder(
   customerPhone?: string,
   clientIp?: string,
   userAgent?: string,
+  orderSource?: string,
   form?: Form // 新增 form 參數用於提取物品清單
 ): Promise<string> {
   const orderToken = generateToken();
@@ -300,6 +309,7 @@ export async function createOrder(
       items_summary: itemsSummary,
       client_ip: clientIp || null,
       user_agent: userAgent || null,
+      order_source: orderSource || null,
       order_token: orderToken,
     });
 
@@ -398,6 +408,8 @@ function mapFormFromDb(row: any): Form {
     deleted_at: row.deleted_at || undefined,
     created_at: row.created_at,
     form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
   };
 }
 
@@ -406,10 +418,11 @@ function mapOrderFromDb(row: any): Order {
   return {
     id: row.id,
     form_id: row.form_id,
-    customer_name: row.customer_name,
-    customer_phone: row.customer_phone,
+    customer_name: row.customer_name || undefined,
+    customer_phone: row.customer_phone || undefined,
+    order_source: row.order_source || undefined,
     order_data: typeof row.order_data === 'string' ? JSON.parse(row.order_data) : row.order_data,
-    items_summary: row.items_summary || undefined,
+    items_summary: row.items_summary,
     client_ip: row.client_ip || undefined,
     user_agent: row.user_agent || undefined,
     created_at: row.created_at,

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 
 interface FormField {
@@ -19,6 +20,8 @@ interface Form {
   pickup_time?: string; // 取貨時間（可選）
   created_at: string;
   form_token: string;
+  facebook_comment_url?: string;
+  line_comment_url?: string;
 }
 
 interface Order {
@@ -56,11 +59,20 @@ export default function CustomerForm() {
   const [sessionId, setSessionId] = useState<string>('');
   const [reservedExpiresAt, setReservedExpiresAt] = useState<Date | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(0); // 剩餘秒數
+  const [source, setSource] = useState<string | undefined>(undefined);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 用於保存每個數字輸入欄位的前一個有效值
   const previousValues = useRef<Record<string, string>>({});
 
   useEffect(() => {
+    if (router.isReady) {
+      const sourceParam = Array.isArray(router.query.source) ? router.query.source[0] : router.query.source;
+      if (sourceParam && typeof sourceParam === 'string') {
+        setSource(sourceParam);
+      }
+    }
     if (token && typeof token === 'string') {
       // 生成或取得 session ID
       let sid = sessionStorage.getItem(`session_${token}`);
@@ -74,7 +86,7 @@ export default function CustomerForm() {
       fetchClientInfo();
       detectDeviceType();
     }
-  }, [token]);
+  }, [token, sessionId, router]);
 
   // 當訂單送出後，重新檢查訂單數量
   useEffect(() => {
@@ -400,13 +412,15 @@ export default function CustomerForm() {
             orderData: order.order_data,
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
+            source,
           }),
         });
 
         const data = await res.json();
         if (res.ok) {
           // 跳轉到訂單確認頁面
-          router.push(`/order/success/${data.orderToken}`);
+          const successUrl = source ? `/order/success/${data.orderToken}?source=${encodeURIComponent(source)}` : `/order/success/${data.orderToken}`;
+          router.push(successUrl);
         } else {
           // 檢查是否是因為額滿而失敗
           if (data.error && data.error.includes('額滿')) {
@@ -565,6 +579,42 @@ export default function CustomerForm() {
     }
   };
 
+  const showToast = (message: string) => {
+    if (!message) return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToastMessage(message);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimeoutRef.current = null;
+    }, 3000);
+  };
+
+  const namePlaceholder = useMemo(() => {
+    if (source === 'facebook') {
+      return '請正確輸入您 Facebook 的名稱或暱稱，避免無法通知你取貨';
+    }
+    if (source === 'line') {
+      return '請正確輸入您 LINE 的名稱或暱稱，避免無法通知你取貨';
+    }
+    return '請正確輸入您的姓名，避免無法通知你取貨';
+  }, [source]);
+
+  const phonePlaceholder = '請正確輸入您的聯繫方式避免無法通知您取貨';
+
+  const handleNameFocus = () => {
+    if (source === 'facebook') {
+      showToast('請正確輸入臉書名稱（暱稱），避免取貨通知發送不到。');
+    } else if (source === 'line') {
+      showToast('請正確輸入 LINE 群組內名稱（暱稱），避免取貨通知發送不到。');
+    }
+  };
+
+  const handlePhoneFocus = () => {
+    showToast('請正確輸入您的聯繫方式避免無法通知您取貨');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -628,6 +678,31 @@ export default function CustomerForm() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
+      <Head>
+        <style>{`
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translate3d(-50%, -10px, 0);
+            }
+            to {
+              opacity: 1;
+              transform: translate3d(-50%, 0, 0);
+            }
+          }
+
+          .toast-enter {
+            animation: fadeInDown 0.3s ease-out;
+          }
+        `}</style>
+      </Head>
+      {toastMessage && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2 toast-enter">
+          <div className="rounded-lg bg-blue-600 text-white px-4 py-3 shadow-lg text-sm sm:text-base">
+            {toastMessage}
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-2 sm:px-4 max-w-4xl">
         <div className="bg-white rounded-lg shadow p-4 sm:p-6 lg:p-8">
           {/* 修改和刪除訂單按鈕 */}
@@ -771,8 +846,9 @@ export default function CustomerForm() {
                           type="text"
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
+                          onFocus={handleNameFocus}
                           className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                          placeholder="請輸入您的姓名"
+                          placeholder={namePlaceholder}
                           required
                         />
                       </td>
@@ -789,8 +865,9 @@ export default function CustomerForm() {
                           type="tel"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
+                          onFocus={handlePhoneFocus}
                           className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                          placeholder="請輸入您的電話"
+                          placeholder={phonePlaceholder}
                           required
                         />
                       </td>
