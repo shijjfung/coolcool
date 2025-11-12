@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { ensureDatabaseInitialized, getOrdersByFormId } from '@/lib/db';
+import { ensureDatabaseInitialized, getOrdersByFormId, Order } from '@/lib/db';
 
 /**
  * LINE Bot 發送取貨通知 API
@@ -94,7 +94,7 @@ export default async function handler(
     
     // 過濾出 LINE 入口的訂單
     const lineOrders = orders.filter(
-      (order) => (order.order_source || '').toLowerCase() === 'line'
+      (order: Order) => (order.order_source || '').toLowerCase() === 'line'
     );
 
     if (lineOrders.length === 0) {
