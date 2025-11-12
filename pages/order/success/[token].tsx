@@ -352,10 +352,22 @@ export default function OrderSuccess() {
               </button>
             </div>
             <button
-              onClick={() => router.push(`/form/${form.form_token}`)}
+              onClick={() => {
+                // 嘗試返回上一頁，如果沒有上一頁則關閉視窗
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  // 如果是在新標籤頁打開的，嘗試關閉
+                  window.close();
+                  // 如果無法關閉（例如不是由腳本打開的），則導向首頁
+                  setTimeout(() => {
+                    router.push('/');
+                  }, 100);
+                }
+              }}
               className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
             >
-              ← 返回表單
+              🚪 離開本頁
             </button>
           </div>
 
