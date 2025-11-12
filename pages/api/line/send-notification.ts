@@ -104,11 +104,11 @@ export default async function handler(
     }
 
     // 取得所有客戶名稱（去重）
-    const customerNames = Array.from(
+    const customerNames: string[] = Array.from(
       new Set(
         lineOrders
-          .map((order) => order.customer_name?.trim())
-          .filter((name): name is string => !!name && name.length > 0)
+          .map((order: Order) => order.customer_name?.trim())
+          .filter((name: string | undefined): name is string => !!name && name.length > 0)
       )
     );
 
@@ -176,14 +176,20 @@ export default async function handler(
     for (const customerName of customerNames) {
       // 嘗試匹配成員的顯示名稱
       const matchedMember = memberDetails.find(
-        (member) => 
+        (member: { userId: string; displayName: string }) => 
           member.displayName === customerName ||
           member.displayName.includes(customerName) ||
           customerName.includes(member.displayName)
       );
 
       if (matchedMember) {
-        mentionees.push({ type: 'user', userId: matchedMember.userId });
+        // 注意：這裡先收集 userId，稍後會建立完整的 LineMention（包含 index 和 length）
+        mentionees.push({ 
+          index: 0, // 稍後會重新計算
+          length: 0, // 稍後會重新計算
+          type: 'user', 
+          userId: matchedMember.userId 
+        });
         matchedNames.push(customerName);
       }
     }
@@ -252,7 +258,7 @@ export default async function handler(
             success: true,
             message: `已成功 @ ${matchedNames.length} 位客戶並發送訊息`,
             matchedNames,
-            unmatchedNames: customerNames.filter(name => !matchedNames.includes(name)),
+            unmatchedNames: customerNames.filter((name: string) => !matchedNames.includes(name)),
           });
         } else {
           // 如果 mention 失敗，改用普通訊息
