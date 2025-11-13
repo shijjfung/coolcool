@@ -134,13 +134,15 @@ export default function AdminDashboard() {
       const res = await fetch('/api/settings/line-group-ids');
       const data = await res.json();
       
-      if (res.ok && data.success && data.groupIds && data.groupIds.length > 0) {
+      if (res.ok && data.success && Array.isArray(data.groupIds) && data.groupIds.length > 0) {
         // 從資料庫載入
         setSavedGroupIds(data.groupIds);
         // 同時更新 localStorage 作為備份
         if (typeof window !== 'undefined') {
           localStorage.setItem('line-group-ids', JSON.stringify(data.groupIds));
         }
+      } else if (data.error) {
+        console.error('載入群組 ID 錯誤:', data.error, data.details);
       } else {
         // 如果資料庫沒有，嘗試從 localStorage 載入（作為備份）
         if (typeof window !== 'undefined') {
@@ -634,9 +636,20 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/forms/list');
       const data = await res.json();
-      setForms(data);
+      
+      // 確保 data 是數組，如果不是則設置為空數組
+      if (Array.isArray(data)) {
+        setForms(data);
+      } else {
+        console.error('API 返回非數組數據:', data);
+        setForms([]);
+        if (data.error) {
+          console.error('API 錯誤:', data.error, data.details);
+        }
+      }
     } catch (error) {
       console.error('取得表單列表錯誤:', error);
+      setForms([]);
     } finally {
       setLoading(false);
     }
@@ -648,10 +661,12 @@ export default function AdminDashboard() {
       const res = await fetch('/api/reports/auto-generate');
       const data = await res.json();
       
-      if (data.generated > 0) {
-        setNotifications(data.forms);
+      if (res.ok && data.generated > 0) {
+        setNotifications(Array.isArray(data.forms) ? data.forms : []);
         // 重新載入表單列表以更新狀態
         fetchForms();
+      } else if (data.error) {
+        console.error('檢查報表錯誤:', data.error, data.details);
       }
     } catch (error) {
       console.error('檢查報表錯誤:', error);
