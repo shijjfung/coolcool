@@ -581,45 +581,6 @@ export default async function handler(
           continue;
         }
       }
-
-      // 移除表單代碼部分（如果有的話）
-      const cleanMessage = messageText.replace(/@\w+\s*/, '').trim();
-
-      // 取得表單設定的關鍵字列表
-      const formKeywords = targetForm.facebook_keywords 
-        ? JSON.parse(targetForm.facebook_keywords) as string[]
-        : ['+1', '+2', '+3', '加一', '加1'];
-
-      // 改進的關鍵字匹配：支援靈活的模式
-      // 匹配：+1、+2、+3、加一、加1、水果1斤+1、5斤+1、烤雞半隻+1 等
-      const matchesFormKeywords = formKeywords.some((keyword: string) => {
-        const lowerKeyword = keyword.toLowerCase();
-        const lowerMessage = cleanMessage.toLowerCase();
-        
-        // 精確匹配
-        if (lowerMessage.includes(lowerKeyword)) {
-          return true;
-        }
-        
-        // 支援變體：+1 和 加一、加1
-        if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
-          return true;
-        }
-        if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
-          return true;
-        }
-        
-        // 支援模式：數字+數字（例如：1斤+1、5斤+1）
-        const keywordPattern = lowerKeyword.replace(/\+/g, '\\+').replace(/\d+/g, '\\d+');
-        const regex = new RegExp(keywordPattern);
-        if (regex.test(lowerMessage)) {
-          return true;
-        }
-        
-        return false;
-      });
-
-      const hasPlusOnePattern = matchesFormKeywords;
       
       // 判斷模式：如果訊息包含「+數字」或「數字+」或「加一/加1」，使用團購模式；否則使用代購模式
       const hasGroupbuyPattern = hasPlusOnePattern || 
