@@ -238,17 +238,17 @@ if (DATABASE_TYPE === 'sqlite') {
   `);
 
   // LINE ???????????????????????????  await dbRun(`
-    CREATE TABLE IF NOT EXISTS line_posts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      form_id INTEGER NOT NULL,
-      group_id TEXT NOT NULL,
-      message_id TEXT,
-      sender_name TEXT,
-      post_content TEXT,
-      posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
-    )
-  `);
+  //   CREATE TABLE IF NOT EXISTS line_posts (
+  //     id INTEGER PRIMARY KEY AUTOINCREMENT,
+  //     form_id INTEGER NOT NULL,
+  //     group_id TEXT NOT NULL,
+  //     message_id TEXT,
+  //     sender_name TEXT NOT NULL,
+  //     post_content TEXT,
+  //     posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  //     FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+  //   )
+  // `);
   
   // ?????
   try {
