@@ -19,7 +19,7 @@ let promisify: any;
 let path: any;
 let fs: any;
 let db: any;
-let dbPath: string;
+let dbPath: string = '';
 let dbRun: (sql: string, params?: any[]) => Promise<any>;
 let dbGet: (sql: string, params?: any[]) => Promise<any>;
 let dbAll: (sql: string, params?: any[]) => Promise<any>;
