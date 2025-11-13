@@ -50,22 +50,22 @@ if (DATABASE_TYPE === 'sqlite') {
 
 // ????????async function initDatabaseSQLite() {
   // ???????  await dbRun(`
-    CREATE TABLE IF NOT EXISTS forms (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      fields TEXT NOT NULL,
-      deadline TEXT NOT NULL,
-      order_deadline TEXT,
-      order_limit INTEGER,
-      pickup_time TEXT,
-      report_generated INTEGER DEFAULT 0,
-      report_generated_at TEXT,
-      deleted INTEGER DEFAULT 0,
-      deleted_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      form_token TEXT UNIQUE NOT NULL
-    )
-  `);
+  //   CREATE TABLE IF NOT EXISTS forms (
+  //     id INTEGER PRIMARY KEY AUTOINCREMENT,
+  //     name TEXT NOT NULL,
+  //     fields TEXT NOT NULL,
+  //     deadline TEXT NOT NULL,
+  //     order_deadline TEXT,
+  //     order_limit INTEGER,
+  //     pickup_time TEXT,
+  //     report_generated INTEGER DEFAULT 0,
+  //     report_generated_at TEXT,
+  //     deleted INTEGER DEFAULT 0,
+  //     deleted_at TEXT,
+  //     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  //     form_token TEXT UNIQUE NOT NULL
+  //   )
+  // `);
   
   // ????????????????????
   try {
