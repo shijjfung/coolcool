@@ -1,19 +1,19 @@
-// ?寞??啣?霈?豢?鞈?摨恍???
+// ?撖????????鞊????冽????
 const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 
-// 憒?雿輻 Supabase嚗???Supabase 撖虫?
+// ????輯撒??Supabase????Supabase ??
 let dbModule: any;
 if (DATABASE_TYPE === 'supabase') {
   try {
     dbModule = require('./db-supabase');
   } catch (error) {
-    console.error('?⊥?頛 Supabase 璅∠?嚗?蝣箄?撌脣?鋆?@supabase/supabase-js 銝西身摰憓???);
+    console.error('??????Supabase ?????????????@supabase/supabase-js ?正頨急謍船?????);
     throw error;
   }
 }
 
-// SQLite 撖虫?嚗????箏??剁?
-// ?芸 SQLite 璅∪?銝????伐??踹???Vercel (Supabase) ?啣?銝???let sqlite3: any;
+// SQLite ??????謕??蝞????
+// ??賃祗 SQLite ?????????隡??頦???Vercel (Supabase) ????????let sqlite3: any;
 let promisify: any;
 let path: any;
 let fs: any;
@@ -24,7 +24,7 @@ let dbGet: (sql: string, params?: any[]) => Promise<any>;
 let dbAll: (sql: string, params?: any[]) => Promise<any>;
 
 if (DATABASE_TYPE === 'sqlite') {
-  // ??撠 SQLite ?賊?璅∠?嚗? Supabase 璅∪?銝??伐?
+  // ???????SQLite ?鞈??????蹓??祗 Supabase ??????隡?
   sqlite3 = require('sqlite3');
   promisify = require('util').promisify;
   path = require('path');
@@ -32,20 +32,20 @@ if (DATABASE_TYPE === 'sqlite') {
 
   dbPath = path.join(process.cwd(), 'orders.db');
 
-  // 蝣箔?鞈?摨急?獢???  if (!fs.existsSync(dbPath)) {
+  // ???????冽??ｇ????  if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');
   }
 
   db = new sqlite3.Database(dbPath);
 
-  // 撠?callback 憸冽??貉?? Promise
+  // ??callback ?詨赯????鞎??謜冪 Promise
   dbRun = promisify(db.run.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbGet = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 }
 
-// ?????澈銵?async function initDatabaseSQLite() {
-  // 銵典閮剖?銵?  await dbRun(`
+// ?豲??謘??謕???async function initDatabaseSQLite() {
+  // ?萄謘????  await dbRun(`
     CREATE TABLE IF NOT EXISTS forms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -63,84 +63,84 @@ if (DATABASE_TYPE === 'sqlite') {
     )
   `);
   
-  // 瑼Ｘ銝行憓甈?嚗?敺摰對?
+  // ?潘撓貔?銵??等謘???????綽謆撠?
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_deadline TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_limit INTEGER`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN pickup_time TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated_at TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_comment_url TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN line_comment_url TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_url TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_author TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_keywords TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN line_post_author TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
 
-  // 閮銵?  await dbRun(`
+  // ?殉?謘?  await dbRun(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       form_id INTEGER NOT NULL,
@@ -158,29 +158,29 @@ if (DATABASE_TYPE === 'sqlite') {
     )
   `);
   
-  // 瑼Ｘ銝行憓甈?嚗?敺摰對?
+  // ?潘撓貔?銵??等謘???????綽謆撠?
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN client_ip TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN user_agent TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN items_summary TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN order_source TEXT`);
   } catch (e: any) {
-    // 甈?撌脣??剁?敹賜?航炊
+    // ?????????寡????芰?
   }
 
-  // 蝟餌絞閮剖?銵?  await dbRun(`
+  // ??蝯????  await dbRun(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -188,7 +188,7 @@ if (DATABASE_TYPE === 'sqlite') {
     )
   `);
 
-  // 靽?閮??銵剁??冽???格??塚?
+  // ?踐???殉?謘????萄????踐????????憛?
   await dbRun(`
     CREATE TABLE IF NOT EXISTS reserved_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,7 +202,7 @@ if (DATABASE_TYPE === 'sqlite') {
     )
   `);
 
-  // LINE 鞈??閮?銵剁?閮?鞈???”?桃?撠???嚗?  await dbRun(`
+  // LINE ????殉死??萄???殉死??????砂?獢?????謚???  await dbRun(`
     CREATE TABLE IF NOT EXISTS line_posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       form_id INTEGER NOT NULL,
@@ -215,7 +215,7 @@ if (DATABASE_TYPE === 'sqlite') {
     )
   `);
   
-  // 撱箇?蝝Ｗ?
+  // ?梁???撥?
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id)`);
   } catch (e: any) {}
@@ -226,7 +226,7 @@ if (DATABASE_TYPE === 'sqlite') {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_posted_at ON line_posts(posted_at)`);
   } catch (e: any) {}
   
-  // 撱箇?蝝Ｗ?
+  // ?梁???撥?
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_form_id ON reserved_orders(form_id)`);
   } catch (e: any) {}
@@ -238,14 +238,14 @@ if (DATABASE_TYPE === 'sqlite') {
   } catch (e: any) {}
 }
 
-// 銵典?賊???
+// ?萄謘?鞈????
 export interface FormField {
   name: string;
   label: string;
   type: 'text' | 'number' | 'costco';
   required: boolean;
   options?: string[];
-  price?: number; // ?寞甈?嚗?賂?
+  price?: number; // ?撖僱???????鞈?
 }
 
 export interface Form {
@@ -253,21 +253,20 @@ export interface Form {
   name: string;
   fields: FormField[];
   deadline: string;
-  order_deadline?: string; // ?嗅?芣迫??
-  order_limit?: number; // 閮?賊??嚗?賂?
-  pickup_time?: string; // ?疏??嚗?賂?
-  report_generated?: number; // ?梯”?臬撌脩???(0/1)
-  report_generated_at?: string; // ?梯”????
-  deleted?: number; // ?臬撌脣?文?獢?(0/1)
-  deleted_at?: string; // ?芷??
+  order_deadline?: string; // ??????翰?蹇?
+  order_limit?: number; // ?殉?謘?鞈????????鞈?
+  pickup_time?: string; // ?謘輻??蹇?????鞈?
+  report_generated?: number; // ?璇胼??秋?????(0/1)
+  report_generated_at?: string; // ?璇胼?賹??蹇?
+  deleted?: number; // ??秋????????蛔???(0/1)
+  deleted_at?: string; // ??畸??蹇?
   created_at: string;
   form_token: string;
   facebook_comment_url?: string;
   line_comment_url?: string;
-  facebook_post_url?: string; // Facebook 鞎潭????嚗?潸??改?
-  facebook_post_author?: string; // Facebook ?潭?????  facebook_keywords?: string; // Facebook ?摮?銵剁?JSON ???嚗?  facebook_auto_monitor?: number; // ?臬? Facebook ?芸??? (0/1)
-  facebook_reply_message?: string; // Facebook ??閮
-  line_post_author?: string; // LINE ?潭??????冽霅閬?抒?鞈??嚗?}
+  facebook_post_url?: string; // Facebook ?蔬????????瞏賂??∵????
+  facebook_post_author?: string; // Facebook ?瞏??????  facebook_keywords?: string; // Facebook ?謚殷?殉???萄??JSON ?????  facebook_auto_monitor?: number; // ??秋??賹? Facebook ???????(0/1)
+  facebook_reply_message?: string; // Facebook ?豯??殷?蹓?  line_post_author?: string; // LINE ?瞏?????????踐??朱?蹓踐?????????}
 
 async function createFormSQLite(
   name: string, 
@@ -397,7 +396,7 @@ async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[
 }
 
 /**
- * ???獢嗡葉?”?? */
+ * ?謘???蛔??Ｗ????? */
 async function getDeletedFormsSQLite(): Promise<Form[]> {
   const rows = await dbAll('SELECT * FROM forms WHERE deleted = 1 ORDER BY deleted_at DESC') as any[];
   return rows.map(row => ({
@@ -420,7 +419,7 @@ async function getDeletedFormsSQLite(): Promise<Form[]> {
 }
 
 /**
- * ?湔銵典?迂
+ * ?皝??萄謘???
  */
 async function updateFormSQLite(
   formId: number,
@@ -471,7 +470,7 @@ async function updateFormNameSQLite(formId: number, newName: string): Promise<bo
 }
 
 /**
- * 璅??梯”撌脩??? */
+ * ????璇胼????? */
 async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
   const result = await dbRun(
     'UPDATE forms SET report_generated = 1, report_generated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -481,11 +480,11 @@ async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
 }
 
 /**
- * ??撌脣??格甇Ｘ???撠???梯”?”?? * 雿輻 order_deadline嚗????剁?嚗?蝙??deadline
+ * ?謘????????潘??撓?????垮謓?賹??璇胼???? * ?輯撒??order_deadline????謚????????刻???deadline
  */
 async function getFormsReadyForReportSQLite(): Promise<Form[]> {
   const now = new Date().toISOString();
-  // ?芸?雿輻 order_deadline嚗?????雿輻 deadline
+  // ????輯撒??order_deadline???謚?????輯撒??deadline
   const rows = await dbAll(
     `SELECT * FROM forms 
      WHERE (
@@ -504,7 +503,7 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
     name: row.name,
     fields: JSON.parse(row.fields),
     deadline: row.deadline,
-    order_deadline: row.order_deadline || row.deadline, // 憒?瘝? order_deadline嚗蝙??deadline
+    order_deadline: row.order_deadline || row.deadline, // ?????? order_deadline????deadline
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     created_at: row.created_at,
@@ -515,21 +514,21 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
 }
 
 /**
- * 撠”?桃宏?啣??暹▲嚗??芷嚗? */
+ * ???獢??????嫖?????畸??? */
 async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
   try {
-    // 蝣箔?鞈?摨怠歇????    await ensureDatabaseInitialized();
+    // ???????冽??豲???    await ensureDatabaseInitialized();
     
-    // ?炎?交?雿?血???    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
+    // ????鈭??選?謢?銵???    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
     const hasDeleted = tableInfo.some((col: any) => col.name === 'deleted');
     const hasDeletedAt = tableInfo.some((col: any) => col.name === 'deleted_at');
     
-    // 憒?甈?銝??剁??岫?啣?
+    // ?????????????謅疵???
     if (!hasDeleted) {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
       } catch (e: any) {
-        console.error('?啣? deleted 甈?憭望?:', e.message);
+        console.error('??? deleted ????剜??:', e.message);
       }
     }
     
@@ -537,20 +536,20 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
       } catch (e: any) {
-        console.error('?啣? deleted_at 甈?憭望?:', e.message);
+        console.error('??? deleted_at ????剜??:', e.message);
       }
     }
     
-    // 雿輻 ISO ?澆????閮?    const deletedAt = new Date().toISOString();
+    // ?輯撒??ISO ?瞉??????佗???    const deletedAt = new Date().toISOString();
     
-    // ??閰行?啣??雿?    let result: any = null;
+    // ????啗?謆????????    let result: any = null;
     try {
       result = await dbRun(
         'UPDATE forms SET deleted = 1, deleted_at = ? WHERE id = ?',
         [deletedAt, formId]
       );
     } catch (error: any) {
-      // 憒?憭望?嚗?閰血?湔 deleted 甈?
+      // ????剜?????啗???皝? deleted ???
       if (error.message && error.message.includes('no such column')) {
         try {
           result = await dbRun(
@@ -558,16 +557,16 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
             [formId]
           );
         } catch (e2: any) {
-          throw new Error(`?⊥??湔銵典嚗?{e2.message}`);
+          throw new Error(`????皝??萄謘??{e2.message}`);
         }
       } else {
         throw error;
       }
     }
     
-    // 瑼Ｘ蝯?
+    // ?潘撓貔??
     if (!result) {
-      // ??瑼Ｘ?臬?湔??
+      // ????潘撓貔??秋??皝????
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
@@ -577,26 +576,25 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
+    // ??? changes ??0???謢?銵?????????    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
       }
-      console.error('銵典?湔憭望?嚗eleted 隞 0');
+      console.error('?萄謘?皝??剜????eleted ??蹌?0');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('moveFormToTrash ?航炊:', error);
-    console.error('?航炊閮:', error.message);
-    throw new Error(`?⊥??湔銵典嚗?{error.message}`);
+    console.error('moveFormToTrash ??芰?:', error);
+    console.error('??芰??殷?蹓?', error.message);
+    throw new Error(`????皝??萄謘??{error.message}`);
   }
 }
 
 /**
- * 敺??暹▲??銵典
- */
+ * ?綜竣???嫖????萄謘? */
 async function restoreFormSQLite(formId: number): Promise<boolean> {
   try {
     const result = await dbRun(
@@ -604,9 +602,9 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
       [formId]
     );
     
-    // 瑼Ｘ蝯?
+    // ?潘撓貔??
     if (!result) {
-      // ??瑼Ｘ?臬?湔??
+      // ????潘撓貔??秋??皝????
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -616,7 +614,7 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
+    // ??? changes ??0???謢?銵?????????    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -626,30 +624,28 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     return changes > 0;
   } catch (error: any) {
-    console.error('restoreForm ?航炊:', error);
-    throw new Error(`?⊥???銵典嚗?{error.message}`);
+    console.error('restoreForm ??芰?:', error);
+    throw new Error(`???????萄謘??{error.message}`);
   }
 }
 
 /**
- * 瘞訾??芷銵典嚗???斤???殷?
+ * ?防???畸??萄謘????蹇???止??謚??畾?
  */
 async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // ??蝞??芷???格??  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
+  // ????????畸??????澗??  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
   const deletedOrders = orderCount?.count || 0;
 
-  // ?芷?賊?閮
-  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
+  // ??畸??鞈??殉?謘?  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
 
-  // 瘞訾??芷銵典
-  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
+  // ?防???畸??萄謘?  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
 
-  // 瑼Ｘ蝯?
+  // ?潘撓貔??
   let success = false;
   if (!result) {
-    // ??瑼Ｘ?臬?芷??
+    // ????潘撓貔??秋???畸????
     const checkForm = await dbGet('SELECT id FROM forms WHERE id = ?', [formId]) as any;
-    success = !checkForm; // 憒??曆??啗”?殷?銵函內?芷??
+    success = !checkForm; // ?????????畾??萄???畸????
   } else {
     success = ((result as any)?.changes ?? 0) > 0;
   }
@@ -660,7 +656,7 @@ async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: b
   };
 }
 
-// 閮?賊???
+// ?殉?謘?鞈????
 export interface Order {
   id: number;
   form_id: number;
@@ -668,7 +664,7 @@ export interface Order {
   customer_phone?: string;
   order_source?: string;
   order_data: Record<string, any>;
-  items_summary?: Array<{ name: string; quantity: number }>; // ?拙?皜嚗?憟賭?憭誨鞈潭?雿???
+  items_summary?: Array<{ name: string; quantity: number }>; // ????謘????陪??叟垢隤券?瞏??選???謖?
   client_ip?: string;
   user_agent?: string;
   created_at: string;
@@ -676,16 +672,16 @@ export interface Order {
   order_token: string;
 }
 
-// 敺??株??葉???拙?皜嚗?憟賭?憭誨鞈潭?雿?
+// ?綜筆?????謕????????謘????陪??叟垢隤券?瞏??選?
 function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
   const items: Array<{ name: string; quantity: number }> = [];
   
-  // ?風銵典甈?嚗?箝末鈭?隞?頃????甈?
+  // ??◢?萄謘??????蝞?箸?哨??????????????
   for (const field of form.fields) {
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // ???貊??澆??????        for (const item of value) {
+        // ????鞎??瞉????蹓???        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -711,12 +707,10 @@ async function createOrderSQLite(
   clientIp?: string,
   userAgent?: string,
   orderSource?: string,
-  form?: Form // ?啣? form ??冽???拙?皜
-): Promise<string> {
+  form?: Form // ??? form ??塗??踐????????謘?): Promise<string> {
   const orderToken = generateToken();
   
-  // ???拙?皜
-  let itemsSummary: string | null = null;
+  // ???????謘?  let itemsSummary: string | null = null;
   if (form) {
     const items = extractItemsSummary(form, orderData);
     if (items && items.length > 0) {
@@ -748,16 +742,16 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     [JSON.stringify(orderData), orderToken]
   );
     
-    // 瑼Ｘ蝯?
+    // ?潘撓貔??
     if (!result) {
-      console.error('updateOrder: dbRun 餈? undefined');
-      // ??瑼Ｘ?臬?湔??
+      console.error('updateOrder: dbRun 擗?? undefined');
+      // ????潘撓貔??秋??皝????
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder && checkOrder.order_token === orderToken) {
-        // 撽?鞈??臬???湔鈭?        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
+        // ?踐??????秋??賹??皝???        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
         if (verifyOrder) {
           const currentData = JSON.parse(verifyOrder.order_data);
-          // 蝪∪瘥?嚗?摰?嚗??臭誑雿?箸撽?嚗?          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
+          // ?芬謘??????堆?????剛??遴鬲蹌?蝞賃秧?踐????          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
             return true;
           }
         }
@@ -767,7 +761,7 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
+    // ??? changes ??0???謢?銵?????????    if (changes === 0) {
       const checkOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder) {
         const currentData = JSON.parse(checkOrder.order_data);
@@ -775,14 +769,14 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
           return true;
         }
       }
-      console.error('閮?湔憭望?');
+      console.error('?殉?謘?皝??剜??');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('updateOrder ?航炊:', error);
-    throw new Error(`?⊥??湔閮嚗?{error.message}`);
+    console.error('updateOrder ??芰?:', error);
+    throw new Error(`????皝??殉?謘??{error.message}`);
   }
 }
 
@@ -824,27 +818,26 @@ async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
 }
 
 /**
- * ?芷閮
- */
+ * ??畸??殉?謘? */
 async function deleteOrderSQLite(orderToken: string): Promise<boolean> {
   try {
     const result = await dbRun('DELETE FROM orders WHERE order_token = ?', [orderToken]);
     
     if (!result) {
-      // ??瑼Ｘ?臬?芷??
+      // ????潘撓貔??秋???畸????
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
-      return !checkOrder; // 憒??曆??啗??殷?銵函內?芷??
+      return !checkOrder; // ??????????畾??萄???畸????
     }
     
     const changes = (result as any)?.changes ?? 0;
     return changes > 0;
   } catch (error: any) {
-    console.error('deleteOrder ?航炊:', error);
-    throw new Error(`?⊥??芷閮嚗?{error.message}`);
+    console.error('deleteOrder ??芰?:', error);
+    throw new Error(`?????畸??殉?謘??{error.message}`);
   }
 }
 
-// 蝟餌絞閮剖??賊???
+// ??蝯???鞈????
 async function getSettingSQLite(key: string): Promise<string | null> {
   await ensureDatabaseInitialized();
   const row = await dbGet('SELECT value FROM settings WHERE key = ?', [key]) as any;
@@ -860,77 +853,77 @@ async function setSettingSQLite(key: string, value: string): Promise<boolean> {
     );
     return true;
   } catch (error) {
-    console.error('閮剖??脣??航炊:', error);
+    console.error('?桀???????芰?:', error);
     return false;
   }
 }
 
-// ???臭? token
+// ?賹???? token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// ?? session ID
+// ?賹? session ID
 export function generateSessionId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-// 靽?閮??嚗QLite嚗?async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// ?踐???殉?謘?????QLite??async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
     await ensureDatabaseInitialized();
     
-    // ????????5??嚗?    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ???????賹??謕?5?????    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await dbRun(
       'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
       [fiveMinutesAgo]
     );
 
-    // 瑼Ｘ?臬撌脫?靽?
+    // ?潘撓貔??秋????踐??
     const existing = await dbGet(
       'SELECT * FROM reserved_orders WHERE form_id = ? AND session_id = ?',
       [formId, sessionId]
     ) as any;
 
     if (existing) {
-      // 瑼Ｘ?臬撌脤???      const reservedAt = new Date(existing.reserved_at);
+      // ?潘撓貔??秋?????      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // 撌脤????芷銝阡??啣???        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
+        // ???賹???畸????????        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
       } else {
-        // 餈??暹?靽?
+        // 擗??????踐??
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // ???嗅?撌脫?鈭斤?閮?歇靽????    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
+    // ?謘???????剜??殉?謘??箸??踐??????    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
     const reserved = await dbAll(
       'SELECT order_number FROM reserved_orders WHERE form_id = ? AND (order_token IS NOT NULL OR reserved_at > ?)',
       [formId, fiveMinutesAgo]
     ) as any[];
 
-    // 閮?銝???函?????    const usedNumbers = new Set<number>();
+    // ?殷???????????????    const usedNumbers = new Set<number>();
     reserved.forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // ?曉蝚砌???函?????    let orderNumber = 1;
+    // ????????????????    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // ?靽?閮?嚗蝙??INSERT OR REPLACE ???臭?蝝?嚗?    await dbRun(
+    // ???踐???殉死??????INSERT OR REPLACE ???????????    await dbRun(
       'INSERT OR REPLACE INTO reserved_orders (form_id, session_id, order_number, reserved_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
       [formId, sessionId, orderNumber]
     );
 
     return { success: true, orderNumber };
   } catch (error: any) {
-    console.error('靽?閮???航炊:', error);
+    console.error('?踐???殉?謘?????芰?:', error);
     return { success: false, error: error.message };
   }
 }
 
-// 蝣箄?靽???摨??漱閮??
+// ?????踐??????制???摹?殉?謘?蹇?
 async function confirmReservedOrderSQLite(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
   try {
     await ensureDatabaseInitialized();
@@ -940,12 +933,12 @@ async function confirmReservedOrderSQLite(formId: number, sessionId: string, ord
     );
     return true;
   } catch (error) {
-    console.error('蝣箄?靽?閮?航炊:', error);
+    console.error('?????踐???殉?謘??芰?:', error);
     return false;
   }
 }
 
-// ??靽???摨?
+// ?謘??踐??????制?
 async function getReservedOrderNumberSQLite(formId: number, sessionId: string): Promise<number | null> {
   try {
     await ensureDatabaseInitialized();
@@ -955,12 +948,12 @@ async function getReservedOrderNumberSQLite(formId: number, sessionId: string): 
     ) as any;
     return result ? result.order_number : null;
   } catch (error) {
-    console.error('??靽?閮???航炊:', error);
+    console.error('?謘??踐???殉?謘?????芰?:', error);
     return null;
   }
 }
 
-// 皜???靽?
+// ??????踐??
 async function cleanupExpiredReservationsSQLite(): Promise<void> {
   try {
     await ensureDatabaseInitialized();
@@ -970,11 +963,11 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
       [fiveMinutesAgo]
     );
   } catch (error) {
-    console.error('皜???靽??航炊:', error);
+    console.error('??????踐????芰?:', error);
   }
 }
 
-// LINE 鞈??閮??賊??賣嚗QLite ?嚗?async function recordLinePostSQLite(
+// LINE ????殉死??鞈??鞈???QLite ??秧??async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -983,7 +976,7 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // 蝣箔? line_posts 銵典???    await dbRun(`
+    // ???? line_posts ?萄???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1001,8 +994,8 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
       [formId, groupId, messageId, senderName, postContent]
     );
   } catch (error: any) {
-    console.error('閮? LINE 鞈???航炊:', error);
-    throw new Error(`閮? LINE 鞈??憭望?嚗?{error.message}`);
+    console.error('?殉死? LINE ?????芰?:', error);
+    throw new Error(`?殉死? LINE ????剜????{error.message}`);
   }
 }
 
@@ -1012,7 +1005,7 @@ async function getRecentLinePostsSQLite(
 ): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
   try {
     await ensureDatabaseInitialized();
-    // 蝣箔? line_posts 銵典???    await dbRun(`
+    // ???? line_posts ?萄???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1037,28 +1030,28 @@ async function getRecentLinePostsSQLite(
       postedAt: row.created_at,
     }));
   } catch (error: any) {
-    console.error('?? LINE 鞈??閮??航炊:', error);
+    console.error('?謘? LINE ????殉死???芰?:', error);
     return [];
   }
 }
 
-// ?????澈嚗蝚砌?甈∩蝙?冽?隤輻嚗?let dbInitialized = false;
+// ?豲??謘??謕???謓剛?????????方撒???let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
   if (DATABASE_TYPE === 'supabase') {
-    // Supabase 銝?閬?憪?嚗”蝯?撌脣 SQL Editor 銝剖遣蝡?    // 雿?閬Ⅱ靽?dbModule 撌脰???    if (!dbModule) {
-      throw new Error('Supabase 璅∠??芾??伐?隢Ⅱ隤憓??詨歇甇?Ⅱ閮剖?');
+    // Supabase ????秋撒??迎???????謓?SQL Editor ?????    // ?選???秋播?⊿?dbModule ????    if (!dbModule) {
+      throw new Error('Supabase ???????隡??ｇ??⊿?????閰冽????⊿??');
     }
     return dbModule.ensureDatabaseInitialized();
   }
   
-  // SQLite 璅∪?
+  // SQLite ??
   if (!dbInitialized) {
     await initDatabaseSQLite();
     dbInitialized = true;
   }
 }
 
-// ?寞?鞈?摨恍????撠???// 憒?雿輻 Supabase嚗? dbModule ?撠????// 憒?雿輻 SQLite嚗蝙?其??Ｗ?蝢拍? SQLite ?賣
+// ?撖????冽????∵????????????// ????輯撒??Supabase?? dbModule ??????????????// ????輯撒??SQLite??????嚗??Ｘ?? SQLite ?鞈?
 
 export const initDatabase = DATABASE_TYPE === 'supabase' 
   ? dbModule.initDatabase 
@@ -1140,7 +1133,7 @@ export const setSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.setSetting
   : setSettingSQLite;
 
-// 靽?閮???賊??賣
+// ?踐???殉?謘????鞈??鞈?
 export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
   ? dbModule.reserveOrderNumber
   : reserveOrderNumberSQLite;
@@ -1157,7 +1150,7 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
 
-// LINE 鞈??閮??賊??賣嚗QLite嚗?async function recordLinePostSQLite(
+// LINE ????殉死??鞈??鞈???QLite??async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -1166,7 +1159,7 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // 蝣箔? line_posts 銵典???    await dbRun(`
+    // ???? line_posts ?萄???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1184,14 +1177,14 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
       [formId, groupId, messageId || null, senderName, postContent || null]
     );
   } catch (error: any) {
-    console.error('閮? LINE 鞈???航炊:', error);
-    throw new Error(`閮? LINE 鞈??憭望?嚗?{error.message}`);
+    console.error('?殉死? LINE ?????芰?:', error);
+    throw new Error(`?殉死? LINE ????剜????{error.message}`);
   }
 }
 
 }
 
-// LINE 鞈??閮??賊??賣
+// LINE ????殉死??鞈??鞈?
 export const recordLinePost = DATABASE_TYPE === 'supabase'
   ? dbModule.recordLinePost
   : recordLinePostSQLite;
@@ -1200,5 +1193,5 @@ export const getRecentLinePosts = DATABASE_TYPE === 'supabase'
   ? dbModule.getRecentLinePosts
   : getRecentLinePostsSQLite;
 
-// generateSessionId 撌脣銝摰儔銝血???
+// generateSessionId ?謓剝????堊垓??銵???
 
