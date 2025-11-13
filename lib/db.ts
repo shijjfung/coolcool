@@ -1064,40 +1064,6 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
   }
 }
 
-// LINE ?????????????QLite ??
-async function recordLinePostSQLite(
-  formId: number,
-  groupId: string,
-  messageId: string | null,
-  senderName: string,
-  postContent: string | null
-): Promise<void> {
-  try {
-    await ensureDatabaseInitialized();
-    // ???? line_posts ??
-    await dbRun(`
-      CREATE TABLE IF NOT EXISTS line_posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        form_id INTEGER NOT NULL,
-        group_id TEXT NOT NULL,
-        message_id TEXT,
-        sender_name TEXT NOT NULL,
-        post_content TEXT,
-        posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
-      )
-    `);
-    
-    await dbRun(
-      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
-      [formId, groupId, messageId, senderName, postContent]
-    );
-  } catch (error: any) {
-    console.error('Failed to record LINE post:', error);
-    throw new Error(`記錄 LINE 賣文失敗: ${error.message}`);
-  }
-}
-
 async function getRecentLinePostsSQLite(
   groupId: string,
   limit: number = 10
@@ -1366,40 +1332,6 @@ export const getReservedOrderNumber = DATABASE_TYPE === 'supabase'
 export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
-
-// LINE ?????????????QLite??
-async function recordLinePostSQLite(
-  formId: number,
-  groupId: string,
-  messageId: string | null,
-  senderName: string,
-  postContent: string | null
-): Promise<void> {
-  try {
-    await ensureDatabaseInitialized();
-    // ???? line_posts ??
-    await dbRun(`
-      CREATE TABLE IF NOT EXISTS line_posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        form_id INTEGER NOT NULL,
-        group_id TEXT NOT NULL,
-        message_id TEXT,
-        sender_name TEXT NOT NULL,
-        post_content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
-      )
-    `);
-    
-    await dbRun(
-      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
-      [formId, groupId, messageId || null, senderName, postContent || null]
-    );
-  } catch (error: any) {
-    console.error('Failed to record LINE post:', error);
-    throw new Error(`記錄 LINE 賣文失敗: ${error.message}`);
-  }
-}
 
 export const getActiveLineSales = DATABASE_TYPE === 'supabase'
   ? dbModule.getActiveLineSales
