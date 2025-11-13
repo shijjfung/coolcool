@@ -1188,40 +1188,6 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   }
 }
 
-async function getRecentLinePostsSQLite(
-  groupId: string,
-  limit: number = 10
-): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
-  try {
-    await ensureDatabaseInitialized();
-    // 蝣箔? line_posts 銵典???    await dbRun(`
-      CREATE TABLE IF NOT EXISTS line_posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        form_id INTEGER NOT NULL,
-        group_id TEXT NOT NULL,
-        message_id TEXT,
-        sender_name TEXT NOT NULL,
-        post_content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
-      )
-    `);
-    
-    const rows = await dbAll(
-      'SELECT form_id, sender_name, post_content, created_at FROM line_posts WHERE group_id = ? ORDER BY created_at DESC LIMIT ?',
-      [groupId, limit]
-    ) as any[];
-    
-    return rows.map((row: any) => ({
-      formId: row.form_id,
-      senderName: row.sender_name || '',
-      postContent: row.post_content || '',
-      postedAt: row.created_at,
-    }));
-  } catch (error: any) {
-    console.error('?? LINE 鞈??閮??航炊:', error);
-    return [];
-  }
 }
 
 // LINE 鞈??閮??賊??賣
