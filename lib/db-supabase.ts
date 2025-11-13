@@ -1,19 +1,19 @@
 import { supabaseAdmin } from './supabase';
 import type { FormField, Form, Order } from './db';
 
-// 確�?使用 Supabase Admin 客戶�?function getSupabase() {
+// 蝣箔?雿輻 Supabase Admin 摰Ｘ蝡?function getSupabase() {
   if (!supabaseAdmin) {
-    console.warn('?��? 警�?：未設�? SUPABASE_SERVICE_ROLE_KEY，使??anon key（可?��??��??��??��?');
-    throw new Error('Supabase ?�正確設定�?請檢?�環境�??�。建議設�?SUPABASE_SERVICE_ROLE_KEY 以獲得�??��??��?);
+    console.warn('?? 霅血?嚗閮剖? SUPABASE_SERVICE_ROLE_KEY嚗蝙??anon key嚗?賣??????塚?');
+    throw new Error('Supabase ?芣迤蝣箄身摰?隢炎?亦憓??詻遣霅啗身摰?SUPABASE_SERVICE_ROLE_KEY 隞亦敺??湔???);
   }
   return supabaseAdmin;
 }
 
-// ?��??��??�庫表�???Supabase Dashboard ??SQL Editor 中執�?supabase-schema.sql�?export async function initDatabase() {
-  // Supabase 表�?構已??SQL Editor 中建立�??�裡不�?要�?任�?�?  // 但�??�此?�數以�???API ?�容??  console.log('Supabase 資�?庫已?��??��?表�?構�?已在 SQL Editor 中建立�?');
+// ?????澈銵剁???Supabase Dashboard ??SQL Editor 銝剖銵?supabase-schema.sql嚗?export async function initDatabase() {
+  // Supabase 銵函?瑽歇??SQL Editor 銝剖遣蝡??ㄐ銝?閬?隞颱?鈭?  // 雿??迨?賣隞乩???API ?詨捆??  console.log('Supabase 鞈?摨怠歇????銵函?瑽?撌脣 SQL Editor 銝剖遣蝡?');
 }
 
-// 表單?��??��?
+// 銵典?賊???
 export async function createForm(
   name: string,
   fields: FormField[],
@@ -53,7 +53,7 @@ export async function createForm(
     .select('id')
     .single();
 
-  if (error) throw new Error(`建�?表單失�?�?{error.message}`);
+  if (error) throw new Error(`撱箇?銵典憭望?嚗?{error.message}`);
   return data.id;
 }
 
@@ -66,7 +66,7 @@ export async function getFormByToken(token: string): Promise<Form | null> {
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') return null; // ?��??��???    throw new Error(`?��?表單失�?�?{error.message}`);
+    if (error.code === 'PGRST116') return null; // ?曆??啗???    throw new Error(`??銵典憭望?嚗?{error.message}`);
   }
 
   return mapFormFromDb(data);
@@ -86,7 +86,7 @@ export async function getFormById(id: number, includeDeleted: boolean = false): 
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`?��?表單失�?�?{error.message}`);
+    throw new Error(`??銵典憭望?嚗?{error.message}`);
   }
 
   return mapFormFromDb(data);
@@ -104,7 +104,7 @@ export async function getAllForms(includeDeleted: boolean = false): Promise<Form
 
   const { data, error } = await query;
 
-  if (error) throw new Error(`?��?表單?�表失�?�?{error.message}`);
+  if (error) throw new Error(`??銵典?”憭望?嚗?{error.message}`);
   return (data || []).map(mapFormFromDb);
 }
 
@@ -115,7 +115,7 @@ export async function getDeletedForms(): Promise<Form[]> {
     .eq('deleted', 1)
     .order('deleted_at', { ascending: false });
 
-  if (error) throw new Error(`?��?已刪?�表?�失?��?${error.message}`);
+  if (error) throw new Error(`??撌脣?方”?桀仃??${error.message}`);
   return (data || []).map(mapFormFromDb);
 }
 
@@ -156,7 +156,7 @@ export async function updateForm(
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`?�新表單失�?�?{error.message}`);
+  if (error) throw new Error(`?湔銵典憭望?嚗?{error.message}`);
   return true;
 }
 
@@ -166,7 +166,7 @@ export async function updateFormName(formId: number, newName: string): Promise<b
     .update({ name: newName })
     .eq('id', formId);
 
-  if (error) throw new Error(`?�新表單?�稱失�?�?{error.message}`);
+  if (error) throw new Error(`?湔銵典?迂憭望?嚗?{error.message}`);
   return true;
 }
 
@@ -179,14 +179,14 @@ export async function markReportGenerated(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`標�??�表?��?失�?�?{error.message}`);
+  if (error) throw new Error(`璅??梯”??憭望?嚗?{error.message}`);
   return true;
 }
 
 export async function getFormsReadyForReport(): Promise<Form[]> {
   const now = new Date().toISOString();
   
-  // Supabase ?�詢：使?��???SQL ?��?步查�?  // ?�查詢�? order_deadline 且已?��???  const { data: data1, error: error1 } = await getSupabase()
+  // Supabase ?亥岷嚗蝙?典???SQL ??甇交閰?  // ?閰Ｘ? order_deadline 銝歇?唳???  const { data: data1, error: error1 } = await getSupabase()
     .from('forms')
     .select('*')
     .not('order_deadline', 'is', null)
@@ -194,7 +194,7 @@ export async function getFormsReadyForReport(): Promise<Form[]> {
     .eq('report_generated', 0)
     .eq('deleted', 0);
 
-  // ?�查詢�???order_deadline �?deadline 已到?��?
+  // ?閰Ｘ???order_deadline 雿?deadline 撌脣??
   const { data: data2, error: error2 } = await getSupabase()
     .from('forms')
     .select('*')
@@ -204,10 +204,10 @@ export async function getFormsReadyForReport(): Promise<Form[]> {
     .eq('deleted', 0);
 
   if (error1 || error2) {
-    throw new Error(`?��?待�??�報表表?�失?��?${error1?.message || error2?.message}`);
+    throw new Error(`??敺??銵刻”?桀仃??${error1?.message || error2?.message}`);
   }
 
-  // ?�併結�?並�?�?  const allForms = [...(data1 || []), ...(data2 || [])];
+  // ?蔥蝯?銝行?摨?  const allForms = [...(data1 || []), ...(data2 || [])];
   allForms.sort((a, b) => {
     const aDeadline = a.order_deadline || a.deadline;
     const bDeadline = b.order_deadline || b.deadline;
@@ -226,7 +226,7 @@ export async function moveFormToTrash(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`移�?表單?��??�桶失�?�?{error.message}`);
+  if (error) throw new Error(`蝘餃?銵典?啣??暹▲憭望?嚗?{error.message}`);
   return true;
 }
 
@@ -239,45 +239,45 @@ export async function restoreForm(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`?��?表單失�?�?{error.message}`);
+  if (error) throw new Error(`??銵典憭望?嚗?{error.message}`);
   return true;
 }
 
 export async function permanentlyDeleteForm(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // ?��?算�??�除?��??�數??  const { count } = await getSupabase()
+  // ??蝞??芷???格??  const { count } = await getSupabase()
     .from('orders')
     .select('*', { count: 'exact', head: true })
     .eq('form_id', formId);
 
   const deletedOrders = count || 0;
 
-  // ?�除?��?訂單（CASCADE ?�自?��??��?但�??��??��??�除以獲?�數?��?
+  // ?芷?賊?閮嚗ASCADE ?????雿??????芷隞亦???
   await getSupabase()
     .from('orders')
     .delete()
     .eq('form_id', formId);
 
-  // 永�??�除表單
+  // 瘞訾??芷銵典
   const { error } = await getSupabase()
     .from('forms')
     .delete()
     .eq('id', formId);
 
-  if (error) throw new Error(`永�??�除表單失�?�?{error.message}`);
+  if (error) throw new Error(`瘞訾??芷銵典憭望?嚗?{error.message}`);
   return { success: true, deletedOrders };
 }
 
-// 訂單?��??��?
-// 從�??��??�中?��??��?清單（�?好�?多代購�?位�?
+// 閮?賊???
+// 敺??株??葉???拙?皜嚗?憟賭?憭誨鞈潭?雿?
 function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
   const items: Array<{ name: string; quantity: number }> = [];
   
-  // ?�歷表單欄�?，找?�「好事�?�?��?��??��?欄�?
+  // ?風銵典甈?嚗?箝末鈭?隞?頃????甈?
   for (const field of form.fields) {
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // ?��??��??��??�物?��???        for (const item of value) {
+        // ???貊??澆??????        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -303,11 +303,11 @@ export async function createOrder(
   clientIp?: string,
   userAgent?: string,
   orderSource?: string,
-  form?: Form // ?��? form ?�數?�於?��??��?清單
+  form?: Form // ?啣? form ??冽???拙?皜
 ): Promise<string> {
   const orderToken = generateToken();
   
-  // ?��??��?清單
+  // ???拙?皜
   let itemsSummary: Array<{ name: string; quantity: number }> | null = null;
   if (form) {
     itemsSummary = extractItemsSummary(form, orderData);
@@ -327,7 +327,7 @@ export async function createOrder(
       order_token: orderToken,
     });
 
-  if (error) throw new Error(`建�?訂單失�?�?{error.message}`);
+  if (error) throw new Error(`撱箇?閮憭望?嚗?{error.message}`);
   return orderToken;
 }
 
@@ -337,7 +337,7 @@ export async function updateOrder(orderToken: string, orderData: Record<string, 
     .update({ order_data: orderData })
     .eq('order_token', orderToken);
 
-  if (error) throw new Error(`?�新訂單失�?�?{error.message}`);
+  if (error) throw new Error(`?湔閮憭望?嚗?{error.message}`);
   return true;
 }
 
@@ -350,7 +350,7 @@ export async function getOrderByToken(token: string): Promise<Order | null> {
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`?��?訂單失�?�?{error.message}`);
+    throw new Error(`??閮憭望?嚗?{error.message}`);
   }
 
   return mapOrderFromDb(data);
@@ -363,7 +363,7 @@ export async function getOrdersByFormId(formId: number): Promise<Order[]> {
     .eq('form_id', formId)
     .order('created_at', { ascending: true });
 
-  if (error) throw new Error(`?��?訂單?�表失�?�?{error.message}`);
+  if (error) throw new Error(`??閮?”憭望?嚗?{error.message}`);
   return (data || []).map(mapOrderFromDb);
 }
 
@@ -373,11 +373,11 @@ export async function deleteOrder(orderToken: string): Promise<boolean> {
     .delete()
     .eq('order_token', orderToken);
 
-  if (error) throw new Error(`?�除訂單失�?�?{error.message}`);
+  if (error) throw new Error(`?芷閮憭望?嚗?{error.message}`);
   return true;
 }
 
-// 系統設�??��??��?
+// 蝟餌絞閮剖??賊???
 export async function getSetting(key: string): Promise<string | null> {
   const { data, error } = await getSupabase()
     .from('settings')
@@ -387,7 +387,7 @@ export async function getSetting(key: string): Promise<string | null> {
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`?��?設�?失�?�?{error.message}`);
+    throw new Error(`??閮剖?憭望?嚗?{error.message}`);
   }
 
   return data?.value || null;
@@ -402,11 +402,11 @@ export async function setSetting(key: string, value: string): Promise<boolean> {
       updated_at: new Date().toISOString(),
     });
 
-  if (error) throw new Error(`?��?設�?失�?�?{error.message}`);
+  if (error) throw new Error(`?脣?閮剖?憭望?嚗?{error.message}`);
   return true;
 }
 
-// 輔助?�數：�?資�?庫�??��?射為 Form ?�件
+// 頛?賣嚗?鞈?摨怨???撠 Form ?拐辣
 function mapFormFromDb(row: any): Form {
   return {
     id: row.id,
@@ -433,7 +433,7 @@ function mapFormFromDb(row: any): Form {
   };
 }
 
-// 輔助?�數：�?資�?庫�??��?射為 Order ?�件
+// 頛?賣嚗?鞈?摨怨???撠 Order ?拐辣
 function mapOrderFromDb(row: any): Order {
   return {
     id: row.id,
@@ -451,7 +451,7 @@ function mapOrderFromDb(row: any): Order {
   };
 }
 
-// LINE �??記�??��??�數（Supabase�?export async function recordLinePost(
+// LINE 鞈??閮??賊??賣嚗upabase嚗?export async function recordLinePost(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -470,26 +470,26 @@ function mapOrderFromDb(row: any): Order {
       });
 
     if (error) {
-      console.error('記�? LINE �???�誤:', error);
+      console.error('閮? LINE 鞈???航炊:', error);
       return false;
     }
     return true;
   } catch (error) {
-    console.error('記�? LINE �???�誤:', error);
+    console.error('閮? LINE 鞈???航炊:', error);
     return false;
   }
 }
 
 }
 
-// ?��??��? token
+// ???臭? token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// 保�?訂單?��?（Supabase�?export async function reserveOrderNumber(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// 靽?閮??嚗upabase嚗?export async function reserveOrderNumber(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
-    // ?��??��??��??��?5?��?�?    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ????????5??嚗?    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await getSupabase()
       .from('reserved_orders')
       .delete()
@@ -497,7 +497,7 @@ function generateToken(): string {
       .lt('reserved_at', fiveMinutesAgo)
       .is('order_token', null);
 
-    // 檢查?�否已�?保�?
+    // 瑼Ｘ?臬撌脫?靽?
     const { data: existing } = await getSupabase()
       .from('reserved_orders')
       .select('*')
@@ -506,20 +506,20 @@ function generateToken(): string {
       .single();
 
     if (existing) {
-      // 檢查?�否已�???      const reservedAt = new Date(existing.reserved_at);
+      // 瑼Ｘ?臬撌脤???      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // 已�??��??�除並�??��???        await getSupabase()
+        // 撌脤????芷銝阡??啣???        await getSupabase()
           .from('reserved_orders')
           .delete()
           .eq('id', existing.id);
       } else {
-        // 返�??��?保�?
+        // 餈??暹?靽?
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // ?��??��?已�?交�?訂單?�已保�??�數??    const { data: orders } = await getSupabase()
+    // ???嗅?撌脫?鈭斤?閮?歇靽????    const { data: orders } = await getSupabase()
       .from('orders')
       .select('id')
       .eq('form_id', formId);
@@ -530,17 +530,17 @@ function generateToken(): string {
       .eq('form_id', formId)
       .or(`order_token.not.is.null,reserved_at.gt.${fiveMinutesAgo}`);
 
-    // 計�?下�??�可?��??��???    const usedNumbers = new Set<number>();
+    // 閮?銝???函?????    const usedNumbers = new Set<number>();
     (reserved || []).forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // ?�到第�??�可?��??��???    let orderNumber = 1;
+    // ?曉蝚砌???函?????    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // ?�入保�?記�?（使??upsert ?��??��?約�?�?    const { error } = await getSupabase()
+    // ?靽?閮?嚗蝙??upsert ???臭?蝝?嚗?    const { error } = await getSupabase()
       .from('reserved_orders')
       .upsert({
         form_id: formId,
@@ -555,12 +555,12 @@ function generateToken(): string {
 
     return { success: true, orderNumber };
   } catch (error: any) {
-    console.error('保�?訂單?��??�誤:', error);
+    console.error('靽?閮???航炊:', error);
     return { success: false, error: error.message };
   }
 }
 
-// 確�?保�??��?序�??�交訂單?��?
+// 蝣箄?靽???摨??漱閮??
 export async function confirmReservedOrder(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
   try {
     const { error } = await getSupabase()
@@ -571,12 +571,12 @@ export async function confirmReservedOrder(formId: number, sessionId: string, or
 
     return !error;
   } catch (error) {
-    console.error('確�?保�?訂單?�誤:', error);
+    console.error('蝣箄?靽?閮?航炊:', error);
     return false;
   }
 }
 
-// ?��?保�??��?序�?
+// ??靽???摨?
 export async function getReservedOrderNumber(formId: number, sessionId: string): Promise<number | null> {
   try {
     const { data } = await getSupabase()
@@ -589,12 +589,12 @@ export async function getReservedOrderNumber(formId: number, sessionId: string):
 
     return data ? data.order_number : null;
   } catch (error) {
-    console.error('?��?保�?訂單?��??�誤:', error);
+    console.error('??靽?閮???航炊:', error);
     return null;
   }
 }
 
-// 清�??��?保�?
+// 皜???靽?
 export async function cleanupExpiredReservations(): Promise<void> {
   try {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -604,11 +604,11 @@ export async function cleanupExpiredReservations(): Promise<void> {
       .lt('reserved_at', fiveMinutesAgo)
       .is('order_token', null);
   } catch (error) {
-    console.error('清�??��?保�??�誤:', error);
+    console.error('皜???靽??航炊:', error);
   }
 }
 
-// LINE �??記�??��??�數
+// LINE 鞈??閮??賊??賣
 export async function recordLinePost(
   formId: number,
   groupId: string,
@@ -629,8 +629,8 @@ export async function recordLinePost(
 
     if (error) throw error;
   } catch (error: any) {
-    console.error('記�? LINE �???�誤:', error);
-    throw new Error(`記�? LINE �??失�?�?{error.message}`);
+    console.error('閮? LINE 鞈???航炊:', error);
+    throw new Error(`閮? LINE 鞈??憭望?嚗?{error.message}`);
   }
 }
 
@@ -655,44 +655,44 @@ export async function getRecentLinePosts(
       postedAt: row.created_at,
     }));
   } catch (error: any) {
-    console.error('?��? LINE �??記�??�誤:', error);
+    console.error('?? LINE 鞈??閮??航炊:', error);
     return [];
   }
 }
 
-// ?��??�檢?��?保�? API ?�容?��?
+// ???炎?伐?靽? API ?詨捆?改?
 export async function ensureDatabaseInitialized() {
-  // Supabase 不�?要�?始�?，表結�?已在 SQL Editor 中建�?  // 但�?要檢??Supabase ????�否�?��
+  // Supabase 銝?閬?憪?嚗”蝯?撌脣 SQL Editor 銝剖遣蝡?  // 雿?閬炎??Supabase ????臬甇?虜
   try {
-    // ?�檢??supabaseAdmin ?�否存在
+    // ?炎??supabaseAdmin ?臬摮
     if (!supabaseAdmin) {
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
       const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
       
       if (!supabaseUrl) {
-        throw new Error('SUPABASE_URL ?��?變數?�設定。�???Vercel Dashboard > Settings > Environment Variables 中設定�?);
+        throw new Error('SUPABASE_URL ?啣?霈?芾身摰???Vercel Dashboard > Settings > Environment Variables 銝剛身摰?);
       }
       if (!supabaseServiceKey && !supabaseAnonKey) {
-        throw new Error('SUPABASE_SERVICE_ROLE_KEY ??SUPABASE_ANON_KEY ?��?變數?�設定。�???Vercel Dashboard > Settings > Environment Variables 中設定�?);
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY ??SUPABASE_ANON_KEY ?啣?霈?芾身摰???Vercel Dashboard > Settings > Environment Variables 銝剛身摰?);
       }
-      throw new Error('Supabase 客戶端�?始�?失�??��?檢查?��?變數設�???);
+      throw new Error('Supabase 摰Ｘ蝡臬?憪?憭望???瑼Ｘ?啣?霈閮剖???);
     }
     
     const supabase = getSupabase();
-    // ?�試一?�簡?��??�詢來�?證�??
+    // ?岫銝?陛?桃??亥岷靘?霅??
     const { error } = await supabase.from('forms').select('id').limit(1);
     if (error && error.code !== 'PGRST116') {
-      // PGRST116 表示沒�?記�?，這是�?��??      // ?��??�誤表示????�表結�??��?�?      if (error.code === '42P01') {
-        throw new Error('資�?庫表不�??�。�???Supabase Dashboard > SQL Editor 中執�?supabase-complete-schema.sql 來建立表結�???);
+      // PGRST116 銵函內瘝?閮?嚗甇?虜??      // ?嗡??航炊銵函內????”蝯???憿?      if (error.code === '42P01') {
+        throw new Error('鞈?摨怨”銝??具???Supabase Dashboard > SQL Editor 銝剖銵?supabase-complete-schema.sql 靘遣蝡”蝯???);
       }
-      throw new Error(`Supabase ???失�?�?{error.message} (code: ${error.code})`);
+      throw new Error(`Supabase ???憭望?嚗?{error.message} (code: ${error.code})`);
     }
     return true;
   } catch (error: any) {
-    if (error.message.includes('Supabase ?�正確設�?) || error.message.includes('?��?變數')) {
-      throw error; // ?�新?�出?��?變數?�誤
+    if (error.message.includes('Supabase ?芣迤蝣箄身摰?) || error.message.includes('?啣?霈')) {
+      throw error; // ???啣?霈?航炊
     }
-    throw new Error(`資�?庫�??檢查失�?�?{error.message}`);
+    throw new Error(`鞈?摨恍??瑼Ｘ憭望?嚗?{error.message}`);
   }
 }
