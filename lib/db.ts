@@ -166,24 +166,22 @@ if (DATABASE_TYPE === 'sqlite') {
   }
 
   // ????  await dbRun(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      form_id INTEGER NOT NULL,
-      customer_name TEXT,
-      customer_phone TEXT,
-      order_source TEXT,
-      facebook_comment_id TEXT,
-      facebook_pickup_notified_at TEXT,
-      order_data TEXT NOT NULL,
-      items_summary TEXT,
-      client_ip TEXT,
-      user_agent TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      order_token TEXT UNIQUE NOT NULL,
-      FOREIGN KEY (form_id) REFERENCES forms(id)
-    )
-  `);
+  //   CREATE TABLE IF NOT EXISTS orders (
+  //     id INTEGER PRIMARY KEY AUTOINCREMENT,
+  //     form_id INTEGER NOT NULL,
+  //     customer_name TEXT,
+  //     customer_phone TEXT,
+  //     order_source TEXT,
+  //     order_data TEXT NOT NULL,
+  //     items_summary TEXT,
+  //     client_ip TEXT,
+  //     user_agent TEXT,
+  //     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  //     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  //     order_token TEXT UNIQUE NOT NULL,
+  //     FOREIGN KEY (form_id) REFERENCES forms(id)
+  //   )
+  // `);
   
   // ????????????????????
   try {
