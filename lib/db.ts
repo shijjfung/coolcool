@@ -20,9 +20,15 @@ let path: any;
 let fs: any;
 let db: any;
 let dbPath: string = '';
-let dbRun: (sql: string, params?: any[]) => Promise<any>;
-let dbGet: (sql: string, params?: any[]) => Promise<any>;
-let dbAll: (sql: string, params?: any[]) => Promise<any>;
+let dbRun: (sql: string, params?: any[]) => Promise<any> = async () => {
+  throw new Error('dbRun 未初始化');
+};
+let dbGet: (sql: string, params?: any[]) => Promise<any> = async () => {
+  throw new Error('dbGet 未初始化');
+};
+let dbAll: (sql: string, params?: any[]) => Promise<any> = async () => {
+  throw new Error('dbAll 未初始化');
+};
 
 if (DATABASE_TYPE === 'sqlite') {
   // ???????SQLite ???????????? Supabase ??????????
