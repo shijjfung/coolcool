@@ -5,9 +5,9 @@ const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 let dbModule: any;
 if (DATABASE_TYPE === 'supabase') {
   try {
-    dbModule = require('./db-supabase');
+    dbModule = require('./db-supabase-fixed');
   } catch (error) {
-        console.error('Failed to load Supabase module');
+    console.error('Failed to load Supabase module:', error);
     throw error;
   }
 }
@@ -1204,7 +1204,15 @@ export async function ensureDatabaseInitialized() {
     // Supabase ???????????????????SQL Editor ??
     // ?????????dbModule ??
     if (!dbModule) {
-      throw new Error('Supabase ??????????????????????????????');
+      // 嘗試重新加載
+      try {
+        dbModule = require('./db-supabase-fixed');
+      } catch (error: any) {
+        throw new Error(`Supabase 模組載入失敗: ${error?.message || '無法載入 db-supabase-fixed 模組'}`);
+      }
+    }
+    if (!dbModule || typeof dbModule.ensureDatabaseInitialized !== 'function') {
+      throw new Error('Supabase 模組未正確初始化，ensureDatabaseInitialized 函數不存在');
     }
     return dbModule.ensureDatabaseInitialized();
   }

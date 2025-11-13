@@ -48,6 +48,7 @@ export default function CreateForm() {
   const [facebookReplyMessage, setFacebookReplyMessage] = useState('已登記');
   const [newKeyword, setNewKeyword] = useState('');
   // LINE 自動監控設定
+  const [lineAutoMonitor, setLineAutoMonitor] = useState(false);
   const [linePostAuthor, setLinePostAuthor] = useState('');
   const [lineKeywords, setLineKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
   const [newLineKeyword, setNewLineKeyword] = useState('');
@@ -117,6 +118,8 @@ export default function CreateForm() {
         setFacebookAutoMonitor(form.facebook_auto_monitor === 1);
         setFacebookReplyMessage(form.facebook_reply_message || '已登記');
         // LINE 自動監控設定
+        // 如果有設定 LINE 發文者姓名，則認為已啟用 LINE 自動監控
+        setLineAutoMonitor(!!form.line_post_author);
         setLinePostAuthor(form.line_post_author || '');
         setLineKeywords(['+1', '+2', '+3', '加一', '加1']); // LINE 關鍵字暫時使用預設值
         setUseCustomLineIdentifier(!!form.line_use_custom_identifier);
@@ -215,6 +218,34 @@ export default function CreateForm() {
           }
         }
 
+        // 驗證 Facebook 自動監控設定
+        if (facebookAutoMonitor) {
+          if (!facebookPostUrl.trim()) {
+            alert('請輸入 Facebook 貼文連結');
+            setSaving(false);
+            return;
+          }
+          if (!facebookPostAuthor.trim()) {
+            alert('請輸入 Facebook 發文者姓名');
+            setSaving(false);
+            return;
+          }
+          if (facebookKeywords.length === 0) {
+            alert('請至少新增一個關鍵字');
+            setSaving(false);
+            return;
+          }
+        }
+
+        // 驗證 LINE 自動監控設定
+        if (lineAutoMonitor) {
+          if (!linePostAuthor.trim()) {
+            alert('請輸入 LINE 發文者姓名');
+            setSaving(false);
+            return;
+          }
+        }
+
         // 組合截止時間（YYYY-MM-DDTHH:mm）
         const deadlineToSend = `${deadlineDate}T${deadlineTime}`;
 
@@ -266,14 +297,14 @@ export default function CreateForm() {
             })(), // 取貨時間（可選）
             facebookCommentUrl: facebookCommentUrl.trim() || undefined,
             lineCommentUrl: lineCommentUrl.trim() || undefined,
-            facebookPostUrl: facebookPostUrl.trim() || undefined,
-            facebookPostAuthor: facebookPostAuthor.trim() || undefined,
-            facebookKeywords: JSON.stringify(facebookKeywords),
-            facebookAutoMonitor: facebookAutoMonitor,
-            facebookReplyMessage: facebookReplyMessage.trim() || undefined,
-            linePostAuthor: linePostAuthor.trim() || undefined,
-            lineCustomIdentifier: useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
-            useCustomLineIdentifier,
+            facebookPostUrl: facebookAutoMonitor ? (facebookPostUrl.trim() || undefined) : undefined,
+            facebookPostAuthor: facebookAutoMonitor ? (facebookPostAuthor.trim() || undefined) : undefined,
+            facebookKeywords: facebookAutoMonitor ? JSON.stringify(facebookKeywords) : undefined,
+            facebookAutoMonitor: facebookAutoMonitor ? 1 : 0,
+            facebookReplyMessage: facebookAutoMonitor ? (facebookReplyMessage.trim() || undefined) : undefined,
+            linePostAuthor: lineAutoMonitor ? (linePostAuthor.trim() || undefined) : undefined,
+            lineCustomIdentifier: lineAutoMonitor && useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
+            useCustomLineIdentifier: lineAutoMonitor && useCustomLineIdentifier,
           }),
         });
 
@@ -316,14 +347,14 @@ export default function CreateForm() {
             })(), // 取貨時間（可選）
             facebookCommentUrl: facebookCommentUrl.trim() || undefined,
             lineCommentUrl: lineCommentUrl.trim() || undefined,
-            facebookPostUrl: facebookPostUrl.trim() || undefined,
-            facebookPostAuthor: facebookPostAuthor.trim() || undefined,
-            facebookKeywords: JSON.stringify(facebookKeywords),
-            facebookAutoMonitor: facebookAutoMonitor,
-            facebookReplyMessage: facebookReplyMessage.trim() || undefined,
-            linePostAuthor: linePostAuthor.trim() || undefined,
-            lineCustomIdentifier: useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
-            useCustomLineIdentifier,
+            facebookPostUrl: facebookAutoMonitor ? (facebookPostUrl.trim() || undefined) : undefined,
+            facebookPostAuthor: facebookAutoMonitor ? (facebookPostAuthor.trim() || undefined) : undefined,
+            facebookKeywords: facebookAutoMonitor ? JSON.stringify(facebookKeywords) : undefined,
+            facebookAutoMonitor: facebookAutoMonitor ? 1 : 0,
+            facebookReplyMessage: facebookAutoMonitor ? (facebookReplyMessage.trim() || undefined) : undefined,
+            linePostAuthor: lineAutoMonitor ? (linePostAuthor.trim() || undefined) : undefined,
+            lineCustomIdentifier: lineAutoMonitor && useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
+            useCustomLineIdentifier: lineAutoMonitor && useCustomLineIdentifier,
           }),
         });
 
@@ -837,22 +868,33 @@ export default function CreateForm() {
 
           {/* LINE 自動監控設定 */}
           <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
-            <label className="block text-base font-bold text-gray-700 mb-4">
-              💬 LINE 自動監控設定
-            </label>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  LINE 發文者姓名 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={linePostAuthor}
-                  onChange={(e) => setLinePostAuthor(e.target.value)}
-                  className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
-                  placeholder="例如：愛買（系統會根據此姓名識別要監控的賣文）"
-                  autoComplete="off"
-                />
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                type="checkbox"
+                id="lineAutoMonitor"
+                checked={lineAutoMonitor}
+                onChange={(e) => setLineAutoMonitor(e.target.checked)}
+                className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+              />
+              <label htmlFor="lineAutoMonitor" className="text-base font-bold text-gray-700 cursor-pointer">
+                🤖 LINE 自動監控留言
+              </label>
+            </div>
+            {lineAutoMonitor && (
+              <div className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    LINE 發文者姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={linePostAuthor}
+                    onChange={(e) => setLinePostAuthor(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                    placeholder="例如：愛買（系統會根據此姓名識別要監控的賣文）"
+                    autoComplete="off"
+                    required={lineAutoMonitor}
+                  />
                 <p className="text-xs text-gray-500 mt-1">
                   💡 當 LINE 群組中有此發文者的賣文時，系統會自動監控該賣文下方的留言
                 </p>
@@ -921,63 +963,64 @@ export default function CreateForm() {
                   💡 提示：如果群組內同時有多個賣文，系統會根據關鍵字匹配度選擇最符合的表單
                 </p>
               </div>
-            <div className="pt-4 mt-4 border-t border-green-200">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                LINE 賣文識別碼
-              </label>
-              <div className="bg-white border border-green-100 rounded-lg p-3 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-sm text-gray-700 font-medium">
-                    預設代碼：
-                  </span>
-                  <code className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm">
-                    {formToken ? `@${formToken}` : '儲存後系統會自動產生 6 碼代碼'}
-                  </code>
-                </div>
-                <p className="text-xs text-gray-600">
-                  💡 請在賣文中加入這組代碼（建議放在文頭或文尾），系統會根據它鎖定對應的表單。
-                </p>
-                <p className="text-xs text-gray-600">
-                  ✅ 當系統偵測到含有識別碼的賣文時，會回覆「小幫手已經收到闆娘要上班的訊息啦!」提醒你 BOT 已開始監控。
-                </p>
-              </div>
-              <div className="flex items-center gap-2 mt-3">
-                <input
-                  id="useCustomLineIdentifier"
-                  type="checkbox"
-                  checked={useCustomLineIdentifier}
-                  onChange={(e) => {
-                    setUseCustomLineIdentifier(e.target.checked);
-                    if (!e.target.checked) {
-                      setLineCustomIdentifier('');
-                    }
-                  }}
-                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-                />
-                <label
-                  htmlFor="useCustomLineIdentifier"
-                  className="text-sm font-medium text-gray-700 cursor-pointer"
-                >
-                  使用自訂識別碼
+              <div className="pt-4 mt-4 border-t border-green-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  LINE 賣文識別碼
                 </label>
-              </div>
-              {useCustomLineIdentifier && (
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    value={lineCustomIdentifier}
-                    onChange={(e) => setLineCustomIdentifier(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
-                    placeholder="例如：#679 或 [鹹水雞679]"
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    建議選擇群組裡獨一無二的字串。賣文內務必包含此字串，系統會同時接受預設代碼與自訂代碼。
+                <div className="bg-white border border-green-100 rounded-lg p-3 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-sm text-gray-700 font-medium">
+                      預設代碼：
+                    </span>
+                    <code className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm">
+                      {formToken ? `@${formToken}` : '儲存後系統會自動產生 6 碼代碼'}
+                    </code>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    💡 請在賣文中加入這組代碼（建議放在文頭或文尾），系統會根據它鎖定對應的表單。
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    ✅ 當系統偵測到含有識別碼的賣文時，會回覆「小幫手已經收到闆娘要上班的訊息啦!」提醒你 BOT 已開始監控。
                   </p>
                 </div>
-              )}
+                <div className="flex items-center gap-2 mt-3">
+                  <input
+                    id="useCustomLineIdentifier"
+                    type="checkbox"
+                    checked={useCustomLineIdentifier}
+                    onChange={(e) => {
+                      setUseCustomLineIdentifier(e.target.checked);
+                      if (!e.target.checked) {
+                        setLineCustomIdentifier('');
+                      }
+                    }}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                  />
+                  <label
+                    htmlFor="useCustomLineIdentifier"
+                    className="text-sm font-medium text-gray-700 cursor-pointer"
+                  >
+                    使用自訂識別碼
+                  </label>
+                </div>
+                {useCustomLineIdentifier && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      value={lineCustomIdentifier}
+                      onChange={(e) => setLineCustomIdentifier(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                      placeholder="例如：#679 或 [鹹水雞679]"
+                      autoComplete="off"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      建議選擇群組裡獨一無二的字串。賣文內務必包含此字串，系統會同時接受預設代碼與自訂代碼。
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-            </div>
+            )}
           </div>
 
           <div className="mb-6">
