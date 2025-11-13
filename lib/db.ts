@@ -1,20 +1,18 @@
-// 根據環境變數選擇資料庫類型
-const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
+﻿// ?寞??啣?霈?豢?鞈?摨恍???const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 
-// 如果使用 Supabase，導入 Supabase 實作
+// 憒?雿輻 Supabase嚗???Supabase 撖虫?
 let dbModule: any;
 if (DATABASE_TYPE === 'supabase') {
   try {
     dbModule = require('./db-supabase');
   } catch (error) {
-    console.error('無法載入 Supabase 模組，請確認已安裝 @supabase/supabase-js 並設定環境變數');
+    console.error('?⊥?頛 Supabase 璅∠?嚗?蝣箄?撌脣?鋆?@supabase/supabase-js 銝西身摰憓???);
     throw error;
   }
 }
 
-// SQLite 實作（保留作為備用）
-// 只在 SQLite 模式下動態導入，避免在 Vercel (Supabase) 環境下載入
-let sqlite3: any;
+// SQLite 撖虫?嚗????箏??剁?
+// ?芸 SQLite 璅∪?銝????伐??踹???Vercel (Supabase) ?啣?銝???let sqlite3: any;
 let promisify: any;
 let path: any;
 let fs: any;
@@ -25,7 +23,7 @@ let dbGet: (sql: string, params?: any[]) => Promise<any>;
 let dbAll: (sql: string, params?: any[]) => Promise<any>;
 
 if (DATABASE_TYPE === 'sqlite') {
-  // 動態導入 SQLite 相關模組（避免在 Supabase 模式下載入）
+  // ??撠 SQLite ?賊?璅∠?嚗? Supabase 璅∪?銝??伐?
   sqlite3 = require('sqlite3');
   promisify = require('util').promisify;
   path = require('path');
@@ -33,23 +31,20 @@ if (DATABASE_TYPE === 'sqlite') {
 
   dbPath = path.join(process.cwd(), 'orders.db');
 
-  // 確保資料庫檔案存在
-  if (!fs.existsSync(dbPath)) {
+  // 蝣箔?鞈?摨急?獢???  if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');
   }
 
   db = new sqlite3.Database(dbPath);
 
-  // 將 callback 風格的函數轉換為 Promise
+  // 撠?callback 憸冽??貉?? Promise
   dbRun = promisify(db.run.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbGet = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 }
 
-// 初始化資料庫表
-async function initDatabaseSQLite() {
-  // 表單設定表
-  await dbRun(`
+// ?????澈銵?async function initDatabaseSQLite() {
+  // 銵典閮剖?銵?  await dbRun(`
     CREATE TABLE IF NOT EXISTS forms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -67,85 +62,84 @@ async function initDatabaseSQLite() {
     )
   `);
   
-  // 檢查並新增新欄位（向後相容）
+  // 瑼Ｘ銝行憓甈?嚗?敺摰對?
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_deadline TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_limit INTEGER`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN pickup_time TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated_at TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_comment_url TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN line_comment_url TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_url TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_author TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_keywords TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN line_post_author TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
 
-  // 訂單表
-  await dbRun(`
+  // 閮銵?  await dbRun(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       form_id INTEGER NOT NULL,
@@ -163,30 +157,29 @@ async function initDatabaseSQLite() {
     )
   `);
   
-  // 檢查並新增新欄位（向後相容）
+  // 瑼Ｘ銝行憓甈?嚗?敺摰對?
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN client_ip TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN user_agent TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN items_summary TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN order_source TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // 甈?撌脣??剁?敹賜?航炊
   }
 
-  // 系統設定表
-  await dbRun(`
+  // 蝟餌絞閮剖?銵?  await dbRun(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -194,7 +187,7 @@ async function initDatabaseSQLite() {
     )
   `);
 
-  // 保留訂單排序表（用於先取單機制）
+  // 靽?閮??銵剁??冽???格??塚?
   await dbRun(`
     CREATE TABLE IF NOT EXISTS reserved_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -208,8 +201,7 @@ async function initDatabaseSQLite() {
     )
   `);
 
-  // LINE 賣文記錄表（記錄賣文與表單的對應關係）
-  await dbRun(`
+  // LINE 鞈??閮?銵剁?閮?鞈???”?桃?撠???嚗?  await dbRun(`
     CREATE TABLE IF NOT EXISTS line_posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       form_id INTEGER NOT NULL,
@@ -222,7 +214,7 @@ async function initDatabaseSQLite() {
     )
   `);
   
-  // 建立索引
+  // 撱箇?蝝Ｗ?
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id)`);
   } catch (e: any) {}
@@ -233,7 +225,7 @@ async function initDatabaseSQLite() {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_posted_at ON line_posts(posted_at)`);
   } catch (e: any) {}
   
-  // 建立索引
+  // 撱箇?蝝Ｗ?
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_form_id ON reserved_orders(form_id)`);
   } catch (e: any) {}
@@ -245,14 +237,14 @@ async function initDatabaseSQLite() {
   } catch (e: any) {}
 }
 
-// 表單相關操作
+// 銵典?賊???
 export interface FormField {
   name: string;
   label: string;
   type: 'text' | 'number' | 'costco';
   required: boolean;
   options?: string[];
-  price?: number; // 價格欄位（可選）
+  price?: number; // ?寞甈?嚗?賂?
 }
 
 export interface Form {
@@ -260,24 +252,21 @@ export interface Form {
   name: string;
   fields: FormField[];
   deadline: string;
-  order_deadline?: string; // 收單截止時間
-  order_limit?: number; // 訂單數量限制（可選）
-  pickup_time?: string; // 取貨時間（可選）
-  report_generated?: number; // 報表是否已生成 (0/1)
-  report_generated_at?: string; // 報表生成時間
-  deleted?: number; // 是否已刪除到垃圾桶 (0/1)
-  deleted_at?: string; // 刪除時間
+  order_deadline?: string; // ?嗅?芣迫??
+  order_limit?: number; // 閮?賊??嚗?賂?
+  pickup_time?: string; // ?疏??嚗?賂?
+  report_generated?: number; // ?梯”?臬撌脩???(0/1)
+  report_generated_at?: string; // ?梯”????
+  deleted?: number; // ?臬撌脣?文?獢?(0/1)
+  deleted_at?: string; // ?芷??
   created_at: string;
   form_token: string;
   facebook_comment_url?: string;
   line_comment_url?: string;
-  facebook_post_url?: string; // Facebook 貼文連結（用於自動監控）
-  facebook_post_author?: string; // Facebook 發文者姓名
-  facebook_keywords?: string; // Facebook 關鍵字列表（JSON 陣列）
-  facebook_auto_monitor?: number; // 是否啟用 Facebook 自動監控 (0/1)
-  facebook_reply_message?: string; // Facebook 回覆訊息
-  line_post_author?: string; // LINE 發文者姓名（用於識別要監控的賣文）
-}
+  facebook_post_url?: string; // Facebook 鞎潭????嚗?潸??改?
+  facebook_post_author?: string; // Facebook ?潭?????  facebook_keywords?: string; // Facebook ?摮?銵剁?JSON ???嚗?  facebook_auto_monitor?: number; // ?臬? Facebook ?芸??? (0/1)
+  facebook_reply_message?: string; // Facebook ??閮
+  line_post_author?: string; // LINE ?潭??????冽霅閬?抒?鞈??嚗?}
 
 async function createFormSQLite(
   name: string, 
@@ -407,8 +396,7 @@ async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[
 }
 
 /**
- * 取得垃圾桶中的表單
- */
+ * ???獢嗡葉?”?? */
 async function getDeletedFormsSQLite(): Promise<Form[]> {
   const rows = await dbAll('SELECT * FROM forms WHERE deleted = 1 ORDER BY deleted_at DESC') as any[];
   return rows.map(row => ({
@@ -431,7 +419,7 @@ async function getDeletedFormsSQLite(): Promise<Form[]> {
 }
 
 /**
- * 更新表單名稱
+ * ?湔銵典?迂
  */
 async function updateFormSQLite(
   formId: number,
@@ -482,8 +470,7 @@ async function updateFormNameSQLite(formId: number, newName: string): Promise<bo
 }
 
 /**
- * 標記報表已生成
- */
+ * 璅??梯”撌脩??? */
 async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
   const result = await dbRun(
     'UPDATE forms SET report_generated = 1, report_generated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -493,12 +480,11 @@ async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
 }
 
 /**
- * 取得已到達收單截止時間但尚未生成報表的表單
- * 使用 order_deadline（如果存在），否則使用 deadline
+ * ??撌脣??格甇Ｘ???撠???梯”?”?? * 雿輻 order_deadline嚗????剁?嚗?蝙??deadline
  */
 async function getFormsReadyForReportSQLite(): Promise<Form[]> {
   const now = new Date().toISOString();
-  // 優先使用 order_deadline，如果沒有則使用 deadline
+  // ?芸?雿輻 order_deadline嚗?????雿輻 deadline
   const rows = await dbAll(
     `SELECT * FROM forms 
      WHERE (
@@ -517,7 +503,7 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
     name: row.name,
     fields: JSON.parse(row.fields),
     deadline: row.deadline,
-    order_deadline: row.order_deadline || row.deadline, // 如果沒有 order_deadline，使用 deadline
+    order_deadline: row.order_deadline || row.deadline, // 憒?瘝? order_deadline嚗蝙??deadline
     report_generated: row.report_generated || 0,
     report_generated_at: row.report_generated_at || undefined,
     created_at: row.created_at,
@@ -528,24 +514,21 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
 }
 
 /**
- * 將表單移到垃圾桶（軟刪除）
- */
+ * 撠”?桃宏?啣??暹▲嚗??芷嚗? */
 async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
   try {
-    // 確保資料庫已初始化
-    await ensureDatabaseInitialized();
+    // 蝣箔?鞈?摨怠歇????    await ensureDatabaseInitialized();
     
-    // 先檢查欄位是否存在
-    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
+    // ?炎?交?雿?血???    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
     const hasDeleted = tableInfo.some((col: any) => col.name === 'deleted');
     const hasDeletedAt = tableInfo.some((col: any) => col.name === 'deleted_at');
     
-    // 如果欄位不存在，嘗試新增
+    // 憒?甈?銝??剁??岫?啣?
     if (!hasDeleted) {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
       } catch (e: any) {
-        console.error('新增 deleted 欄位失敗:', e.message);
+        console.error('?啣? deleted 甈?憭望?:', e.message);
       }
     }
     
@@ -553,22 +536,20 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
       } catch (e: any) {
-        console.error('新增 deleted_at 欄位失敗:', e.message);
+        console.error('?啣? deleted_at 甈?憭望?:', e.message);
       }
     }
     
-    // 使用 ISO 格式的時間戳記
-    const deletedAt = new Date().toISOString();
+    // 雿輻 ISO ?澆????閮?    const deletedAt = new Date().toISOString();
     
-    // 先嘗試更新兩個欄位
-    let result: any = null;
+    // ??閰行?啣??雿?    let result: any = null;
     try {
       result = await dbRun(
         'UPDATE forms SET deleted = 1, deleted_at = ? WHERE id = ?',
         [deletedAt, formId]
       );
     } catch (error: any) {
-      // 如果失敗，嘗試只更新 deleted 欄位
+      // 憒?憭望?嚗?閰血?湔 deleted 甈?
       if (error.message && error.message.includes('no such column')) {
         try {
           result = await dbRun(
@@ -576,16 +557,16 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
             [formId]
           );
         } catch (e2: any) {
-          throw new Error(`無法更新表單：${e2.message}`);
+          throw new Error(`?⊥??湔銵典嚗?{e2.message}`);
         }
       } else {
         throw error;
       }
     }
     
-    // 檢查結果
+    // 瑼Ｘ蝯?
     if (!result) {
-      // 手動檢查是否更新成功
+      // ??瑼Ｘ?臬?湔??
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
@@ -595,26 +576,25 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
       }
-      console.error('表單更新失敗，deleted 仍為 0');
+      console.error('銵典?湔憭望?嚗eleted 隞 0');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('moveFormToTrash 錯誤:', error);
-    console.error('錯誤訊息:', error.message);
-    throw new Error(`無法更新表單：${error.message}`);
+    console.error('moveFormToTrash ?航炊:', error);
+    console.error('?航炊閮:', error.message);
+    throw new Error(`?⊥??湔銵典嚗?{error.message}`);
   }
 }
 
 /**
- * 從垃圾桶還原表單
+ * 敺??暹▲??銵典
  */
 async function restoreFormSQLite(formId: number): Promise<boolean> {
   try {
@@ -623,9 +603,9 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
       [formId]
     );
     
-    // 檢查結果
+    // 瑼Ｘ蝯?
     if (!result) {
-      // 手動檢查是否更新成功
+      // ??瑼Ｘ?臬?湔??
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -635,8 +615,7 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -646,31 +625,30 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     return changes > 0;
   } catch (error: any) {
-    console.error('restoreForm 錯誤:', error);
-    throw new Error(`無法還原表單：${error.message}`);
+    console.error('restoreForm ?航炊:', error);
+    throw new Error(`?⊥???銵典嚗?{error.message}`);
   }
 }
 
 /**
- * 永久刪除表單（同時刪除相關訂單）
+ * 瘞訾??芷銵典嚗???斤???殷?
  */
 async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // 先計算要刪除的訂單數量
-  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
+  // ??蝞??芷???格??  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
   const deletedOrders = orderCount?.count || 0;
 
-  // 刪除相關訂單
+  // ?芷?賊?閮
   await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
 
-  // 永久刪除表單
+  // 瘞訾??芷銵典
   const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
 
-  // 檢查結果
+  // 瑼Ｘ蝯?
   let success = false;
   if (!result) {
-    // 手動檢查是否刪除成功
+    // ??瑼Ｘ?臬?芷??
     const checkForm = await dbGet('SELECT id FROM forms WHERE id = ?', [formId]) as any;
-    success = !checkForm; // 如果找不到表單，表示刪除成功
+    success = !checkForm; // 憒??曆??啗”?殷?銵函內?芷??
   } else {
     success = ((result as any)?.changes ?? 0) > 0;
   }
@@ -681,7 +659,7 @@ async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: b
   };
 }
 
-// 訂單相關操作
+// 閮?賊???
 export interface Order {
   id: number;
   form_id: number;
@@ -689,7 +667,7 @@ export interface Order {
   customer_phone?: string;
   order_source?: string;
   order_data: Record<string, any>;
-  items_summary?: Array<{ name: string; quantity: number }>; // 物品清單（從好事多代購欄位提取）
+  items_summary?: Array<{ name: string; quantity: number }>; // ?拙?皜嚗?憟賭?憭誨鞈潭?雿???
   client_ip?: string;
   user_agent?: string;
   created_at: string;
@@ -697,17 +675,16 @@ export interface Order {
   order_token: string;
 }
 
-// 從訂單資料中提取物品清單（從好事多代購欄位）
+// 敺??株??葉???拙?皜嚗?憟賭?憭誨鞈潭?雿?
 function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
   const items: Array<{ name: string; quantity: number }> = [];
   
-  // 遍歷表單欄位，找出「好事多代購」類型的欄位
+  // ?風銵典甈?嚗?箝末鈭?隞?頃????甈?
   for (const field of form.fields) {
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // 處理數組格式的物品清單
-        for (const item of value) {
+        // ???貊??澆??????        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -733,11 +710,11 @@ async function createOrderSQLite(
   clientIp?: string,
   userAgent?: string,
   orderSource?: string,
-  form?: Form // 新增 form 參數用於提取物品清單
+  form?: Form // ?啣? form ??冽???拙?皜
 ): Promise<string> {
   const orderToken = generateToken();
   
-  // 提取物品清單
+  // ???拙?皜
   let itemsSummary: string | null = null;
   if (form) {
     const items = extractItemsSummary(form, orderData);
@@ -770,18 +747,16 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     [JSON.stringify(orderData), orderToken]
   );
     
-    // 檢查結果
+    // 瑼Ｘ蝯?
     if (!result) {
-      console.error('updateOrder: dbRun 返回 undefined');
-      // 手動檢查是否更新成功
+      console.error('updateOrder: dbRun 餈? undefined');
+      // ??瑼Ｘ?臬?湔??
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder && checkOrder.order_token === orderToken) {
-        // 驗證資料是否真的更新了
-        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
+        // 撽?鞈??臬???湔鈭?        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
         if (verifyOrder) {
           const currentData = JSON.parse(verifyOrder.order_data);
-          // 簡單比較（不完美，但可以作為基本驗證）
-          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
+          // 蝪∪瘥?嚗?摰?嚗??臭誑雿?箸撽?嚗?          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
             return true;
           }
         }
@@ -791,8 +766,7 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // 憒? changes ??0嚗?霅?衣???唳???    if (changes === 0) {
       const checkOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder) {
         const currentData = JSON.parse(checkOrder.order_data);
@@ -800,14 +774,14 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
           return true;
         }
       }
-      console.error('訂單更新失敗');
+      console.error('閮?湔憭望?');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('updateOrder 錯誤:', error);
-    throw new Error(`無法更新訂單：${error.message}`);
+    console.error('updateOrder ?航炊:', error);
+    throw new Error(`?⊥??湔閮嚗?{error.message}`);
   }
 }
 
@@ -849,27 +823,27 @@ async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
 }
 
 /**
- * 刪除訂單
+ * ?芷閮
  */
 async function deleteOrderSQLite(orderToken: string): Promise<boolean> {
   try {
     const result = await dbRun('DELETE FROM orders WHERE order_token = ?', [orderToken]);
     
     if (!result) {
-      // 手動檢查是否刪除成功
+      // ??瑼Ｘ?臬?芷??
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
-      return !checkOrder; // 如果找不到訂單，表示刪除成功
+      return !checkOrder; // 憒??曆??啗??殷?銵函內?芷??
     }
     
     const changes = (result as any)?.changes ?? 0;
     return changes > 0;
   } catch (error: any) {
-    console.error('deleteOrder 錯誤:', error);
-    throw new Error(`無法刪除訂單：${error.message}`);
+    console.error('deleteOrder ?航炊:', error);
+    throw new Error(`?⊥??芷閮嚗?{error.message}`);
   }
 }
 
-// 系統設定相關操作
+// 蝟餌絞閮剖??賊???
 async function getSettingSQLite(key: string): Promise<string | null> {
   await ensureDatabaseInitialized();
   const row = await dbGet('SELECT value FROM settings WHERE key = ?', [key]) as any;
@@ -885,85 +859,77 @@ async function setSettingSQLite(key: string, value: string): Promise<boolean> {
     );
     return true;
   } catch (error) {
-    console.error('設定儲存錯誤:', error);
+    console.error('閮剖??脣??航炊:', error);
     return false;
   }
 }
 
-// 生成唯一 token
+// ???臭? token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// 生成 session ID
+// ?? session ID
 export function generateSessionId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-// 保留訂單排序（SQLite）
-async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// 靽?閮??嚗QLite嚗?async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
     await ensureDatabaseInitialized();
     
-    // 先清理過期保留（5分鐘）
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ????????5??嚗?    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await dbRun(
       'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
       [fiveMinutesAgo]
     );
 
-    // 檢查是否已有保留
+    // 瑼Ｘ?臬撌脫?靽?
     const existing = await dbGet(
       'SELECT * FROM reserved_orders WHERE form_id = ? AND session_id = ?',
       [formId, sessionId]
     ) as any;
 
     if (existing) {
-      // 檢查是否已過期
-      const reservedAt = new Date(existing.reserved_at);
+      // 瑼Ｘ?臬撌脤???      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // 已過期，刪除並重新分配
-        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
+        // 撌脤????芷銝阡??啣???        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
       } else {
-        // 返回現有保留
+        // 餈??暹?靽?
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // 取得當前已提交的訂單和已保留的數量
-    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
+    // ???嗅?撌脫?鈭斤?閮?歇靽????    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
     const reserved = await dbAll(
       'SELECT order_number FROM reserved_orders WHERE form_id = ? AND (order_token IS NOT NULL OR reserved_at > ?)',
       [formId, fiveMinutesAgo]
     ) as any[];
 
-    // 計算下一個可用的排序號
-    const usedNumbers = new Set<number>();
+    // 閮?銝???函?????    const usedNumbers = new Set<number>();
     reserved.forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // 找到第一個可用的排序號
-    let orderNumber = 1;
+    // ?曉蝚砌???函?????    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // 插入保留記錄（使用 INSERT OR REPLACE 處理唯一約束）
-    await dbRun(
+    // ?靽?閮?嚗蝙??INSERT OR REPLACE ???臭?蝝?嚗?    await dbRun(
       'INSERT OR REPLACE INTO reserved_orders (form_id, session_id, order_number, reserved_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
       [formId, sessionId, orderNumber]
     );
 
     return { success: true, orderNumber };
   } catch (error: any) {
-    console.error('保留訂單排序錯誤:', error);
+    console.error('靽?閮???航炊:', error);
     return { success: false, error: error.message };
   }
 }
 
-// 確認保留的排序（提交訂單時）
+// 蝣箄?靽???摨??漱閮??
 async function confirmReservedOrderSQLite(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
   try {
     await ensureDatabaseInitialized();
@@ -973,12 +939,12 @@ async function confirmReservedOrderSQLite(formId: number, sessionId: string, ord
     );
     return true;
   } catch (error) {
-    console.error('確認保留訂單錯誤:', error);
+    console.error('蝣箄?靽?閮?航炊:', error);
     return false;
   }
 }
 
-// 取得保留的排序號
+// ??靽???摨?
 async function getReservedOrderNumberSQLite(formId: number, sessionId: string): Promise<number | null> {
   try {
     await ensureDatabaseInitialized();
@@ -988,12 +954,12 @@ async function getReservedOrderNumberSQLite(formId: number, sessionId: string): 
     ) as any;
     return result ? result.order_number : null;
   } catch (error) {
-    console.error('取得保留訂單排序錯誤:', error);
+    console.error('??靽?閮???航炊:', error);
     return null;
   }
 }
 
-// 清理過期保留
+// 皜???靽?
 async function cleanupExpiredReservationsSQLite(): Promise<void> {
   try {
     await ensureDatabaseInitialized();
@@ -1003,12 +969,11 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
       [fiveMinutesAgo]
     );
   } catch (error) {
-    console.error('清理過期保留錯誤:', error);
+    console.error('皜???靽??航炊:', error);
   }
 }
 
-// LINE 賣文記錄相關函數（SQLite 版本）
-async function recordLinePostSQLite(
+// LINE 鞈??閮??賊??賣嚗QLite ?嚗?async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -1017,8 +982,7 @@ async function recordLinePostSQLite(
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // 確保 line_posts 表存在
-    await dbRun(`
+    // 蝣箔? line_posts 銵典???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1036,8 +1000,8 @@ async function recordLinePostSQLite(
       [formId, groupId, messageId, senderName, postContent]
     );
   } catch (error: any) {
-    console.error('記錄 LINE 賣文錯誤:', error);
-    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+    console.error('閮? LINE 鞈???航炊:', error);
+    throw new Error(`閮? LINE 鞈??憭望?嚗?{error.message}`);
   }
 }
 
@@ -1047,8 +1011,7 @@ async function getRecentLinePostsSQLite(
 ): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
   try {
     await ensureDatabaseInitialized();
-    // 確保 line_posts 表存在
-    await dbRun(`
+    // 蝣箔? line_posts 銵典???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1073,33 +1036,28 @@ async function getRecentLinePostsSQLite(
       postedAt: row.created_at,
     }));
   } catch (error: any) {
-    console.error('取得 LINE 賣文記錄錯誤:', error);
+    console.error('?? LINE 鞈??閮??航炊:', error);
     return [];
   }
 }
 
-// 初始化資料庫（在第一次使用時調用）
-let dbInitialized = false;
+// ?????澈嚗蝚砌?甈∩蝙?冽?隤輻嚗?let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
   if (DATABASE_TYPE === 'supabase') {
-    // Supabase 不需要初始化，表結構已在 SQL Editor 中建立
-    // 但需要確保 dbModule 已載入
-    if (!dbModule) {
-      throw new Error('Supabase 模組未載入，請確認環境變數已正確設定');
+    // Supabase 銝?閬?憪?嚗”蝯?撌脣 SQL Editor 銝剖遣蝡?    // 雿?閬Ⅱ靽?dbModule 撌脰???    if (!dbModule) {
+      throw new Error('Supabase 璅∠??芾??伐?隢Ⅱ隤憓??詨歇甇?Ⅱ閮剖?');
     }
     return dbModule.ensureDatabaseInitialized();
   }
   
-  // SQLite 模式
+  // SQLite 璅∪?
   if (!dbInitialized) {
     await initDatabaseSQLite();
     dbInitialized = true;
   }
 }
 
-// 根據資料庫類型選擇要導出的函數
-// 如果使用 Supabase，從 dbModule 重新導出所有函數
-// 如果使用 SQLite，使用上面定義的 SQLite 函數
+// ?寞?鞈?摨恍????撠???// 憒?雿輻 Supabase嚗? dbModule ?撠????// 憒?雿輻 SQLite嚗蝙?其??Ｗ?蝢拍? SQLite ?賣
 
 export const initDatabase = DATABASE_TYPE === 'supabase' 
   ? dbModule.initDatabase 
@@ -1181,7 +1139,7 @@ export const setSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.setSetting
   : setSettingSQLite;
 
-// 保留訂單排序相關函數
+// 靽?閮???賊??賣
 export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
   ? dbModule.reserveOrderNumber
   : reserveOrderNumberSQLite;
@@ -1198,8 +1156,7 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
 
-// LINE 賣文記錄相關函數（SQLite）
-async function recordLinePostSQLite(
+// LINE 鞈??閮??賊??賣嚗QLite嚗?async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -1208,8 +1165,7 @@ async function recordLinePostSQLite(
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // 確保 line_posts 表存在
-    await dbRun(`
+    // 蝣箔? line_posts 銵典???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1227,8 +1183,8 @@ async function recordLinePostSQLite(
       [formId, groupId, messageId || null, senderName, postContent || null]
     );
   } catch (error: any) {
-    console.error('記錄 LINE 賣文錯誤:', error);
-    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+    console.error('閮? LINE 鞈???航炊:', error);
+    throw new Error(`閮? LINE 鞈??憭望?嚗?{error.message}`);
   }
 }
 
@@ -1238,8 +1194,7 @@ async function getRecentLinePostsSQLite(
 ): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
   try {
     await ensureDatabaseInitialized();
-    // 確保 line_posts 表存在
-    await dbRun(`
+    // 蝣箔? line_posts 銵典???    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1264,12 +1219,12 @@ async function getRecentLinePostsSQLite(
       postedAt: row.created_at,
     }));
   } catch (error: any) {
-    console.error('取得 LINE 賣文記錄錯誤:', error);
+    console.error('?? LINE 鞈??閮??航炊:', error);
     return [];
   }
 }
 
-// LINE 賣文記錄相關函數
+// LINE 鞈??閮??賊??賣
 export const recordLinePost = DATABASE_TYPE === 'supabase'
   ? dbModule.recordLinePost
   : recordLinePostSQLite;
@@ -1278,5 +1233,5 @@ export const getRecentLinePosts = DATABASE_TYPE === 'supabase'
   ? dbModule.getRecentLinePosts
   : getRecentLinePostsSQLite;
 
-// generateSessionId 已在上面定義並導出
+// generateSessionId 撌脣銝摰儔銝血???
 
