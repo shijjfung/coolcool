@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAllForms, getFormByToken, createOrder, ensureDatabaseInitialized, FormField } from '@/lib/db';
+import { getAllForms, getFormByToken, createOrder, ensureDatabaseInitialized, FormField, type Form } from '@/lib/db';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
 
 // 已處理留言追蹤（使用記憶體快取，避免重複處理）
@@ -254,9 +254,9 @@ export default async function handler(
     const { formId, accessToken } = req.body;
 
     // 如果指定了表單 ID，只掃描該表單；否則掃描所有啟用自動監控的表單
-    let forms;
+    let forms: Form[];
     if (formId) {
-      const form = await getAllForms().then(forms => forms.find(f => f.id === formId));
+      const form = await getAllForms().then((forms: Form[]) => forms.find(f => f.id === formId));
       forms = form ? [form] : [];
     } else {
       forms = await getAllForms();
