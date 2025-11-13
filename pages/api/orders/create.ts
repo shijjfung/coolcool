@@ -64,7 +64,8 @@ export default async function handler(
       clientIp,
       userAgent,
       source,
-      form // 傳入 form 以便提取物品清單
+      form,
+      undefined // 傳入 form 以便提取物品清單，Facebook 留言 ID 無
     );
 
     // 如果有 sessionId，確認保留的排序已提交

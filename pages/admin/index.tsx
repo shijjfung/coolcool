@@ -15,6 +15,15 @@ interface Form {
   form_token: string;
   facebook_comment_url?: string;
   line_comment_url?: string;
+   facebook_post_url?: string;
+   facebook_post_author?: string;
+   facebook_keywords?: string;
+   facebook_auto_monitor?: number;
+   facebook_reply_message?: string;
+   line_post_author?: string;
+   post_deadline_reply_message?: string;
+   line_custom_identifier?: string;
+   line_use_custom_identifier?: boolean;
 }
 
 interface OrderSummary {
@@ -22,7 +31,16 @@ interface OrderSummary {
   customer_name?: string;
   customer_phone?: string;
   order_source?: string;
+  facebook_comment_id?: string;
+  facebook_pickup_notified_at?: string | null;
   items_summary?: Array<{ name: string; quantity: number }>;
+}
+
+interface FacebookNotificationOrder {
+  id: number;
+  customerName?: string;
+  commentId?: string;
+  notifiedAt?: string | null;
 }
 
 interface ButtonConfig {
@@ -67,6 +85,21 @@ export default function AdminDashboard() {
   const [lineNotificationMessage, setLineNotificationMessage] = useState('');
   const [lineGroupId, setLineGroupId] = useState('');
   const [sendingLineNotification, setSendingLineNotification] = useState(false);
+  const [facebookNotificationModal, setFacebookNotificationModal] = useState<{
+    formId: number;
+    formName: string;
+    orders: FacebookNotificationOrder[];
+  } | null>(null);
+  const [facebookNotificationMessage, setFacebookNotificationMessage] = useState('');
+  const [sendingFacebookNotification, setSendingFacebookNotification] = useState(false);
+  const formatDateTime = (iso?: string | null) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('zh-TW');
+    } catch {
+      return '';
+    }
+  };
   
   // 群組 ID 列表（從資料庫載入，優先於 localStorage）
   interface SavedGroupId {
@@ -80,6 +113,20 @@ export default function AdminDashboard() {
   
   const [selectedGroupIdId, setSelectedGroupIdId] = useState<string>('');
   const [newGroupIdName, setNewGroupIdName] = useState('');
+  
+  // Facebook Token 狀態
+  const [facebookTokenStatus, setFacebookTokenStatus] = useState<{
+    configured: boolean;
+    valid?: boolean;
+    expires_at?: string | null;
+    days_remaining?: number | null;
+    message?: string;
+  } | null>(null);
+  const [loadingTokenStatus, setLoadingTokenStatus] = useState(false);
+  const [refreshingToken, setRefreshingToken] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [autoDeployEnabled, setAutoDeployEnabled] = useState(false);
+  const facebookDaysRemaining = facebookTokenStatus?.days_remaining ?? null;
   
   // 從資料庫載入群組 ID 列表
   const loadGroupIds = async () => {
@@ -207,15 +254,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // 預設按鈕配置
-  const defaultButtons: ButtonConfig[] = [
-    { id: 'test-parser', label: '🧪 測試訊息解析', href: '/admin/test-parser', className: 'bg-purple-600 hover:bg-purple-700' },
-    { id: 'batch-import', label: '📥 批量匯入留言', href: '/admin/batch-import', className: 'bg-indigo-600 hover:bg-indigo-700' },
-    { id: 'facebook-import', label: '🤖 Facebook 智能匯入', href: '/admin/facebook-import', className: 'bg-pink-600 hover:bg-pink-700' },
-    { id: 'facebook-auto', label: '⚡ Facebook 自動處理', href: '/admin/facebook-auto', className: 'bg-red-600 hover:bg-red-700' },
-    { id: 'trash', label: '🗑️ 垃圾桶', href: '/admin/trash', className: 'bg-gray-600 hover:bg-gray-700' },
-    { id: 'settings', label: '⚙️ 系統設定', href: '/admin/settings', className: 'bg-yellow-600 hover:bg-yellow-700' },
-  ];
+  // 預設按鈕配置（舊功能已移除，保留空陣列避免顯示）
+  const defaultButtons: ButtonConfig[] = [];
+  const allowedButtonIds = new Set(defaultButtons.map(b => b.id));
 
   // 從 localStorage 載入按鈕順序
   const [buttons, setButtons] = useState<ButtonConfig[]>(() => {
@@ -223,15 +264,18 @@ export default function AdminDashboard() {
       const saved = localStorage.getItem('admin-button-order');
       if (saved) {
         try {
-          const savedOrder = JSON.parse(saved);
-          // 確保所有按鈕都存在
-          const savedIds = savedOrder.map((b: ButtonConfig) => b.id);
-          const missingButtons = defaultButtons.filter(b => !savedIds.includes(b.id));
-          return [...savedOrder, ...missingButtons];
+          const savedOrder = JSON.parse(saved) as ButtonConfig[];
+          const filtered = savedOrder.filter(b => allowedButtonIds.has(b.id));
+          if (filtered.length > 0) {
+            const savedIds = filtered.map((b: ButtonConfig) => b.id);
+            const missingButtons = defaultButtons.filter(b => !savedIds.includes(b.id));
+            return [...filtered, ...missingButtons];
+          }
         } catch (e) {
-          return defaultButtons;
+          // ignore parse error and fallback
         }
       }
+      localStorage.removeItem('admin-button-order');
     }
     return defaultButtons;
   });
@@ -240,7 +284,11 @@ export default function AdminDashboard() {
   const saveButtonOrder = (newButtons: ButtonConfig[]) => {
     setButtons(newButtons);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('admin-button-order', JSON.stringify(newButtons));
+      if (newButtons.length === 0) {
+        localStorage.removeItem('admin-button-order');
+      } else {
+        localStorage.setItem('admin-button-order', JSON.stringify(newButtons));
+      }
     }
   };
 
@@ -479,10 +527,108 @@ export default function AdminDashboard() {
     fetchForms();
     checkAutoReports();
     loadGroupIds(); // 載入群組 ID 列表
-    // 每 5 分鐘檢查一次
-    const interval = setInterval(checkAutoReports, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    loadFacebookTokenStatus(); // 載入 Facebook Token 狀態
+    
+    // 從 localStorage 載入自動刷新設定
+    if (typeof window !== 'undefined') {
+      const autoRefresh = localStorage.getItem('facebook-auto-refresh');
+      if (autoRefresh === 'true') {
+        setAutoRefreshEnabled(true);
+      }
+      const autoDeploy = localStorage.getItem('facebook-auto-deploy');
+      if (autoDeploy === 'true') {
+        setAutoDeployEnabled(true);
+      }
+    }
+    
+    // 每 5 分鐘檢查一次報表
+    const reportInterval = setInterval(checkAutoReports, 5 * 60 * 1000);
+    
+    // 每 1 小時檢查一次 Token 狀態（如果啟用自動刷新）
+    let tokenInterval: NodeJS.Timeout | null = null;
+    if (autoRefreshEnabled) {
+      tokenInterval = setInterval(() => {
+        loadFacebookTokenStatus();
+      }, 60 * 60 * 1000);
+    }
+    
+    return () => {
+      clearInterval(reportInterval);
+      if (tokenInterval) {
+        clearInterval(tokenInterval);
+      }
+    };
   }, [authChecked]);
+
+  // 載入 Facebook Token 狀態
+  const loadFacebookTokenStatus = async () => {
+    setLoadingTokenStatus(true);
+    try {
+      const res = await fetch('/api/facebook/token-status');
+      const data = await res.json();
+      setFacebookTokenStatus(data);
+      
+      // 如果啟用自動刷新，且 Token 剩餘天數少於 10 天，自動刷新
+      const shouldAutoRefresh = autoRefreshEnabled && data.valid && data.days_remaining !== null && data.days_remaining < 10;
+      if (shouldAutoRefresh) {
+        // 延遲執行，避免阻塞 UI
+        setTimeout(() => {
+          handleRefreshToken(true, autoDeployEnabled);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('載入 Facebook Token 狀態錯誤:', error);
+    } finally {
+      setLoadingTokenStatus(false);
+    }
+  };
+
+  // 刷新 Facebook Token
+  const handleRefreshToken = async (autoRefresh = false, autoDeploy = false) => {
+    if (!autoRefresh && !confirm('確定要刷新 Facebook Token 嗎？這會延長 Token 有效期 60 天。')) {
+      return;
+    }
+
+    setRefreshingToken(true);
+    try {
+      // 如果啟用自動部署，使用自動刷新部署 API
+      const apiEndpoint = autoDeploy ? '/api/facebook/auto-refresh-deploy' : '/api/facebook/refresh-token';
+      const res = await fetch(apiEndpoint, {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        const message = autoDeploy
+          ? (autoRefresh ? '✅ Token 已自動刷新並部署（剩餘天數少於 10 天）' : '✅ Token 已刷新，環境變數已更新，部署已觸發！')
+          : (autoRefresh ? '✅ Token 已自動刷新（剩餘天數少於 10 天）' : '✅ Token 已成功刷新！');
+        
+        showToast(message);
+        // 重新載入狀態
+        await loadFacebookTokenStatus();
+        
+        // 提醒用戶更新環境變數（如果不是自動部署）
+        if (!autoRefresh && !autoDeploy) {
+          alert(`Token 已成功刷新！\n\n新的 Token：${data.access_token}\n\n⚠️ 重要：請將新的 Token 更新到環境變數 FACEBOOK_ACCESS_TOKEN\n\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
+        } else if (!autoRefresh && autoDeploy) {
+          alert(`Token 已成功刷新並部署！\n\n✅ Vercel 環境變數已自動更新\n✅ 重新部署已觸發\n\n部署 ID：${data.deployment_id || 'N/A'}\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
+        }
+      } else {
+        showToast(`❌ 刷新失敗：${data.error || '未知錯誤'}`);
+        if (!autoRefresh) {
+          alert(`刷新 Token 失敗：${data.error || '未知錯誤'}\n\n提示：${data.hint || ''}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('刷新 Facebook Token 錯誤:', error);
+      showToast('❌ 刷新時發生錯誤');
+      if (!autoRefresh) {
+        alert('刷新時發生錯誤：' + error.message);
+      }
+    } finally {
+      setRefreshingToken(false);
+    }
+  };
 
   const fetchForms = async () => {
     try {
@@ -683,6 +829,8 @@ export default function AdminDashboard() {
       customer_name: order.customer_name || order.order_data?.customer_name || undefined,
       customer_phone: order.customer_phone || undefined,
       order_source: (order.order_source || order.source || '').toLowerCase() || undefined,
+      facebook_comment_id: order.facebook_comment_id || undefined,
+      facebook_pickup_notified_at: order.facebook_pickup_notified_at || undefined,
       items_summary: order.items_summary,
     }));
 
@@ -705,14 +853,13 @@ export default function AdminDashboard() {
         .map((order) => order.customer_name?.trim())
         .filter((name): name is string => !!name && name.length > 0);
 
-      if (names.length === 0) {
+      if (names.length === 0 && type === 'line') {
         alert('這些訂單尚未填寫姓名，請先到報表補齊後再通知客戶。');
         return;
       }
 
       const uniqueNames = Array.from(new Set(names));
 
-      // 如果是 LINE，顯示輸入視窗
       if (type === 'line') {
         setLineNotificationModal({
           formId: form.id,
@@ -725,30 +872,118 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Facebook 維持原本的複製功能
-      const nameLine = uniqueNames.join(' ');
-      const displayNames = uniqueNames.join('、');
-      const message = `${nameLine}
-親愛的 ${displayNames} 您好，您購買的商品已經到貨囉～可以來涼涼取貨啦！`;
+      const facebookOrders = filtered
+        .filter(order => order.facebook_comment_id)
+        .map(order => ({
+          id: order.id,
+          customerName: order.customer_name?.trim() || undefined,
+          commentId: order.facebook_comment_id!,
+          notifiedAt: order.facebook_pickup_notified_at || null,
+        }));
 
-      const copied = await copyToClipboard(message);
-      if (copied) {
-        showToast(`${type === 'facebook' ? 'Facebook' : 'LINE'} 取貨通知已複製，請貼到對應入口！`);
-      } else {
-        alert('複製失敗，請手動複製通知內容。');
+      if (facebookOrders.length === 0) {
+        alert('這些訂單沒有記錄 Facebook 留言資訊，無法自動回覆。');
+        return;
       }
 
-      setNotificationPreview({
+      const displayNames = uniqueNames.join('、');
+      const greetingNames = displayNames || '各位';
+      setFacebookNotificationModal({
         formId: form.id,
         formName: form.name,
-        type,
-        message,
+        orders: facebookOrders,
       });
+      setFacebookNotificationMessage(`親愛的 ${greetingNames} 您好，您購買的商品已經到貨囉～可以來涼涼取貨啦！`);
     } catch (error: any) {
       console.error('生成取貨通知錯誤:', error);
       alert(error?.message || '生成取貨通知時發生錯誤，請稍後再試。');
     } finally {
       setGeneratingNotification(null);
+    }
+  };
+
+  const handleCopyFacebookNotification = async () => {
+    if (!facebookNotificationMessage.trim()) {
+      alert('請先輸入通知訊息');
+      return;
+    }
+    const copied = await copyToClipboard(facebookNotificationMessage.trim());
+    if (copied) {
+      showToast('Facebook 通知內容已複製！');
+    } else {
+      alert('複製失敗，請手動複製。');
+    }
+  };
+
+  const handleSendFacebookNotification = async () => {
+    if (!facebookNotificationModal) return;
+
+    const message = facebookNotificationMessage.trim();
+    if (!message) {
+      alert('請輸入通知訊息');
+      return;
+    }
+
+    const targetOrders = facebookNotificationModal.orders.filter((order) => order.commentId);
+    if (targetOrders.length === 0) {
+      alert('沒有可通知的留言，請重新整理後再試。');
+      return;
+    }
+
+    const pendingOrders = targetOrders.filter((order) => !order.notifiedAt);
+    if (pendingOrders.length === 0) {
+      const confirmed = window.confirm('這些客戶已通知過，確定要再次通知嗎？');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setSendingFacebookNotification(true);
+      const response = await fetch('/api/facebook/send-pickup-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderIds: targetOrders.map((order) => order.id),
+          message,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '發送失敗');
+      }
+
+      const successList: Array<{ orderId: number; notifiedAt: string }> = data.results?.success || [];
+      const notifiedMap = new Map<number, string>();
+      successList.forEach((item) => {
+        notifiedMap.set(item.orderId, item.notifiedAt);
+      });
+
+      if (successList.length > 0) {
+        setOrdersCache((prev) => {
+          const current = prev[facebookNotificationModal.formId];
+          if (!current) return prev;
+          const updated = current.map((order) =>
+            notifiedMap.has(order.id)
+              ? { ...order, facebook_pickup_notified_at: notifiedMap.get(order.id) || null }
+              : order
+          );
+          return { ...prev, [facebookNotificationModal.formId]: updated };
+        });
+      }
+
+      showToast(data.message || 'Facebook 取貨通知已發送！');
+      setFacebookNotificationModal(null);
+      setFacebookNotificationMessage('');
+    } catch (error: any) {
+      console.error('發送 Facebook 通知錯誤:', error);
+      alert(error?.message || '發送 Facebook 通知時發生錯誤，請稍後再試。');
+    } finally {
+      setSendingFacebookNotification(false);
     }
   };
 
@@ -844,8 +1079,133 @@ export default function AdminDashboard() {
         </div>
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
+        {/* Facebook Token 狀態卡片 */}
+        {facebookTokenStatus && (
+          <div className="mb-4 p-4 bg-white rounded-lg shadow border-l-4 border-blue-500">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  🔑 Facebook Token 狀態
+                </h3>
+                {loadingTokenStatus ? (
+                  <p className="text-sm text-gray-600">載入中...</p>
+                ) : (
+                  <div className="space-y-1">
+                    {!facebookTokenStatus.configured ? (
+                      <p className="text-sm text-orange-600">⚠️ 未設定 Facebook Access Token</p>
+                    ) : !facebookTokenStatus.valid ? (
+                      <p className="text-sm text-red-600">❌ Token 無效或已過期</p>
+                    ) : (
+                      <>
+                        <p className="text-sm text-gray-700">
+                          {facebookDaysRemaining != null ? (
+                            <>
+                              {facebookDaysRemaining > 10 ? (
+                                <span className="text-green-600">
+                                  ✅ Token 有效，剩餘 <strong>{facebookDaysRemaining}</strong> 天
+                                </span>
+                              ) : facebookDaysRemaining > 0 ? (
+                                <span className="text-orange-600">
+                                  ⚠️ Token 即將到期，剩餘 <strong>{facebookDaysRemaining}</strong> 天
+                                </span>
+                              ) : (
+                                <span className="text-red-600">❌ Token 已過期</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-gray-600">✅ Token 有效</span>
+                          )}
+                        </p>
+                        {facebookTokenStatus.expires_at && (
+                          <p className="text-xs text-gray-500">
+                            到期時間：{new Date(facebookTokenStatus.expires_at).toLocaleString('zh-TW')}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {facebookTokenStatus.configured && facebookTokenStatus.valid && (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoRefreshEnabled}
+                          onChange={(e) => {
+                            setAutoRefreshEnabled(e.target.checked);
+                            if (e.target.checked) {
+                              localStorage.setItem('facebook-auto-refresh', 'true');
+                              if (facebookDaysRemaining != null && facebookDaysRemaining < 10) {
+                                handleRefreshToken(true, autoDeployEnabled);
+                              }
+                            } else {
+                              localStorage.removeItem('facebook-auto-refresh');
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <span>自動刷新</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoDeployEnabled}
+                          onChange={(e) => {
+                            setAutoDeployEnabled(e.target.checked);
+                            if (e.target.checked) {
+                              localStorage.setItem('facebook-auto-deploy', 'true');
+                            } else {
+                              localStorage.removeItem('facebook-auto-deploy');
+                            }
+                          }}
+                          disabled={!autoRefreshEnabled}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <span className={!autoRefreshEnabled ? 'text-gray-400' : ''}>自動部署</span>
+                      </label>
+                    </div>
+                    <button
+                      onClick={() => handleRefreshToken(false, autoDeployEnabled)}
+                      disabled={refreshingToken}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        refreshingToken
+                          ? 'bg-gray-400 text-white cursor-not-allowed'
+                          : facebookDaysRemaining != null && facebookDaysRemaining < 10
+                          ? 'bg-orange-600 text-white hover:bg-orange-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {refreshingToken ? '刷新中...' : '🔄 刷新 Token'}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={loadFacebookTokenStatus}
+                  disabled={loadingTokenStatus}
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {loadingTokenStatus ? '載入中...' : '🔄'}
+                </button>
+              </div>
+            </div>
+            {autoRefreshEnabled && (
+              <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                💡 自動刷新已啟用{autoDeployEnabled ? '（含自動部署）' : ''}：當 Token 剩餘天數少於 10 天時，系統會自動刷新{autoDeployEnabled ? '並部署' : ''}
+                {autoDeployEnabled && (
+                  <div className="mt-1 text-orange-600">
+                    ⚠️ 需要設定 VERCEL_TOKEN 和 VERCEL_PROJECT_ID 環境變數
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4">表單管理</h1>
+          {buttons.length > 0 && (
           <div className="w-full flex justify-center">
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 sm:gap-3">
               {/* 可拖曳的按鈕 */}
@@ -971,6 +1331,7 @@ export default function AdminDashboard() {
               ))}
             </div>
           </div>
+        )}
         </div>
 
         {/* 通知區域 */}
@@ -1022,23 +1383,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* 手動檢查按鈕和建立新表單 */}
-        <div className="mb-4 flex justify-end gap-2">
-          <Link
-            href="/admin/create"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-          >
-            + 建立新表單
-          </Link>
-          <button
-            onClick={checkAutoReports}
-            disabled={checkingReports}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 text-sm"
-          >
-            {checkingReports ? '檢查中...' : '🔍 檢查報表'}
-          </button>
-        </div>
-
         {loading ? (
           <div className="text-center py-12">載入中...</div>
         ) : forms.length === 0 ? (
@@ -1055,22 +1399,51 @@ export default function AdminDashboard() {
           <>
             {/* 批量操作工具列 */}
             {forms.length > 0 && (
-              <div className="mb-4 bg-white rounded-lg shadow p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedForms.size === forms.length && forms.length > 0}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      {selectedForms.size === forms.length ? '取消全選' : '全選'}
+              <div className="mb-4 bg-white rounded-lg shadow p-4 flex flex-col gap-4">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedForms.size === forms.length && forms.length > 0}
+                        onChange={handleSelectAll}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        {selectedForms.size === forms.length ? '取消全選' : '全選'}
+                      </span>
+                    </label>
+                    <span className="text-sm text-gray-600">
+                      已選擇 {selectedForms.size} 張表單
                     </span>
-                  </label>
-                  <span className="text-sm text-gray-600">
-                    已選擇 {selectedForms.size} 張表單
-                  </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href="/admin/create"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      + 建立新表單
+                    </Link>
+                    <button
+                      onClick={checkAutoReports}
+                      disabled={checkingReports}
+                      className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 text-sm"
+                    >
+                      {checkingReports ? '檢查中...' : '🔍 檢查報表'}
+                    </button>
+                    <Link
+                      href="/admin/trash"
+                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                    >
+                      🗑️ 垃圾桶
+                    </Link>
+                    <Link
+                      href="/admin/settings"
+                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                    >
+                      ⚙️ 系統設定
+                    </Link>
+                  </div>
                 </div>
                 {selectedForms.size > 0 && (
                   <button
@@ -1331,6 +1704,109 @@ export default function AdminDashboard() {
                   >
                     關閉
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Facebook 通知彈窗 */}
+            {facebookNotificationModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-gray-800">
+                        📣 Facebook 取貨通知
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setFacebookNotificationModal(null);
+                          setFacebookNotificationMessage('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 text-2xl"
+                        aria-label="關閉"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong>表單：</strong>{facebookNotificationModal.formName}
+                      </p>
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200 max-h-40 overflow-y-auto space-y-2">
+                        {facebookNotificationModal.orders.map((order) => (
+                          <div
+                            key={order.id}
+                            className="flex items-center justify-between text-sm text-gray-700"
+                          >
+                            <span>{order.customerName || '未填姓名'}</span>
+                            {order.notifiedAt ? (
+                              <span className="text-xs text-green-600">
+                                已於 {formatDateTime(order.notifiedAt)} 通知
+                              </span>
+                            ) : (
+                              <span className="text-xs text-orange-600">尚未通知</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-blue-600">
+                        系統會前往每位客戶的 +1 留言下方回覆以下訊息。
+                      </p>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        通知訊息 <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={facebookNotificationMessage}
+                        onChange={(e) => setFacebookNotificationMessage(e.target.value)}
+                        rows={4}
+                        placeholder="請輸入要回覆的取貨訊息內容"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm resize-none"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        建議提醒取貨時間與地點，訊息將以相同內容回覆至每位客戶的 +1 留言下方。
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={handleCopyFacebookNotification}
+                        className="flex-1 bg-gray-200 text-gray-700 py-2 rounded hover:bg-gray-300 transition-colors text-sm font-medium disabled:opacity-50"
+                        disabled={!facebookNotificationMessage.trim()}
+                      >
+                        複製訊息
+                      </button>
+                      <button
+                        onClick={handleSendFacebookNotification}
+                        disabled={sendingFacebookNotification || !facebookNotificationMessage.trim()}
+                        className="flex-1 bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {sendingFacebookNotification ? (
+                          <>
+                            <span className="animate-spin">⏳</span>
+                            發送中...
+                          </>
+                        ) : (
+                          <>
+                            🚀 自動回覆留言
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFacebookNotificationModal(null);
+                          setFacebookNotificationMessage('');
+                        }}
+                        className="flex-1 bg-gray-200 text-gray-700 py-2 rounded hover:bg-gray-300 transition-colors text-sm font-medium"
+                        disabled={sendingFacebookNotification}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

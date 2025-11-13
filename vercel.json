@@ -1,2 +1,9 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/facebook-token-refresh",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
 

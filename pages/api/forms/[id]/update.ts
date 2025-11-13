@@ -19,7 +19,25 @@ export default async function handler(
     }
 
     const formId = Number(id);
-    const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl } = req.body;
+    const {
+      name,
+      fields,
+      deadline,
+      orderDeadline,
+      orderLimit,
+      pickupTime,
+      facebookCommentUrl,
+      lineCommentUrl,
+      facebookPostUrl,
+      facebookPostAuthor,
+      facebookKeywords,
+      facebookAutoMonitor,
+      facebookReplyMessage,
+      linePostAuthor,
+      postDeadlineReplyMessage,
+      lineCustomIdentifier,
+      useCustomLineIdentifier,
+    } = req.body;
 
     if (!name || !fields || !deadline) {
       return res.status(400).json({ error: '缺少必要欄位' });
@@ -43,6 +61,15 @@ export default async function handler(
       }
     }
 
+    if (useCustomLineIdentifier) {
+      if (!lineCustomIdentifier || !String(lineCustomIdentifier).trim()) {
+        return res.status(400).json({ error: '請輸入 LINE 賣文識別碼' });
+      }
+      if (String(lineCustomIdentifier).trim().length > 50) {
+        return res.status(400).json({ error: 'LINE 賣文識別碼長度請勿超過 50 個字元' });
+      }
+    }
+
     // 更新表單
     await updateForm(
       formId,
@@ -53,7 +80,16 @@ export default async function handler(
       orderLimit ? parseInt(String(orderLimit)) : undefined,
       pickupTime,
       facebookCommentUrl,
-      lineCommentUrl
+      lineCommentUrl,
+      facebookPostUrl,
+      facebookPostAuthor,
+      facebookKeywords,
+      facebookAutoMonitor ? 1 : 0,
+      facebookReplyMessage,
+      linePostAuthor,
+      postDeadlineReplyMessage,
+      lineCustomIdentifier,
+      useCustomLineIdentifier ? 1 : 0
     );
 
     const updatedForm = await getFormById(formId);

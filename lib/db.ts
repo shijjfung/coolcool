@@ -1,20 +1,19 @@
-// 根據環境變數選擇資料庫類型
+// ??????????????????????
 const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 
-// 如果使用 Supabase，導入 Supabase 實作
+// ????????Supabase?????Supabase ???
 let dbModule: any;
 if (DATABASE_TYPE === 'supabase') {
   try {
     dbModule = require('./db-supabase');
   } catch (error) {
-    console.error('無法載入 Supabase 模組，請確認已安裝 @supabase/supabase-js 並設定環境變數');
+        console.error('Failed to load Supabase module');
     throw error;
   }
 }
 
-// SQLite 實作（保留作為備用）
-// 只在 SQLite 模式下動態導入，避免在 Vercel (Supabase) 環境下載入
-let sqlite3: any;
+// SQLite ??????????????
+// ??? SQLite ??????????????????Vercel (Supabase) ????????let sqlite3: any;
 let promisify: any;
 let path: any;
 let fs: any;
@@ -25,7 +24,7 @@ let dbGet: (sql: string, params?: any[]) => Promise<any>;
 let dbAll: (sql: string, params?: any[]) => Promise<any>;
 
 if (DATABASE_TYPE === 'sqlite') {
-  // 動態導入 SQLite 相關模組（避免在 Supabase 模式下載入）
+  // ???????SQLite ???????????? Supabase ??????????
   sqlite3 = require('sqlite3');
   promisify = require('util').promisify;
   path = require('path');
@@ -33,23 +32,20 @@ if (DATABASE_TYPE === 'sqlite') {
 
   dbPath = path.join(process.cwd(), 'orders.db');
 
-  // 確保資料庫檔案存在
-  if (!fs.existsSync(dbPath)) {
+  // ???????????????  if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');
   }
 
   db = new sqlite3.Database(dbPath);
 
-  // 將 callback 風格的函數轉換為 Promise
+  // ??callback ???????????Promise
   dbRun = promisify(db.run.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbGet = promisify(db.get.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
   dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 }
 
-// 初始化資料庫表
-async function initDatabaseSQLite() {
-  // 表單設定表
-  await dbRun(`
+// ????????async function initDatabaseSQLite() {
+  // ???????  await dbRun(`
     CREATE TABLE IF NOT EXISTS forms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -67,61 +63,107 @@ async function initDatabaseSQLite() {
     )
   `);
   
-  // 檢查並新增新欄位（向後相容）
+  // ????????????????????
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_deadline TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN order_limit INTEGER`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN pickup_time TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN report_generated_at TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_comment_url TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN line_comment_url TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_url TEXT`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_author TEXT`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_keywords TEXT`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN line_post_author TEXT`);
+  } catch (e: any) {
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN post_deadline_reply_message TEXT`);
+  } catch (e: any) {
+    // column may already exist
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN line_custom_identifier TEXT`);
+  } catch (e: any) {
+    // column may already exist
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN line_use_custom_identifier INTEGER DEFAULT 0`);
+  } catch (e: any) {
+    // column may already exist
   }
 
-  // 訂單表
-  await dbRun(`
+  // ????  await dbRun(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       form_id INTEGER NOT NULL,
       customer_name TEXT,
       customer_phone TEXT,
       order_source TEXT,
+      facebook_comment_id TEXT,
+      facebook_pickup_notified_at TEXT,
       order_data TEXT NOT NULL,
       items_summary TEXT,
       client_ip TEXT,
@@ -133,30 +175,39 @@ async function initDatabaseSQLite() {
     )
   `);
   
-  // 檢查並新增新欄位（向後相容）
+  // ????????????????????
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN client_ip TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN user_agent TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN items_summary TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
   }
   try {
     await dbRun(`ALTER TABLE orders ADD COLUMN order_source TEXT`);
   } catch (e: any) {
-    // 欄位已存在，忽略錯誤
+    // ??????????????????
+  }
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN facebook_comment_id TEXT`);
+  } catch (e: any) {
+    // column may already exist
+  }
+  try {
+    await dbRun(`ALTER TABLE orders ADD COLUMN facebook_pickup_notified_at TEXT`);
+  } catch (e: any) {
+    // column may already exist
   }
 
-  // 系統設定表
-  await dbRun(`
+  // ???????  await dbRun(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -164,7 +215,7 @@ async function initDatabaseSQLite() {
     )
   `);
 
-  // 保留訂單排序表（用於先取單機制）
+  // ????????????????????????
   await dbRun(`
     CREATE TABLE IF NOT EXISTS reserved_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -177,8 +228,32 @@ async function initDatabaseSQLite() {
       UNIQUE(form_id, session_id)
     )
   `);
+
+  // LINE ???????????????????????????  await dbRun(`
+    CREATE TABLE IF NOT EXISTS line_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id INTEGER NOT NULL,
+      group_id TEXT NOT NULL,
+      message_id TEXT,
+      sender_name TEXT,
+      post_content TEXT,
+      posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+    )
+  `);
   
-  // 建立索引
+  // ?????
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_group_id ON line_posts(group_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_posted_at ON line_posts(posted_at)`);
+  } catch (e: any) {}
+  
+  // ?????
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_form_id ON reserved_orders(form_id)`);
   } catch (e: any) {}
@@ -190,14 +265,24 @@ async function initDatabaseSQLite() {
   } catch (e: any) {}
 }
 
-// 表單相關操作
+// ?????????
 export interface FormField {
   name: string;
   label: string;
   type: 'text' | 'number' | 'costco';
   required: boolean;
   options?: string[];
-  price?: number; // 價格欄位（可選）
+  price?: number;
+}
+
+export interface LineSale {
+  id: number;
+  form_id: number;
+  group_id: string;
+  identifier?: string | null;
+  deadline?: string | null;
+  end_announced?: boolean;
+  first_warning_sent?: boolean;
 }
 
 export interface Form {
@@ -205,17 +290,79 @@ export interface Form {
   name: string;
   fields: FormField[];
   deadline: string;
-  order_deadline?: string; // 收單截止時間
-  order_limit?: number; // 訂單數量限制（可選）
-  pickup_time?: string; // 取貨時間（可選）
-  report_generated?: number; // 報表是否已生成 (0/1)
-  report_generated_at?: string; // 報表生成時間
-  deleted?: number; // 是否已刪除到垃圾桶 (0/1)
-  deleted_at?: string; // 刪除時間
+  order_deadline?: string;
+  order_limit?: number;
+  pickup_time?: string;
+  report_generated?: number;
+  report_generated_at?: string;
+  deleted?: number;
+  deleted_at?: string;
   created_at: string;
   form_token: string;
   facebook_comment_url?: string;
   line_comment_url?: string;
+  facebook_post_url?: string;
+  facebook_post_author?: string;
+  facebook_keywords?: string;
+  facebook_auto_monitor?: number;
+  facebook_reply_message?: string;
+  line_post_author?: string;
+  post_deadline_reply_message?: string;
+  line_custom_identifier?: string;
+  line_use_custom_identifier?: boolean;
+}
+
+function mapFormRow(row: any): Form {
+  return {
+    id: row.id,
+    name: row.name,
+    fields: typeof row.fields === 'string' ? JSON.parse(row.fields) : row.fields,
+    deadline: row.deadline,
+    order_deadline: row.order_deadline || undefined,
+    order_limit:
+      row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
+    pickup_time: row.pickup_time || undefined,
+    report_generated: row.report_generated || 0,
+    report_generated_at: row.report_generated_at || undefined,
+    deleted: row.deleted || 0,
+    deleted_at: row.deleted_at || undefined,
+    created_at: row.created_at,
+    form_token: row.form_token,
+    facebook_comment_url: row.facebook_comment_url || undefined,
+    line_comment_url: row.line_comment_url || undefined,
+    facebook_post_url: row.facebook_post_url || undefined,
+    facebook_post_author: row.facebook_post_author || undefined,
+    facebook_keywords: row.facebook_keywords || undefined,
+    facebook_auto_monitor: row.facebook_auto_monitor || 0,
+    facebook_reply_message: row.facebook_reply_message || undefined,
+    line_post_author: row.line_post_author || undefined,
+    post_deadline_reply_message: row.post_deadline_reply_message || undefined,
+    line_custom_identifier: row.line_custom_identifier || undefined,
+    line_use_custom_identifier:
+      row.line_use_custom_identifier === null || row.line_use_custom_identifier === undefined
+        ? undefined
+        : row.line_use_custom_identifier === true ||
+          row.line_use_custom_identifier === 1 ||
+          row.line_use_custom_identifier === '1',
+  };
+}
+
+function mapLineSaleRow(row: any): LineSale {
+  return {
+    id: row.id,
+    form_id: row.form_id,
+    group_id: row.group_id,
+    identifier: row.identifier || null,
+    deadline: row.deadline || null,
+    end_announced:
+      row.end_announced === true ||
+      row.end_announced === 1 ||
+      row.end_announced === '1',
+    first_warning_sent:
+      row.first_warning_sent === true ||
+      row.first_warning_sent === 1 ||
+      row.first_warning_sent === '1',
+  };
 }
 
 async function createFormSQLite(
@@ -226,11 +373,30 @@ async function createFormSQLite(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string,
+  postDeadlineReplyMessage?: string,
+  lineCustomIdentifier?: string,
+  lineUseCustomIdentifier?: boolean
 ): Promise<number> {
   const formToken = generateToken();
+  const trimmedCustomIdentifier = (lineCustomIdentifier || '').trim();
+  const useCustomIdentifier = lineUseCustomIdentifier ? 1 : 0;
+  const storedCustomIdentifier =
+    useCustomIdentifier && trimmedCustomIdentifier.length > 0
+      ? trimmedCustomIdentifier
+      : null;
+  const storedPostDeadlineReply =
+    postDeadlineReplyMessage && postDeadlineReplyMessage.trim()
+      ? postDeadlineReplyMessage.trim()
+      : null;
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_keywords, facebook_auto_monitor, facebook_reply_message, line_post_author, post_deadline_reply_message, line_custom_identifier, line_use_custom_identifier, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       name,
       JSON.stringify(fields),
@@ -240,6 +406,15 @@ async function createFormSQLite(
       pickupTime || null,
       facebookCommentUrl || null,
       lineCommentUrl || null,
+      facebookPostUrl || null,
+      facebookPostAuthor || null,
+      facebookKeywords || null,
+      facebookAutoMonitor || 0,
+      facebookReplyMessage || null,
+      linePostAuthor || null,
+      storedPostDeadlineReply,
+      storedCustomIdentifier,
+      useCustomIdentifier,
       formToken,
     ]
   );
@@ -250,23 +425,7 @@ async function createFormSQLite(
 async function getFormByTokenSQLite(token: string): Promise<Form | null> {
   const row = await dbGet('SELECT * FROM forms WHERE form_token = ? AND (deleted IS NULL OR deleted = 0)', [token]) as any;
   if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    fields: JSON.parse(row.fields),
-    deadline: row.deadline,
-    order_deadline: row.order_deadline || undefined,
-    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
-    pickup_time: row.pickup_time || undefined,
-    report_generated: row.report_generated || 0,
-    report_generated_at: row.report_generated_at || undefined,
-    deleted: row.deleted || 0,
-    deleted_at: row.deleted_at || undefined,
-    created_at: row.created_at,
-    form_token: row.form_token,
-    facebook_comment_url: row.facebook_comment_url || undefined,
-    line_comment_url: row.line_comment_url || undefined,
-  };
+  return mapFormRow(row);
 }
 
 async function getFormByIdSQLite(id: number, includeDeleted: boolean = false): Promise<Form | null> {
@@ -275,23 +434,7 @@ async function getFormByIdSQLite(id: number, includeDeleted: boolean = false): P
     : 'SELECT * FROM forms WHERE id = ? AND (deleted IS NULL OR deleted = 0)';
   const row = await dbGet(query, [id]) as any;
   if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    fields: JSON.parse(row.fields),
-    deadline: row.deadline,
-    order_deadline: row.order_deadline || undefined,
-    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
-    pickup_time: row.pickup_time || undefined,
-    report_generated: row.report_generated || 0,
-    report_generated_at: row.report_generated_at || undefined,
-    deleted: row.deleted || 0,
-    deleted_at: row.deleted_at || undefined,
-    created_at: row.created_at,
-    form_token: row.form_token,
-    facebook_comment_url: row.facebook_comment_url || undefined,
-    line_comment_url: row.line_comment_url || undefined,
-  };
+  return mapFormRow(row);
 }
 
 async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[]> {
@@ -299,49 +442,18 @@ async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[
     ? 'SELECT * FROM forms ORDER BY created_at DESC'
     : 'SELECT * FROM forms WHERE deleted IS NULL OR deleted = 0 ORDER BY created_at DESC';
   const rows = await dbAll(query) as any[];
-  return rows.map(row => ({
-    id: row.id,
-    name: row.name,
-    fields: JSON.parse(row.fields),
-    deadline: row.deadline,
-    order_deadline: row.order_deadline || undefined,
-    report_generated: row.report_generated || 0,
-    report_generated_at: row.report_generated_at || undefined,
-    deleted: row.deleted || 0,
-    deleted_at: row.deleted_at || undefined,
-    created_at: row.created_at,
-    form_token: row.form_token,
-    facebook_comment_url: row.facebook_comment_url || undefined,
-    line_comment_url: row.line_comment_url || undefined,
-  }));
+  return rows.map(mapFormRow);
 }
 
 /**
- * 取得垃圾桶中的表單
- */
+ * ?????????????? */
 async function getDeletedFormsSQLite(): Promise<Form[]> {
   const rows = await dbAll('SELECT * FROM forms WHERE deleted = 1 ORDER BY deleted_at DESC') as any[];
-  return rows.map(row => ({
-    id: row.id,
-    name: row.name,
-    fields: JSON.parse(row.fields),
-    deadline: row.deadline,
-    order_deadline: row.order_deadline || undefined,
-    order_limit: row.order_limit !== null && row.order_limit !== undefined ? row.order_limit : undefined,
-    pickup_time: row.pickup_time || undefined,
-    report_generated: row.report_generated || 0,
-    report_generated_at: row.report_generated_at || undefined,
-    deleted: row.deleted || 0,
-    deleted_at: row.deleted_at || undefined,
-    created_at: row.created_at,
-    form_token: row.form_token,
-    facebook_comment_url: row.facebook_comment_url || undefined,
-    line_comment_url: row.line_comment_url || undefined,
-  }));
+  return rows.map(mapFormRow);
 }
 
 /**
- * 更新表單名稱
+ * ??????????
  */
 async function updateFormSQLite(
   formId: number,
@@ -352,10 +464,29 @@ async function updateFormSQLite(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string,
+  postDeadlineReplyMessage?: string,
+  lineCustomIdentifier?: string,
+  lineUseCustomIdentifier?: boolean
 ): Promise<boolean> {
+  const trimmedCustomIdentifier = (lineCustomIdentifier || '').trim();
+  const useCustomIdentifier = lineUseCustomIdentifier ? 1 : 0;
+  const storedCustomIdentifier =
+    useCustomIdentifier && trimmedCustomIdentifier.length > 0
+      ? trimmedCustomIdentifier
+      : null;
+  const storedPostDeadlineReply =
+    postDeadlineReplyMessage && postDeadlineReplyMessage.trim()
+      ? postDeadlineReplyMessage.trim()
+      : null;
   await dbRun(
-    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ? WHERE id = ?',
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, line_post_author = ?, post_deadline_reply_message = ?, line_custom_identifier = ?, line_use_custom_identifier = ? WHERE id = ?',
     [
       name,
       JSON.stringify(fields),
@@ -365,6 +496,15 @@ async function updateFormSQLite(
       pickupTime || null,
       facebookCommentUrl || null,
       lineCommentUrl || null,
+      facebookPostUrl || null,
+      facebookPostAuthor || null,
+      facebookKeywords || null,
+      facebookAutoMonitor || 0,
+      facebookReplyMessage || null,
+      linePostAuthor || null,
+      storedPostDeadlineReply,
+      storedCustomIdentifier,
+      useCustomIdentifier,
       formId,
     ]
   );
@@ -380,8 +520,7 @@ async function updateFormNameSQLite(formId: number, newName: string): Promise<bo
 }
 
 /**
- * 標記報表已生成
- */
+ * ???????????? */
 async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
   const result = await dbRun(
     'UPDATE forms SET report_generated = 1, report_generated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -391,12 +530,11 @@ async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
 }
 
 /**
- * 取得已到達收單截止時間但尚未生成報表的表單
- * 使用 order_deadline（如果存在），否則使用 deadline
+ * ??????????????????????????????? * ????order_deadline?????????????????deadline
  */
 async function getFormsReadyForReportSQLite(): Promise<Form[]> {
   const now = new Date().toISOString();
-  // 優先使用 order_deadline，如果沒有則使用 deadline
+  // ???????order_deadline????????????deadline
   const rows = await dbAll(
     `SELECT * FROM forms 
      WHERE (
@@ -410,40 +548,29 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
     [now, now]
   ) as any[];
   
-  return rows.map(row => ({
-    id: row.id,
-    name: row.name,
-    fields: JSON.parse(row.fields),
-    deadline: row.deadline,
-    order_deadline: row.order_deadline || row.deadline, // 如果沒有 order_deadline，使用 deadline
-    report_generated: row.report_generated || 0,
-    report_generated_at: row.report_generated_at || undefined,
-    created_at: row.created_at,
-    form_token: row.form_token,
-    facebook_comment_url: row.facebook_comment_url || undefined,
-    line_comment_url: row.line_comment_url || undefined,
-  }));
+  return rows.map(row => {
+    const form = mapFormRow(row);
+    form.order_deadline = row.order_deadline || row.deadline;
+    return form;
+  });
 }
 
 /**
- * 將表單移到垃圾桶（軟刪除）
- */
+ * ???????????????????? */
 async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
   try {
-    // 確保資料庫已初始化
-    await ensureDatabaseInitialized();
+    // ??????????????    await ensureDatabaseInitialized();
     
-    // 先檢查欄位是否存在
-    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
+    // ???????????????    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
     const hasDeleted = tableInfo.some((col: any) => col.name === 'deleted');
     const hasDeletedAt = tableInfo.some((col: any) => col.name === 'deleted_at');
     
-    // 如果欄位不存在，嘗試新增
+    // ???????????????????
     if (!hasDeleted) {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
       } catch (e: any) {
-        console.error('新增 deleted 欄位失敗:', e.message);
+            console.error('Failed to load Supabase module');
       }
     }
     
@@ -451,22 +578,20 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
       } catch (e: any) {
-        console.error('新增 deleted_at 欄位失敗:', e.message);
+            console.error('Failed to load Supabase module');
       }
     }
     
-    // 使用 ISO 格式的時間戳記
-    const deletedAt = new Date().toISOString();
+    // ????ISO ???????????    const deletedAt = new Date().toISOString();
     
-    // 先嘗試更新兩個欄位
-    let result: any = null;
+    // ???????????????    let result: any = null;
     try {
       result = await dbRun(
         'UPDATE forms SET deleted = 1, deleted_at = ? WHERE id = ?',
         [deletedAt, formId]
       );
     } catch (error: any) {
-      // 如果失敗，嘗試只更新 deleted 欄位
+      // ??????????????????? deleted ????
       if (error.message && error.message.includes('no such column')) {
         try {
           result = await dbRun(
@@ -474,16 +599,16 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
             [formId]
           );
         } catch (e2: any) {
-          throw new Error(`無法更新表單：${e2.message}`);
+          throw new Error(`????????????{e2.message}`);
         }
       } else {
         throw error;
       }
     }
     
-    // 檢查結果
+    // ????
     if (!result) {
-      // 手動檢查是否更新成功
+      // ???????????????
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
@@ -493,27 +618,25 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // ???? changes ??0??????????????????    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
       }
-      console.error('表單更新失敗，deleted 仍為 0');
+          console.error('Failed to load Supabase module');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('moveFormToTrash 錯誤:', error);
-    console.error('錯誤訊息:', error.message);
-    throw new Error(`無法更新表單：${error.message}`);
+        console.error('Failed to load Supabase module');
+        console.error('Failed to load Supabase module');
+    throw new Error(`????????????{error.message}`);
   }
 }
 
 /**
- * 從垃圾桶還原表單
- */
+ * ???????????? */
 async function restoreFormSQLite(formId: number): Promise<boolean> {
   try {
     const result = await dbRun(
@@ -521,9 +644,9 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
       [formId]
     );
     
-    // 檢查結果
+    // ????
     if (!result) {
-      // 手動檢查是否更新成功
+      // ???????????????
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -533,8 +656,7 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // ???? changes ??0??????????????????    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -544,31 +666,28 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     return changes > 0;
   } catch (error: any) {
-    console.error('restoreForm 錯誤:', error);
-    throw new Error(`無法還原表單：${error.message}`);
+        console.error('Failed to load Supabase module');
+    throw new Error(`???????????{error.message}`);
   }
 }
 
 /**
- * 永久刪除表單（同時刪除相關訂單）
+ * ???????????????????????
  */
 async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // 先計算要刪除的訂單數量
-  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
+  // ?????????????????  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
   const deletedOrders = orderCount?.count || 0;
 
-  // 刪除相關訂單
-  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
+  // ??????????  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
 
-  // 永久刪除表單
-  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
+  // ??????????  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
 
-  // 檢查結果
+  // ????
   let success = false;
   if (!result) {
-    // 手動檢查是否刪除成功
+    // ???????????????
     const checkForm = await dbGet('SELECT id FROM forms WHERE id = ?', [formId]) as any;
-    success = !checkForm; // 如果找不到表單，表示刪除成功
+    success = !checkForm; // ???????????????????????
   } else {
     success = ((result as any)?.changes ?? 0) > 0;
   }
@@ -579,15 +698,17 @@ async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: b
   };
 }
 
-// 訂單相關操作
+// ????????
 export interface Order {
   id: number;
   form_id: number;
   customer_name?: string;
   customer_phone?: string;
   order_source?: string;
+  facebook_comment_id?: string;
+  facebook_pickup_notified_at?: string | null;
   order_data: Record<string, any>;
-  items_summary?: Array<{ name: string; quantity: number }>; // 物品清單（從好事多代購欄位提取）
+  items_summary?: Array<{ name: string; quantity: number }>; // ??????????????????????
   client_ip?: string;
   user_agent?: string;
   created_at: string;
@@ -595,17 +716,16 @@ export interface Order {
   order_token: string;
 }
 
-// 從訂單資料中提取物品清單（從好事多代購欄位）
+// ???????????????????????????????
 function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
   const items: Array<{ name: string; quantity: number }> = [];
   
-  // 遍歷表單欄位，找出「好事多代購」類型的欄位
+  // ????????????????????????????????
   for (const field of form.fields) {
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // 處理數組格式的物品清單
-        for (const item of value) {
+        // ????????????????        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -631,12 +751,12 @@ async function createOrderSQLite(
   clientIp?: string,
   userAgent?: string,
   orderSource?: string,
-  form?: Form // 新增 form 參數用於提取物品清單
+  form?: Form,
+  facebookCommentId?: string
 ): Promise<string> {
   const orderToken = generateToken();
   
-  // 提取物品清單
-  let itemsSummary: string | null = null;
+  // ?????????  let itemsSummary: string | null = null;
   if (form) {
     const items = extractItemsSummary(form, orderData);
     if (items && items.length > 0) {
@@ -645,12 +765,13 @@ async function createOrderSQLite(
   }
   
   await dbRun(
-    'INSERT INTO orders (form_id, customer_name, customer_phone, order_source, order_data, items_summary, client_ip, user_agent, order_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO orders (form_id, customer_name, customer_phone, order_source, facebook_comment_id, order_data, items_summary, client_ip, user_agent, order_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       formId,
       customerName || null,
       customerPhone || null,
       orderSource || null,
+      facebookCommentId || null,
       JSON.stringify(orderData),
       itemsSummary,
       clientIp || null,
@@ -668,18 +789,16 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     [JSON.stringify(orderData), orderToken]
   );
     
-    // 檢查結果
+    // ????
     if (!result) {
-      console.error('updateOrder: dbRun 返回 undefined');
-      // 手動檢查是否更新成功
+          console.error('Failed to load Supabase module');
+      // ???????????????
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder && checkOrder.order_token === orderToken) {
-        // 驗證資料是否真的更新了
-        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
+        // ?????????????????        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
         if (verifyOrder) {
           const currentData = JSON.parse(verifyOrder.order_data);
-          // 簡單比較（不完美，但可以作為基本驗證）
-          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
+          // ????????????????????????????          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
             return true;
           }
         }
@@ -689,8 +808,7 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // 如果 changes 為 0，驗證是否真的更新成功
-    if (changes === 0) {
+    // ???? changes ??0??????????????????    if (changes === 0) {
       const checkOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder) {
         const currentData = JSON.parse(checkOrder.order_data);
@@ -698,14 +816,14 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
           return true;
         }
       }
-      console.error('訂單更新失敗');
+          console.error('Failed to load Supabase module');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-    console.error('updateOrder 錯誤:', error);
-    throw new Error(`無法更新訂單：${error.message}`);
+        console.error('Failed to load Supabase module');
+    throw new Error(`???????????{error.message}`);
   }
 }
 
@@ -718,6 +836,8 @@ async function getOrderByTokenSQLite(token: string): Promise<Order | null> {
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     order_source: row.order_source || undefined,
+    facebook_comment_id: row.facebook_comment_id || undefined,
+    facebook_pickup_notified_at: row.facebook_pickup_notified_at || undefined,
     order_data: JSON.parse(row.order_data),
     items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
     client_ip: row.client_ip || undefined,
@@ -736,6 +856,8 @@ async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     order_source: row.order_source || undefined,
+    facebook_comment_id: row.facebook_comment_id || undefined,
+    facebook_pickup_notified_at: row.facebook_pickup_notified_at || undefined,
     order_data: JSON.parse(row.order_data),
     items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
     client_ip: row.client_ip || undefined,
@@ -746,28 +868,59 @@ async function getOrdersByFormIdSQLite(formId: number): Promise<Order[]> {
   }));
 }
 
+async function getOrdersByIdsSQLite(orderIds: number[]): Promise<Order[]> {
+  if (!orderIds || orderIds.length === 0) return [];
+  const placeholders = orderIds.map(() => '?').join(',');
+  const rows = await dbAll(
+    `SELECT * FROM orders WHERE id IN (${placeholders})`,
+    orderIds
+  ) as any[];
+  return rows.map(row => ({
+    id: row.id,
+    form_id: row.form_id,
+    customer_name: row.customer_name,
+    customer_phone: row.customer_phone,
+    order_source: row.order_source || undefined,
+    facebook_comment_id: row.facebook_comment_id || undefined,
+    facebook_pickup_notified_at: row.facebook_pickup_notified_at || undefined,
+    order_data: JSON.parse(row.order_data),
+    items_summary: row.items_summary ? JSON.parse(row.items_summary) : undefined,
+    client_ip: row.client_ip || undefined,
+    user_agent: row.user_agent || undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    order_token: row.order_token,
+  }));
+}
+
+async function markFacebookPickupNotifiedSQLite(orderId: number, notifiedAt: string): Promise<void> {
+  await dbRun(
+    'UPDATE orders SET facebook_pickup_notified_at = ? WHERE id = ?',
+    [notifiedAt, orderId]
+  );
+}
+
 /**
- * 刪除訂單
- */
+ * ??????? */
 async function deleteOrderSQLite(orderToken: string): Promise<boolean> {
   try {
     const result = await dbRun('DELETE FROM orders WHERE order_token = ?', [orderToken]);
     
     if (!result) {
-      // 手動檢查是否刪除成功
+      // ???????????????
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
-      return !checkOrder; // 如果找不到訂單，表示刪除成功
+      return !checkOrder; // ????????????????????????
     }
     
     const changes = (result as any)?.changes ?? 0;
     return changes > 0;
   } catch (error: any) {
-    console.error('deleteOrder 錯誤:', error);
-    throw new Error(`無法刪除訂單：${error.message}`);
+        console.error('Failed to load Supabase module');
+    throw new Error(`???????????{error.message}`);
   }
 }
 
-// 系統設定相關操作
+// ???????????
 async function getSettingSQLite(key: string): Promise<string | null> {
   await ensureDatabaseInitialized();
   const row = await dbGet('SELECT value FROM settings WHERE key = ?', [key]) as any;
@@ -783,85 +936,77 @@ async function setSettingSQLite(key: string, value: string): Promise<boolean> {
     );
     return true;
   } catch (error) {
-    console.error('設定儲存錯誤:', error);
+        console.error('Failed to load Supabase module');
     return false;
   }
 }
 
-// 生成唯一 token
+// ????? token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// 生成 session ID
+// ?? session ID
 export function generateSessionId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-// 保留訂單排序（SQLite）
-async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// ??????????QLite??async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
     await ensureDatabaseInitialized();
     
-    // 先清理過期保留（5分鐘）
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ??????????5?????    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await dbRun(
       'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
       [fiveMinutesAgo]
     );
 
-    // 檢查是否已有保留
+    // ????????????
     const existing = await dbGet(
       'SELECT * FROM reserved_orders WHERE form_id = ? AND session_id = ?',
       [formId, sessionId]
     ) as any;
 
     if (existing) {
-      // 檢查是否已過期
-      const reservedAt = new Date(existing.reserved_at);
+      // ???????????      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // 已過期，刪除並重新分配
-        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
+        // ?????????????????        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
       } else {
-        // 返回現有保留
+        // ??????????
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // 取得當前已提交的訂單和已保留的數量
-    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
+    // ?????????????????????????    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
     const reserved = await dbAll(
       'SELECT order_number FROM reserved_orders WHERE form_id = ? AND (order_token IS NOT NULL OR reserved_at > ?)',
       [formId, fiveMinutesAgo]
     ) as any[];
 
-    // 計算下一個可用的排序號
-    const usedNumbers = new Set<number>();
+    // ?????????????????    const usedNumbers = new Set<number>();
     reserved.forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // 找到第一個可用的排序號
-    let orderNumber = 1;
+    // ??????????????????    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // 插入保留記錄（使用 INSERT OR REPLACE 處理唯一約束）
-    await dbRun(
+    // ?????????????INSERT OR REPLACE ???????????    await dbRun(
       'INSERT OR REPLACE INTO reserved_orders (form_id, session_id, order_number, reserved_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
       [formId, sessionId, orderNumber]
     );
 
     return { success: true, orderNumber };
   } catch (error: any) {
-    console.error('保留訂單排序錯誤:', error);
+        console.error('Failed to load Supabase module');
     return { success: false, error: error.message };
   }
 }
 
-// 確認保留的排序（提交訂單時）
+// ????????????????????
 async function confirmReservedOrderSQLite(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
   try {
     await ensureDatabaseInitialized();
@@ -871,12 +1016,12 @@ async function confirmReservedOrderSQLite(formId: number, sessionId: string, ord
     );
     return true;
   } catch (error) {
-    console.error('確認保留訂單錯誤:', error);
+        console.error('Failed to load Supabase module');
     return false;
   }
 }
 
-// 取得保留的排序號
+// ????????????
 async function getReservedOrderNumberSQLite(formId: number, sessionId: string): Promise<number | null> {
   try {
     await ensureDatabaseInitialized();
@@ -886,12 +1031,12 @@ async function getReservedOrderNumberSQLite(formId: number, sessionId: string): 
     ) as any;
     return result ? result.order_number : null;
   } catch (error) {
-    console.error('取得保留訂單排序錯誤:', error);
+        console.error('Failed to load Supabase module');
     return null;
   }
 }
 
-// 清理過期保留
+// ?????????
 async function cleanupExpiredReservationsSQLite(): Promise<void> {
   try {
     await ensureDatabaseInitialized();
@@ -901,33 +1046,191 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
       [fiveMinutesAgo]
     );
   } catch (error) {
-    console.error('清理過期保留錯誤:', error);
+        console.error('Failed to load Supabase module');
   }
 }
 
-// 初始化資料庫（在第一次使用時調用）
-let dbInitialized = false;
+// LINE ?????????????QLite ?????async function recordLinePostSQLite(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null
+): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    // ???? line_posts ??????    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    await dbRun(
+      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
+      [formId, groupId, messageId, senderName, postContent]
+    );
+  } catch (error: any) {
+        console.error('Failed to load Supabase module');
+    throw new Error(`?? LINE ?????????{error.message}`);
+  }
+}
+
+async function getRecentLinePostsSQLite(
+  groupId: string,
+  limit: number = 10
+): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
+  try {
+    await ensureDatabaseInitialized();
+    // ???? line_posts ??????    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    const rows = await dbAll(
+      'SELECT form_id, sender_name, post_content, created_at FROM line_posts WHERE group_id = ? ORDER BY created_at DESC LIMIT ?',
+      [groupId, limit]
+    ) as any[];
+
+    return rows.map((row: any) => ({
+      formId: row.form_id,
+      senderName: row.sender_name || '',
+      postContent: row.post_content || '',
+      postedAt: row.created_at,
+    }));
+  } catch (error: any) {
+        console.error('Failed to load Supabase module');
+    return [];
+  }
+}
+
+async function getActiveLineSalesSQLite(): Promise<LineSale[]> {
+  await ensureDatabaseInitialized();
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS line_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id INTEGER NOT NULL,
+      group_id TEXT NOT NULL,
+      message_id TEXT,
+      sender_name TEXT NOT NULL,
+      post_content TEXT,
+      identifier TEXT,
+      deadline TEXT,
+      end_announced INTEGER DEFAULT 0,
+      first_warning_sent INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+    )
+  `);
+  try { await dbRun('ALTER TABLE line_posts ADD COLUMN identifier TEXT'); } catch (e: any) {}
+  try { await dbRun('ALTER TABLE line_posts ADD COLUMN deadline TEXT'); } catch (e: any) {}
+  try { await dbRun('ALTER TABLE line_posts ADD COLUMN end_announced INTEGER DEFAULT 0'); } catch (e: any) {}
+  try { await dbRun('ALTER TABLE line_posts ADD COLUMN first_warning_sent INTEGER DEFAULT 0'); } catch (e: any) {}
+
+  const rows = await dbAll(
+    'SELECT * FROM line_posts WHERE deadline IS NOT NULL AND end_announced = 0 AND datetime(deadline) <= datetime("now")'
+  ) as any[];
+  return rows.map(mapLineSaleRow);
+}
+
+async function recordLinePostSQLite(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null,
+  identifier?: string | null,
+  deadline?: string | null
+): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        identifier TEXT,
+        deadline TEXT,
+        end_announced INTEGER DEFAULT 0,
+        first_warning_sent INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    try { await dbRun('ALTER TABLE line_posts ADD COLUMN identifier TEXT'); } catch (e: any) {}
+    try { await dbRun('ALTER TABLE line_posts ADD COLUMN deadline TEXT'); } catch (e: any) {}
+    try { await dbRun('ALTER TABLE line_posts ADD COLUMN end_announced INTEGER DEFAULT 0'); } catch (e: any) {}
+    try { await dbRun('ALTER TABLE line_posts ADD COLUMN first_warning_sent INTEGER DEFAULT 0'); } catch (e: any) {}
+
+    await dbRun(
+      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content, identifier, deadline, end_announced, first_warning_sent) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)',
+      [
+        formId,
+        groupId,
+        messageId,
+        senderName,
+        postContent,
+        identifier || null,
+        deadline || null,
+      ]
+    );
+  } catch (error: any) {
+        console.error('Failed to load Supabase module');
+    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+  }
+}
+
+async function getLatestLineSaleSQLite(groupId: string, formId: number): Promise<LineSale | null> {
+  const row = await dbGet(
+    'SELECT * FROM line_posts WHERE group_id = ? AND form_id = ? ORDER BY created_at DESC LIMIT 1',
+    [groupId, formId]
+  ) as any;
+  if (!row) return null;
+  return mapLineSaleRow(row);
+}
+
+async function markLineSaleEndAnnouncedSQLite(saleId: number): Promise<void> {
+  await dbRun('UPDATE line_posts SET end_announced = 1 WHERE id = ?', [saleId]);
+}
+
+async function markLineSaleFirstWarningSentSQLite(saleId: number): Promise<void> {
+  await dbRun('UPDATE line_posts SET first_warning_sent = 1 WHERE id = ?', [saleId]);
+}
+
+// ??????????????????????????let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
   if (DATABASE_TYPE === 'supabase') {
-    // Supabase 不需要初始化，表結構已在 SQL Editor 中建立
-    // 但需要確保 dbModule 已載入
-    if (!dbModule) {
-      throw new Error('Supabase 模組未載入，請確認環境變數已正確設定');
+    // Supabase ???????????????????SQL Editor ?????    // ?????????dbModule ??????    if (!dbModule) {
+      throw new Error('Supabase ??????????????????????????????');
     }
     return dbModule.ensureDatabaseInitialized();
   }
   
-  // SQLite 模式
+  // SQLite ????
   if (!dbInitialized) {
     await initDatabaseSQLite();
     dbInitialized = true;
   }
 }
 
-// 根據資料庫類型選擇要導出的函數
-// 如果使用 Supabase，從 dbModule 重新導出所有函數
-// 如果使用 SQLite，使用上面定義的 SQLite 函數
-
+// ??????????????????????????// ????????Supabase??? dbModule ??????????????// ????????SQLite???????????? SQLite ????
 export const initDatabase = DATABASE_TYPE === 'supabase' 
   ? dbModule.initDatabase 
   : initDatabaseSQLite;
@@ -996,9 +1299,29 @@ export const getOrdersByFormId = DATABASE_TYPE === 'supabase'
   ? dbModule.getOrdersByFormId
   : getOrdersByFormIdSQLite;
 
+export const getOrdersByIds = DATABASE_TYPE === 'supabase'
+  ? dbModule.getOrdersByIds
+  : getOrdersByIdsSQLite;
+
 export const deleteOrder = DATABASE_TYPE === 'supabase'
   ? dbModule.deleteOrder
   : deleteOrderSQLite;
+
+export const markFacebookPickupNotified = DATABASE_TYPE === 'supabase'
+  ? dbModule.markFacebookPickupNotified
+  : markFacebookPickupNotifiedSQLite;
+
+export const getLatestLineSale = DATABASE_TYPE === 'supabase'
+  ? dbModule.getLatestLineSale
+  : getLatestLineSaleSQLite;
+
+export const markLineSaleEndAnnounced = DATABASE_TYPE === 'supabase'
+  ? dbModule.markLineSaleEndAnnounced
+  : markLineSaleEndAnnouncedSQLite;
+
+export const markLineSaleFirstWarningSent = DATABASE_TYPE === 'supabase'
+  ? dbModule.markLineSaleFirstWarningSent
+  : markLineSaleFirstWarningSentSQLite;
 
 export const getSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.getSetting
@@ -1008,8 +1331,7 @@ export const setSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.setSetting
   : setSettingSQLite;
 
-// 保留訂單排序相關函數
-export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
+// ???????????????export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
   ? dbModule.reserveOrderNumber
   : reserveOrderNumberSQLite;
 
@@ -1025,5 +1347,45 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
 
-// generateSessionId 已在上面定義並導出
+// LINE ?????????????QLite??async function recordLinePostSQLite(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null
+): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    // ???? line_posts ??????    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    await dbRun(
+      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
+      [formId, groupId, messageId || null, senderName, postContent || null]
+    );
+  } catch (error: any) {
+        console.error('Failed to load Supabase module');
+    throw new Error(`?? LINE ?????????{error.message}`);
+  }
+}
+
+export const getActiveLineSales = DATABASE_TYPE === 'supabase'
+  ? dbModule.getActiveLineSales
+  : getActiveLineSalesSQLite;
+
+async function getFormByIdLiteSQLite(formId: number): Promise<Form | null> {
+  const row = await dbGet('SELECT * FROM forms WHERE id = ?', [formId]) as any;
+  if (!row) return null;
+  return mapFormRow(row);
+}
 

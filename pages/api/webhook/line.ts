@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-import { getFormByToken, createOrder, ensureDatabaseInitialized, FormField } from '@/lib/db';
+import { getFormByToken, getAllForms, createOrder, ensureDatabaseInitialized, FormField, recordLinePost, getLatestLineSale, markLineSaleEndAnnounced, markLineSaleFirstWarningSent } from '@/lib/db';
 
 /**
  * LINE Webhook API
@@ -31,9 +31,44 @@ interface LineWebhookBody {
   events: LineEvent[];
 }
 
+function extractLineIdentifiers(form: any): string[] {
+  const identifiers = new Set<string>();
+  if (form?.form_token) {
+    identifiers.add(form.form_token.toLowerCase());
+    identifiers.add(`@${form.form_token}`.toLowerCase());
+  }
+  if (form?.line_use_custom_identifier && form?.line_custom_identifier) {
+    const custom = String(form.line_custom_identifier).trim();
+    if (custom) {
+      identifiers.add(custom.toLowerCase());
+      const normalized = custom.replace(/^[#@]+/, '').toLowerCase();
+      if (normalized && normalized !== custom.toLowerCase()) {
+        identifiers.add(normalized);
+      }
+    }
+  }
+  return Array.from(identifiers).filter(Boolean);
+}
+
+function pad(num: number): string {
+  return num.toString().padStart(2, '0');
+}
+
+function formatDeadline(date: Date): string {
+  return `${date.getFullYear()}年${pad(date.getMonth() + 1)}月${pad(date.getDate())}日${pad(date.getHours())}時${pad(date.getMinutes())}分`;
+}
+
 // 簡化的 LINE API 回應（實際使用時需要安裝 @line/bot-sdk）
-async function replyMessage(replyToken: string, message: string, channelAccessToken: string) {
+async function replyMessage(replyToken: string, message: string, channelAccessToken: string, quoteToken?: string) {
   try {
+    const payloadMessage: any = {
+      type: 'text',
+      text: message,
+    };
+    if (quoteToken) {
+      payloadMessage.quoteToken = quoteToken;
+    }
+
     const response = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: {
@@ -42,6 +77,28 @@ async function replyMessage(replyToken: string, message: string, channelAccessTo
       },
       body: JSON.stringify({
         replyToken,
+        messages: [payloadMessage],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('LINE API 錯誤:', await response.text());
+    }
+  } catch (error) {
+    console.error('回覆 LINE 訊息錯誤:', error);
+  }
+}
+
+async function sendPushMessage(to: string, message: string, channelAccessToken: string) {
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to,
         messages: [
           {
             type: 'text',
@@ -52,10 +109,10 @@ async function replyMessage(replyToken: string, message: string, channelAccessTo
     });
 
     if (!response.ok) {
-      console.error('LINE API 錯誤:', await response.text());
+      console.error('LINE Push API 錯誤:', await response.text());
     }
   } catch (error) {
-    console.error('回覆 LINE 訊息錯誤:', error);
+    console.error('推播 LINE 訊息錯誤:', error);
   }
 }
 
@@ -117,6 +174,12 @@ export default async function handler(
 
       const messageText = event.message.text;
       if (!messageText) continue;
+      const messageLower = messageText.toLowerCase();
+      const groupId = event.source.groupId || '';
+      const quoteToken = event.message.quoteToken;
+      if (!groupId) {
+        continue;
+      }
 
       // 優先處理群組 ID 查詢指令（必須在訂單處理之前）
       // 檢查訊息是否為群組 ID 查詢指令（支援多種格式）
@@ -134,14 +197,16 @@ export default async function handler(
           await replyMessage(
             event.replyToken!,
             `📋 群組 ID：\n${groupId}\n\n💡 提示：複製此 ID 並貼到管理後台的「LINE 群組 ID」欄位中`,
-            channelAccessToken
+            channelAccessToken,
+            quoteToken
           );
           continue; // 重要：處理完群組 ID 查詢後，不再處理訂單邏輯
         } else if (sourceType === 'user') {
           await replyMessage(
             event.replyToken!,
             '⚠️ 此訊息不是在群組中發送的。\n\n請在群組中發送「群組ID」來取得群組 ID。',
-            channelAccessToken
+            channelAccessToken,
+            quoteToken
           );
           continue; // 重要：處理完後不再繼續
         } else {
@@ -149,72 +214,441 @@ export default async function handler(
           await replyMessage(
             event.replyToken!,
             '⚠️ 無法取得群組 ID。請確認 Bot 已正確加入群組。',
-            channelAccessToken
+            channelAccessToken,
+            quoteToken
           );
           continue;
         }
       }
 
-      // 取得表單（如果沒有設定預設表單，需要從訊息中提取）
-      let targetFormToken = formToken;
+      // 取得發送者資訊（用於上下文關聯）
+      const senderUserId = event.source.userId;
+      let senderName = '';
+      
+      // 嘗試取得發送者名稱
+      if (senderUserId && event.source.groupId) {
+        try {
+          const profileResponse = await fetch(
+            `https://api.line.me/v2/bot/group/${event.source.groupId}/member/${senderUserId}`,
+            {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${channelAccessToken}`,
+              },
+            }
+          );
+          if (profileResponse.ok) {
+            const profile = await profileResponse.json();
+            senderName = profile.displayName || '';
+          }
+        } catch (error) {
+          console.error('取得發送者資訊失敗:', error);
+        }
+      }
 
-      // 如果訊息包含表單代碼（例如：「@abc123 韭菜+2」）
+      // 取得所有啟用的表單（用於上下文關聯匹配）
+      const allForms = await getAllForms();
+
+      // 🔥 優先處理：檢測是否為發文者的賣文
+      // 檢查發送者是否為任何表單設定的 LINE 發文者
+      const formsWithMatchingAuthor = allForms.filter(
+        form => form.line_post_author && 
+                form.line_post_author.trim() !== '' &&
+                senderName &&
+                (senderName.includes(form.line_post_author.trim()) || 
+                 form.line_post_author.trim().includes(senderName))
+      );
+
+      if (formsWithMatchingAuthor.length > 0) {
+        const identifierMatchedForm = formsWithMatchingAuthor.find(form => {
+          const deadline = form.order_deadline
+            ? new Date(form.order_deadline)
+            : new Date(form.deadline);
+          if (new Date() > deadline) return false;
+          const identifiers = extractLineIdentifiers(form);
+          return identifiers.length > 0 && identifiers.some(id => messageLower.includes(id));
+        });
+
+        if (identifierMatchedForm) {
+          const identifiers = extractLineIdentifiers(identifierMatchedForm);
+          const matchedIdentifier = identifiers.find(id => messageLower.includes(id)) || identifierMatchedForm.form_token;
+          const deadlineDate = identifierMatchedForm.order_deadline
+            ? new Date(identifierMatchedForm.order_deadline)
+            : new Date(identifierMatchedForm.deadline);
+          const deadlineLabel = formatDeadline(deadlineDate);
+          const saleMessage = `本次「${identifierMatchedForm.name}」結單時間為 ${deadlineLabel}止，只要有下單的客戶小幫手會一一回覆喔！`;
+
+          try {
+            await recordLinePost(
+              identifierMatchedForm.id,
+              groupId,
+              null,
+              senderName,
+              messageText.substring(0, 500),
+              matchedIdentifier,
+              deadlineDate.toISOString()
+            );
+          } catch (error) {
+            console.error('記錄 LINE 賣文失敗:', error);
+          }
+
+          await sendPushMessage(groupId, saleMessage, channelAccessToken);
+          console.log(`✅ 透過識別碼偵測到賣文：${senderName}，表單：${identifierMatchedForm.name}`);
+          continue;
+        }
+      }
+
+      // 如果發送者匹配到表單的發文者，且訊息看起來像賣文（不是簡單的 +1 留言）
+      if (formsWithMatchingAuthor.length > 0 && messageText.length > 20) {
+        // 判斷是否為賣文（包含商品資訊、價格、結單時間等關鍵字）
+        // 排除明顯是留言的訊息（例如：+1、+2、加一 等）
+        const isCommentMessage = /^[\+\d加一1-9\s]+$/.test(messageText.trim()) || 
+                                 messageText.trim().length < 10;
+        
+        const isPostMessage = !isCommentMessage && (
+          /(商品|價格|結單|截止|收單|團購|預購|下單|數量|份|組|元|塊|斤|隻|個|罐|包|盒|售|賣|開團|開單)/i.test(messageText) ||
+          messageText.length > 50 // 長訊息可能是賣文
+        );
+
+        if (isPostMessage) {
+          // 找到最符合的表單（根據關鍵字匹配度）
+          let bestMatchForm: any = null;
+          let bestScore = 0;
+
+          for (const form of formsWithMatchingAuthor) {
+            // 檢查結單時間
+            const deadline = form.order_deadline 
+              ? new Date(form.order_deadline) 
+              : new Date(form.deadline);
+            const now = new Date();
+            if (now > deadline) {
+              continue; // 已過期的表單不處理
+            }
+
+            // 計算匹配分數（根據關鍵字）
+            const keywords = form.facebook_keywords ? JSON.parse(form.facebook_keywords) : [];
+            let score = 0;
+            const lowerMessage = messageLower;
+            
+            // 如果賣文中包含表單的關鍵字，增加分數
+            for (const keyword of keywords) {
+              const lowerKeyword = keyword.toLowerCase();
+              if (lowerMessage.includes(lowerKeyword)) {
+                score += 5;
+              } else if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
+                score += 4;
+              } else if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
+                score += 4;
+              }
+            }
+
+            // 如果賣文長度較長，可能是詳細的賣文
+            if (messageText.length > 100) {
+              score += 3;
+            }
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatchForm = form;
+            }
+          }
+
+          // 如果找到匹配的表單，回應確認訊息並記錄賣文
+          if (bestMatchForm) {
+            const identifiers = extractLineIdentifiers(bestMatchForm);
+            const matchedIdentifier = identifiers.find(id => messageLower.includes(id)) || bestMatchForm.form_token;
+            const deadlineDate = bestMatchForm.order_deadline
+              ? new Date(bestMatchForm.order_deadline)
+              : new Date(bestMatchForm.deadline);
+            const deadlineLabel = formatDeadline(deadlineDate);
+            const saleMessage = `本次「${bestMatchForm.name}」結單時間為 ${deadlineLabel}止，只要有下單的客戶小幫手會一一回覆喔！`;
+
+            // 記錄賣文與表單的對應關係
+            try {
+              await recordLinePost(
+                bestMatchForm.id,
+                groupId,
+                null, // LINE API 可能無法取得訊息 ID
+                senderName,
+                messageText.substring(0, 500),
+                matchedIdentifier,
+                deadlineDate.toISOString()
+              );
+            } catch (error) {
+              console.error('記錄 LINE 賣文失敗:', error);
+            }
+
+            await sendPushMessage(groupId, saleMessage, channelAccessToken);
+            console.log(`✅ 檢測到發文者賣文：${senderName}，表單：${bestMatchForm.name}`);
+            continue;
+          }
+        }
+      }
+      
+      // 優先檢查是否有表單代碼（例如：「@abc123 韭菜+2」）
+      let targetForm = null;
       const formTokenMatch = messageText.match(/@(\w+)/);
       if (formTokenMatch) {
-        targetFormToken = formTokenMatch[1];
+        targetForm = await getFormByToken(formTokenMatch[1]);
       }
 
-      if (!targetFormToken) {
+      if (!targetForm) {
+        const identifierMatchedForm = allForms.find(form => {
+          if (form.deleted && form.deleted !== 0) return false;
+          const identifiers = extractLineIdentifiers(form);
+          if (identifiers.length === 0) return false;
+          const deadline = form.order_deadline
+            ? new Date(form.order_deadline)
+            : new Date(form.deadline);
+          if (new Date() > deadline) return false;
+          return identifiers.some(id => messageLower.includes(id));
+        });
+
+        if (identifierMatchedForm) {
+          targetForm = identifierMatchedForm;
+        }
+      }
+
+      // 如果沒有表單代碼，根據 LINE 發文者姓名和關鍵字匹配表單
+      if (!targetForm) {
+        // 取得所有有設定 LINE 發文者姓名的表單
+        const formsWithLineAuthor = allForms.filter(
+          form => form.line_post_author && 
+                  form.line_post_author.trim() !== '' &&
+                  (form.deleted === 0 || !form.deleted)
+        );
+
+        // 檢查結單時間（使用 order_deadline 或 deadline）
+        const now = new Date();
+        const activeForms = formsWithLineAuthor.filter(form => {
+          const deadline = form.order_deadline ? new Date(form.order_deadline) : new Date(form.deadline);
+          return now <= deadline;
+        });
+
+        // 根據關鍵字匹配表單（支援靈活的模式）
+        const matchedForms: Array<{ form: any; score: number }> = [];
+        
+        for (const form of activeForms) {
+          const keywords = form.facebook_keywords ? JSON.parse(form.facebook_keywords) : [];
+          
+          // 檢查訊息是否符合關鍵字（使用改進的匹配邏輯）
+          let matchScore = 0;
+          for (const keyword of keywords) {
+            const lowerKeyword = keyword.toLowerCase();
+            const lowerMessage = messageLower;
+            
+            // 精確匹配（分數最高）
+            if (lowerMessage.includes(lowerKeyword)) {
+              matchScore += 10;
+            }
+            // 變體匹配
+            else if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
+              matchScore += 8;
+            }
+            else if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
+              matchScore += 8;
+            }
+            // 模式匹配（例如：1斤+1、5斤+1）
+            else {
+              const keywordPattern = lowerKeyword.replace(/\+/g, '\\+').replace(/\d+/g, '\\d+');
+              try {
+                const regex = new RegExp(keywordPattern);
+                if (regex.test(lowerMessage)) {
+                  matchScore += 6;
+                }
+              } catch (e) {
+                // 忽略正則表達式錯誤
+              }
+            }
+          }
+
+          if (matchScore > 0) {
+            matchedForms.push({ form, score: matchScore });
+          }
+        }
+
+        // 根據分數排序，選擇分數最高的表單
+        if (matchedForms.length > 0) {
+          matchedForms.sort((a, b) => b.score - a.score);
+          targetForm = matchedForms[0].form;
+        }
+
+        // 如果還是沒有匹配到，使用預設表單
+        if (!targetForm && formToken) {
+          targetForm = await getFormByToken(formToken);
+        }
+      }
+
+      if (!targetForm) {
         await replyMessage(
           event.replyToken!,
-          '請先設定表單代碼，或使用格式：@表單代碼 商品+數量',
-          channelAccessToken
+          '找不到對應的表單，請確認：\n1. 是否已建立表單並設定 LINE 發文者姓名\n2. 訊息是否符合關鍵字格式\n3. 表單是否仍在有效期限內',
+          channelAccessToken,
+          quoteToken
         );
         continue;
       }
 
-      // 取得表單
-      const form = await getFormByToken(targetFormToken);
-      if (!form) {
-        await replyMessage(
-          event.replyToken!,
-          '找不到指定的表單，請確認表單代碼是否正確',
-          channelAccessToken
-        );
-        continue;
-      }
+      const saleRecord = await getLatestLineSale(groupId, targetForm.id);
 
-      // 檢查截止時間
-      const deadline = new Date(form.deadline);
+      // 檢查截止時間（使用記錄中的 deadline 或表單設定）
+      const deadline = saleRecord?.deadline
+        ? new Date(saleRecord.deadline)
+        : targetForm.order_deadline
+          ? new Date(targetForm.order_deadline)
+          : new Date(targetForm.deadline);
       const now = new Date();
       if (now > deadline) {
-        await replyMessage(
-          event.replyToken!,
-          '此表單已超過截止時間',
-          channelAccessToken
-        );
-        continue;
+        if (saleRecord) {
+          const responses: string[] = [];
+          let needEndAnnounceUpdate = false;
+          let needFirstWarningUpdate = false;
+
+          if (!saleRecord.end_announced) {
+            responses.push(`本次「${targetForm.name}」已經結單了，無法再登記。`);
+            needEndAnnounceUpdate = true;
+          }
+
+          if (hasPlusOnePattern && !saleRecord.first_warning_sent) {
+            responses.push(`不登記，${targetForm.name} 已結單，下次請早唷！^.^`);
+            needFirstWarningUpdate = true;
+          }
+
+          if (responses.length > 0) {
+            await replyMessage(
+              event.replyToken!,
+              responses.join('\n\n'),
+              channelAccessToken,
+              quoteToken
+            );
+          }
+
+          if (needEndAnnounceUpdate) {
+            await markLineSaleEndAnnounced(saleRecord.id);
+          }
+          if (needFirstWarningUpdate) {
+            await markLineSaleFirstWarningSent(saleRecord.id);
+          }
+
+          continue;
+        } else {
+          const fallbackMessage = targetForm.post_deadline_reply_message?.trim() || '此表單已超過結單時間';
+          await replyMessage(
+            event.replyToken!,
+            fallbackMessage,
+            channelAccessToken,
+            quoteToken
+          );
+          continue;
+        }
       }
 
       // 移除表單代碼部分（如果有的話）
       const cleanMessage = messageText.replace(/@\w+\s*/, '').trim();
 
-      // 判斷模式：如果訊息包含「+數字」或「數字+」，使用團購模式；否則使用代購模式
-      const hasGroupbuyPattern = /[\+\d]/.test(cleanMessage) && !/我要買|買\s/.test(cleanMessage);
+      // 取得表單設定的關鍵字列表
+      const formKeywords = targetForm.facebook_keywords 
+        ? JSON.parse(targetForm.facebook_keywords) as string[]
+        : ['+1', '+2', '+3', '加一', '加1'];
+
+      // 改進的關鍵字匹配：支援靈活的模式
+      // 匹配：+1、+2、+3、加一、加1、水果1斤+1、5斤+1、烤雞半隻+1 等
+      const matchesFormKeywords = formKeywords.some((keyword: string) => {
+        const lowerKeyword = keyword.toLowerCase();
+        const lowerMessage = cleanMessage.toLowerCase();
+        
+        // 精確匹配
+        if (lowerMessage.includes(lowerKeyword)) {
+          return true;
+        }
+        
+        // 支援變體：+1 和 加一、加1
+        if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
+          return true;
+        }
+        if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
+          return true;
+        }
+        
+        // 支援模式：數字+數字（例如：1斤+1、5斤+1）
+        const keywordPattern = lowerKeyword.replace(/\+/g, '\\+').replace(/\d+/g, '\\d+');
+        const regex = new RegExp(keywordPattern);
+        if (regex.test(lowerMessage)) {
+          return true;
+        }
+        
+        return false;
+      });
+
+      const hasPlusOnePattern = matchesFormKeywords;
+      
+      // 判斷模式：如果訊息包含「+數字」或「數字+」或「加一/加1」，使用團購模式；否則使用代購模式
+      const hasGroupbuyPattern = hasPlusOnePattern || 
+                                  (/[\+\d]/.test(cleanMessage) && !/我要買|買\s/.test(cleanMessage));
       const mode = hasGroupbuyPattern ? 'groupbuy' : 'proxy';
 
       // 解析訊息
-      const availableProducts = extractProductsFromForm(form.fields);
+      const availableProducts = extractProductsFromForm(targetForm.fields);
       const parsed = parseOrderMessage(cleanMessage, availableProducts, undefined, mode);
 
       if (!parsed || parsed.items.length === 0) {
+        // 如果訊息包含 +1 相關關鍵字但無法解析，仍然嘗試建立訂單
+        if (hasPlusOnePattern) {
+          // 嘗試提取商品名稱（從訊息中移除 +1、加一等關鍵字）
+          const productName = cleanMessage
+            .replace(/\+1|加一|加1|\+\s*1|加\s*一|加\s*1/gi, '')
+            .trim();
+          
+          if (productName) {
+            // 建立簡單訂單（數量為 1）
+            const orderData: Record<string, any> = {};
+            
+            const productField = targetForm.fields.find(
+              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+            );
+            if (productField) {
+              orderData[productField.name] = productName;
+            }
+
+            const quantityField = targetForm.fields.find(
+              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+            );
+            if (quantityField) {
+              orderData[quantityField.name] = 1;
+            }
+
+            // 建立訂單
+            const orderToken = await createOrder(
+              targetForm.id,
+              orderData,
+              parsed.customerName,
+              parsed.customerPhone,
+              undefined,
+              undefined,
+              'line',
+              targetForm,
+              undefined
+            );
+
+            // 回覆確認訊息
+            await replyMessage(
+              event.replyToken!,
+              `✅ 已登記！\n\n商品：${productName}\n數量：1\n訂單代碼：${orderToken}`,
+              channelAccessToken,
+              quoteToken
+            );
+            continue;
+          }
+        }
+        
         const suggestion = mode === 'proxy'
           ? '無法解析訂單訊息。請使用格式：商品名稱（例如：我要買牛奶、牛奶一罐）'
-          : '無法解析訂單訊息。請使用格式：商品名+數量（例如：韭菜+2、高麗菜+1）';
+          : `無法解析訂單訊息。請使用格式：商品名+數量（例如：韭菜+2、高麗菜+1、半隻+1）\n\n支援的關鍵字：${formKeywords.join('、')}`;
         await replyMessage(
           event.replyToken!,
           suggestion,
-          channelAccessToken
+          channelAccessToken,
+          quoteToken
         );
         continue;
       }
@@ -225,14 +659,14 @@ export default async function handler(
       // 建立訂單資料
       const orderData: Record<string, any> = {};
 
-      const productField = form.fields.find(
+      const productField = targetForm.fields.find(
         (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
       );
       if (productField && mergedItems.length > 0) {
         orderData[productField.name] = mergedItems[0].productName;
       }
 
-      const quantityField = form.fields.find(
+      const quantityField = targetForm.fields.find(
         (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
       );
       if (quantityField) {
@@ -242,24 +676,32 @@ export default async function handler(
 
       // 建立訂單
       const orderToken = await createOrder(
-        form.id,
+        targetForm.id,
         orderData,
         parsed.customerName,
         parsed.customerPhone,
         undefined,
         undefined,
         'line',
-        form
+        targetForm,
+        undefined
       );
 
-      // 回覆確認訊息
+      // 回覆確認訊息（簡化版本，符合用戶需求）
       const itemsText = mergedItems
         .map((item: any) => `${item.productName} x${item.quantity}`)
         .join('、');
+      
+      // 如果訊息包含 +1 相關關鍵字，使用簡短回覆
+      const replyText = hasPlusOnePattern
+        ? '✅ 已登記'
+        : `✅ 訂單已建立！\n\n商品：${itemsText}\n訂單代碼：${orderToken}\n\n您可以使用此代碼修改訂單。`;
+      
       await replyMessage(
         event.replyToken!,
-        `✅ 訂單已建立！\n\n商品：${itemsText}\n訂單代碼：${orderToken}\n\n您可以使用此代碼修改訂單。`,
-        channelAccessToken
+        replyText,
+        channelAccessToken,
+        quoteToken
       );
     }
 

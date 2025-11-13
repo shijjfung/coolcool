@@ -209,9 +209,13 @@ export default function OrderSuccess() {
     if (!printRef.current) return;
 
     try {
-      // 動態導入 html2canvas（僅在需要時載入）
-      const html2canvas = (await import('html2canvas')).default;
-      
+      // 動態導入 html2canvas（僅在需要時載入，兼容 default / named export）
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default ?? (html2canvasModule as any);
+      if (typeof html2canvas !== 'function') {
+        throw new Error('無法載入 html2canvas 套件，請確認是否已安裝。');
+      }
+
       const canvas = await html2canvas(printRef.current, {
         backgroundColor: '#ffffff',
         scale: 2,
@@ -225,52 +229,50 @@ export default function OrderSuccess() {
       const fileName = `訂單明細_${order?.order_token.substring(0, 8)}_${dateStr}.png`;
 
       // 檢測是否為移動設備
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // 移動設備：使用 Blob 和分享 API 或新窗口打開
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            alert('生成圖片失敗，請稍後再試');
-            return;
-          }
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
 
-          // 嘗試使用 Web Share API（如果支持）
-          if (navigator.share && navigator.canShare) {
-            const file = new File([blob], fileName, { type: 'image/png' });
-            if (navigator.canShare({ files: [file] })) {
-              navigator.share({
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob((result) => resolve(result), 'image/png')
+      );
+
+      if (!blob) {
+        alert('生成圖片失敗，請稍後再試');
+        return;
+      }
+
+      if (isMobile) {
+        if (navigator.share && navigator.canShare) {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
                 files: [file],
                 title: '訂單明細',
-                text: '我的訂單明細'
-              }).catch((err) => {
-                // 如果分享失敗，使用備用方法
-                console.log('分享失敗，使用備用方法:', err);
-                openImageInNewWindow(blob);
+                text: '我的訂單明細',
               });
               return;
+            } catch (err) {
+              console.log('分享失敗，改用開新視窗:', err);
             }
           }
+        }
 
-          // 備用方法：在新窗口中打開圖片，讓用戶長按保存
-          openImageInNewWindow(blob);
-        }, 'image/png');
+        openImageInNewWindow(blob);
       } else {
-        // PC：使用傳統下載方式
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
+        link.href = url;
         link.download = fileName;
-        link.href = canvas.toDataURL('image/png');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }
     } catch (error: any) {
       console.error('下載圖片錯誤:', error);
-      if (error.message && error.message.includes('html2canvas')) {
-        alert('下載圖片功能需要安裝 html2canvas 套件。請執行：npm install html2canvas');
-      } else {
-        alert('下載圖片失敗：' + (error.message || '未知錯誤'));
-      }
+      alert('下載圖片失敗：' + (error?.message || '未知錯誤，請稍後再試'));
     }
   };
 
@@ -303,8 +305,42 @@ export default function OrderSuccess() {
   };
 
   // 列印
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    if (isMobile) {
+      await downloadAsImage();
+    } else {
+      window.print();
+    }
+  };
+
+  const handleLeavePage = () => {
+    if (typeof window === 'undefined') return;
+
+    const attemptClose = () => {
+      window.open('', '_self');
+      window.close();
+    };
+
+    if (window.history.length > 1) {
+      window.history.go(-1);
+      setTimeout(() => {
+        attemptClose();
+      }, 200);
+    } else {
+      attemptClose();
+    }
+
+    setTimeout(() => {
+      if (!document.hidden) {
+        window.location.href = 'about:blank';
+        setTimeout(() => {
+          router.replace('/');
+        }, 300);
+      }
+    }, 400);
   };
 
   if (loading) {
@@ -394,7 +430,7 @@ export default function OrderSuccess() {
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="container mx-auto px-4 max-w-4xl">
           {/* 操作按鈕（不列印） */}
-          <div className="no-print mb-6 flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="no-print mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               onClick={handlePrint}
               className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
@@ -415,19 +451,7 @@ export default function OrderSuccess() {
               </button>
             </div>
             <button
-              onClick={() => {
-                // 嘗試返回上一頁，如果沒有上一頁則關閉視窗
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  // 如果是在新標籤頁打開的，嘗試關閉
-                  window.close();
-                  // 如果無法關閉（例如不是由腳本打開的），則導向首頁
-                  setTimeout(() => {
-                    router.push('/');
-                  }, 100);
-                }
-              }}
+              onClick={handleLeavePage}
               className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium shadow-md flex items-center justify-center gap-2"
             >
               🚪 離開本頁
