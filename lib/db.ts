@@ -216,12 +216,12 @@ if (DATABASE_TYPE === 'sqlite') {
   }
 
   // ???????  await dbRun(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  //   CREATE TABLE IF NOT EXISTS settings (
+  //     key TEXT PRIMARY KEY,
+  //     value TEXT NOT NULL,
+  //     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  //   )
+  // `);
 
   // ????????????????????????
   await dbRun(`
