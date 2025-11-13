@@ -575,9 +575,9 @@ async function getFormsReadyForReportSQLite(): Promise<Form[]> {
  * ???????????????????? */
 async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
   try {
-    // ??????????????    await ensureDatabaseInitialized();
+    await ensureDatabaseInitialized();
     
-    // ???????????????    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
+    const tableInfo = await dbAll("PRAGMA table_info(forms)") as any[];
     const hasDeleted = tableInfo.some((col: any) => col.name === 'deleted');
     const hasDeletedAt = tableInfo.some((col: any) => col.name === 'deleted_at');
     
@@ -586,7 +586,7 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted INTEGER DEFAULT 0`);
       } catch (e: any) {
-            console.error('Failed to load Supabase module');
+        // Column may already exist
       }
     }
     
@@ -594,13 +594,13 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
       try {
         await dbRun(`ALTER TABLE forms ADD COLUMN deleted_at TEXT`);
       } catch (e: any) {
-            console.error('Failed to load Supabase module');
+        // Column may already exist
       }
     }
     
-    // ????ISO ???????????    const deletedAt = new Date().toISOString();
+    const deletedAt = new Date().toISOString();
     
-    // ???????????????    let result: any = null;
+    let result: any = null;
     try {
       result = await dbRun(
         'UPDATE forms SET deleted = 1, deleted_at = ? WHERE id = ?',
@@ -634,20 +634,18 @@ async function moveFormToTrashSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // ???? changes ??0??????????????????    if (changes === 0) {
+    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 1) {
         return true;
       }
-          console.error('Failed to load Supabase module');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-        console.error('Failed to load Supabase module');
-        console.error('Failed to load Supabase module');
-    throw new Error(`????????????{error.message}`);
+    console.error('Failed to move form to trash:', error);
+    throw new Error(`移動表單到垃圾桶失敗: ${error.message}`);
   }
 }
 
@@ -672,7 +670,7 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // ???? changes ??0??????????????????    if (changes === 0) {
+    if (changes === 0) {
       const checkForm = await dbGet('SELECT deleted FROM forms WHERE id = ?', [formId]) as any;
       if (checkForm && checkForm.deleted === 0) {
         return true;
@@ -682,8 +680,8 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
     
     return changes > 0;
   } catch (error: any) {
-        console.error('Failed to load Supabase module');
-    throw new Error(`???????????{error.message}`);
+    console.error('Failed to restore form:', error);
+    throw new Error(`還原表單失敗: ${error.message}`);
   }
 }
 
@@ -691,14 +689,15 @@ async function restoreFormSQLite(formId: number): Promise<boolean> {
  * ???????????????????????
  */
 async function permanentlyDeleteFormSQLite(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // ?????????????????  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
+  await ensureDatabaseInitialized();
+  
+  const orderCount = await dbGet('SELECT COUNT(*) as count FROM orders WHERE form_id = ?', [formId]) as { count: number };
   const deletedOrders = orderCount?.count || 0;
 
-  // ??????????  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
+  await dbRun('DELETE FROM orders WHERE form_id = ?', [formId]);
 
-  // ??????????  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
+  const result = await dbRun('DELETE FROM forms WHERE id = ?', [formId]);
 
-  // ????
   let success = false;
   if (!result) {
     // ???????????????
@@ -741,7 +740,7 @@ function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // ????????????????        for (const item of value) {
+        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -772,7 +771,7 @@ async function createOrderSQLite(
 ): Promise<string> {
   const orderToken = generateToken();
   
-  // ?????????  let itemsSummary: string | null = null;
+  let itemsSummary: string | null = null;
   if (form) {
     const items = extractItemsSummary(form, orderData);
     if (items && items.length > 0) {
@@ -811,10 +810,10 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
       // ???????????????
       const checkOrder = await dbGet('SELECT order_token FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder && checkOrder.order_token === orderToken) {
-        // ?????????????????        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
+        const verifyOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
         if (verifyOrder) {
           const currentData = JSON.parse(verifyOrder.order_data);
-          // ????????????????????????????          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
+          if (JSON.stringify(currentData) === JSON.stringify(orderData)) {
             return true;
           }
         }
@@ -824,7 +823,7 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
     
     const changes = (result as any)?.changes ?? (result?.lastID !== undefined ? 1 : 0);
     
-    // ???? changes ??0??????????????????    if (changes === 0) {
+    if (changes === 0) {
       const checkOrder = await dbGet('SELECT order_data FROM orders WHERE order_token = ?', [orderToken]) as any;
       if (checkOrder) {
         const currentData = JSON.parse(checkOrder.order_data);
@@ -832,14 +831,13 @@ async function updateOrderSQLite(orderToken: string, orderData: Record<string, a
           return true;
         }
       }
-          console.error('Failed to load Supabase module');
       return false;
     }
     
     return changes > 0;
   } catch (error: any) {
-        console.error('Failed to load Supabase module');
-    throw new Error(`???????????{error.message}`);
+    console.error('Failed to update order:', error);
+    throw new Error(`更新訂單失敗: ${error.message}`);
   }
 }
 
@@ -972,7 +970,7 @@ async function reserveOrderNumberSQLite(formId: number, sessionId: string): Prom
   try {
     await ensureDatabaseInitialized();
     
-    // ??????????5?????    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await dbRun(
       'DELETE FROM reserved_orders WHERE reserved_at < ? AND order_token IS NULL',
       [fiveMinutesAgo]
@@ -985,33 +983,32 @@ async function reserveOrderNumberSQLite(formId: number, sessionId: string): Prom
     ) as any;
 
     if (existing) {
-      // ???????????      const reservedAt = new Date(existing.reserved_at);
+      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // ?????????????????        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
+        await dbRun('DELETE FROM reserved_orders WHERE id = ?', [existing.id]);
       } else {
-        // ??????????
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // ?????????????????????????    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
+    const orders = await dbAll('SELECT id FROM orders WHERE form_id = ?', [formId]) as any[];
     const reserved = await dbAll(
       'SELECT order_number FROM reserved_orders WHERE form_id = ? AND (order_token IS NOT NULL OR reserved_at > ?)',
       [formId, fiveMinutesAgo]
     ) as any[];
 
-    // ?????????????????    const usedNumbers = new Set<number>();
+    const usedNumbers = new Set<number>();
     reserved.forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // ??????????????????    let orderNumber = 1;
+    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // ?????????????INSERT OR REPLACE ???????????    await dbRun(
+    await dbRun(
       'INSERT OR REPLACE INTO reserved_orders (form_id, session_id, order_number, reserved_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
       [formId, sessionId, orderNumber]
     );
@@ -1077,7 +1074,8 @@ async function recordLinePostSQLite(
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // ???? line_posts ??????    await dbRun(`
+    // ???? line_posts ??
+    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1095,8 +1093,8 @@ async function recordLinePostSQLite(
       [formId, groupId, messageId, senderName, postContent]
     );
   } catch (error: any) {
-        console.error('Failed to load Supabase module');
-    throw new Error(`?? LINE ?????????{error.message}`);
+    console.error('Failed to record LINE post:', error);
+    throw new Error(`記錄 LINE 賣文失敗: ${error.message}`);
   }
 }
 
@@ -1106,7 +1104,8 @@ async function getRecentLinePostsSQLite(
 ): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
   try {
     await ensureDatabaseInitialized();
-    // ???? line_posts ??????    await dbRun(`
+    // ???? line_posts ??
+    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1352,7 +1351,7 @@ export const setSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.setSetting
   : setSettingSQLite;
 
-// ???????????????export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
+export const reserveOrderNumber = DATABASE_TYPE === 'supabase'
   ? dbModule.reserveOrderNumber
   : reserveOrderNumberSQLite;
 
@@ -1368,7 +1367,8 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
 
-// LINE ?????????????QLite??async function recordLinePostSQLite(
+// LINE ?????????????QLite??
+async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -1377,7 +1377,8 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
 ): Promise<void> {
   try {
     await ensureDatabaseInitialized();
-    // ???? line_posts ??????    await dbRun(`
+    // ???? line_posts ??
+    await dbRun(`
       CREATE TABLE IF NOT EXISTS line_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         form_id INTEGER NOT NULL,
@@ -1395,8 +1396,8 @@ export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
       [formId, groupId, messageId || null, senderName, postContent || null]
     );
   } catch (error: any) {
-        console.error('Failed to load Supabase module');
-    throw new Error(`?? LINE ?????????{error.message}`);
+    console.error('Failed to record LINE post:', error);
+    throw new Error(`記錄 LINE 賣文失敗: ${error.message}`);
   }
 }
 
