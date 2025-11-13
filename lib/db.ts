@@ -32,6 +32,9 @@ if (DATABASE_TYPE === 'sqlite') {
   fs = require('fs');
 
   dbPath = path.join(process.cwd(), 'orders.db');
+  if (!dbPath) {
+    throw new Error('無法取得 SQLite 資料庫檔案路徑');
+  }
 
   // ???????????????  if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');
