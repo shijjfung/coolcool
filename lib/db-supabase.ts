@@ -1,23 +1,19 @@
 import { supabaseAdmin } from './supabase';
 import type { FormField, Form, Order } from './db';
 
-// 確保使用 Supabase Admin 客戶端
-function getSupabase() {
+// 確�?使用 Supabase Admin 客戶�?function getSupabase() {
   if (!supabaseAdmin) {
-    console.warn('⚠️ 警告：未設定 SUPABASE_SERVICE_ROLE_KEY，使用 anon key（可能會有權限限制）');
-    throw new Error('Supabase 未正確設定，請檢查環境變數。建議設定 SUPABASE_SERVICE_ROLE_KEY 以獲得完整權限。');
+    console.warn('?��? 警�?：未設�? SUPABASE_SERVICE_ROLE_KEY，使??anon key（可?��??��??��??��?');
+    throw new Error('Supabase ?�正確設定�?請檢?�環境�??�。建議設�?SUPABASE_SERVICE_ROLE_KEY 以獲得�??��??��?);
   }
   return supabaseAdmin;
 }
 
-// 初始化資料庫表（在 Supabase Dashboard 的 SQL Editor 中執行 supabase-schema.sql）
-export async function initDatabase() {
-  // Supabase 表結構已在 SQL Editor 中建立，這裡不需要做任何事
-  // 但保留此函數以保持 API 相容性
-  console.log('Supabase 資料庫已初始化（表結構應已在 SQL Editor 中建立）');
+// ?��??��??�庫表�???Supabase Dashboard ??SQL Editor 中執�?supabase-schema.sql�?export async function initDatabase() {
+  // Supabase 表�?構已??SQL Editor 中建立�??�裡不�?要�?任�?�?  // 但�??�此?�數以�???API ?�容??  console.log('Supabase 資�?庫已?��??��?表�?構�?已在 SQL Editor 中建立�?');
 }
 
-// 表單相關操作
+// 表單?��??��?
 export async function createForm(
   name: string,
   fields: FormField[],
@@ -57,7 +53,7 @@ export async function createForm(
     .select('id')
     .single();
 
-  if (error) throw new Error(`建立表單失敗：${error.message}`);
+  if (error) throw new Error(`建�?表單失�?�?{error.message}`);
   return data.id;
 }
 
@@ -70,8 +66,7 @@ export async function getFormByToken(token: string): Promise<Form | null> {
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') return null; // 找不到記錄
-    throw new Error(`取得表單失敗：${error.message}`);
+    if (error.code === 'PGRST116') return null; // ?��??��???    throw new Error(`?��?表單失�?�?{error.message}`);
   }
 
   return mapFormFromDb(data);
@@ -91,7 +86,7 @@ export async function getFormById(id: number, includeDeleted: boolean = false): 
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`取得表單失敗：${error.message}`);
+    throw new Error(`?��?表單失�?�?{error.message}`);
   }
 
   return mapFormFromDb(data);
@@ -109,7 +104,7 @@ export async function getAllForms(includeDeleted: boolean = false): Promise<Form
 
   const { data, error } = await query;
 
-  if (error) throw new Error(`取得表單列表失敗：${error.message}`);
+  if (error) throw new Error(`?��?表單?�表失�?�?{error.message}`);
   return (data || []).map(mapFormFromDb);
 }
 
@@ -120,7 +115,7 @@ export async function getDeletedForms(): Promise<Form[]> {
     .eq('deleted', 1)
     .order('deleted_at', { ascending: false });
 
-  if (error) throw new Error(`取得已刪除表單失敗：${error.message}`);
+  if (error) throw new Error(`?��?已刪?�表?�失?��?${error.message}`);
   return (data || []).map(mapFormFromDb);
 }
 
@@ -161,7 +156,7 @@ export async function updateForm(
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`更新表單失敗：${error.message}`);
+  if (error) throw new Error(`?�新表單失�?�?{error.message}`);
   return true;
 }
 
@@ -171,7 +166,7 @@ export async function updateFormName(formId: number, newName: string): Promise<b
     .update({ name: newName })
     .eq('id', formId);
 
-  if (error) throw new Error(`更新表單名稱失敗：${error.message}`);
+  if (error) throw new Error(`?�新表單?�稱失�?�?{error.message}`);
   return true;
 }
 
@@ -184,16 +179,14 @@ export async function markReportGenerated(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`標記報表生成失敗：${error.message}`);
+  if (error) throw new Error(`標�??�表?��?失�?�?{error.message}`);
   return true;
 }
 
 export async function getFormsReadyForReport(): Promise<Form[]> {
   const now = new Date().toISOString();
   
-  // Supabase 查詢：使用原生 SQL 或分步查詢
-  // 先查詢有 order_deadline 且已到期的
-  const { data: data1, error: error1 } = await getSupabase()
+  // Supabase ?�詢：使?��???SQL ?��?步查�?  // ?�查詢�? order_deadline 且已?��???  const { data: data1, error: error1 } = await getSupabase()
     .from('forms')
     .select('*')
     .not('order_deadline', 'is', null)
@@ -201,7 +194,7 @@ export async function getFormsReadyForReport(): Promise<Form[]> {
     .eq('report_generated', 0)
     .eq('deleted', 0);
 
-  // 再查詢沒有 order_deadline 但 deadline 已到期的
+  // ?�查詢�???order_deadline �?deadline 已到?��?
   const { data: data2, error: error2 } = await getSupabase()
     .from('forms')
     .select('*')
@@ -211,11 +204,10 @@ export async function getFormsReadyForReport(): Promise<Form[]> {
     .eq('deleted', 0);
 
   if (error1 || error2) {
-    throw new Error(`取得待生成報表表單失敗：${error1?.message || error2?.message}`);
+    throw new Error(`?��?待�??�報表表?�失?��?${error1?.message || error2?.message}`);
   }
 
-  // 合併結果並排序
-  const allForms = [...(data1 || []), ...(data2 || [])];
+  // ?�併結�?並�?�?  const allForms = [...(data1 || []), ...(data2 || [])];
   allForms.sort((a, b) => {
     const aDeadline = a.order_deadline || a.deadline;
     const bDeadline = b.order_deadline || b.deadline;
@@ -234,7 +226,7 @@ export async function moveFormToTrash(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`移動表單到垃圾桶失敗：${error.message}`);
+  if (error) throw new Error(`移�?表單?��??�桶失�?�?{error.message}`);
   return true;
 }
 
@@ -247,47 +239,45 @@ export async function restoreForm(formId: number): Promise<boolean> {
     })
     .eq('id', formId);
 
-  if (error) throw new Error(`還原表單失敗：${error.message}`);
+  if (error) throw new Error(`?��?表單失�?�?{error.message}`);
   return true;
 }
 
 export async function permanentlyDeleteForm(formId: number): Promise<{ success: boolean; deletedOrders: number }> {
-  // 先計算要刪除的訂單數量
-  const { count } = await getSupabase()
+  // ?��?算�??�除?��??�數??  const { count } = await getSupabase()
     .from('orders')
     .select('*', { count: 'exact', head: true })
     .eq('form_id', formId);
 
   const deletedOrders = count || 0;
 
-  // 刪除相關訂單（CASCADE 會自動處理，但我們先手動刪除以獲取數量）
+  // ?�除?��?訂單（CASCADE ?�自?��??��?但�??��??��??�除以獲?�數?��?
   await getSupabase()
     .from('orders')
     .delete()
     .eq('form_id', formId);
 
-  // 永久刪除表單
+  // 永�??�除表單
   const { error } = await getSupabase()
     .from('forms')
     .delete()
     .eq('id', formId);
 
-  if (error) throw new Error(`永久刪除表單失敗：${error.message}`);
+  if (error) throw new Error(`永�??�除表單失�?�?{error.message}`);
   return { success: true, deletedOrders };
 }
 
-// 訂單相關操作
-// 從訂單資料中提取物品清單（從好事多代購欄位）
+// 訂單?��??��?
+// 從�??��??�中?��??��?清單（�?好�?多代購�?位�?
 function extractItemsSummary(form: Form, orderData: Record<string, any>): Array<{ name: string; quantity: number }> | null {
   const items: Array<{ name: string; quantity: number }> = [];
   
-  // 遍歷表單欄位，找出「好事多代購」類型的欄位
+  // ?�歷表單欄�?，找?�「好事�?�?��?��??��?欄�?
   for (const field of form.fields) {
     if (field.type === 'costco') {
       const value = orderData[field.name];
       if (Array.isArray(value)) {
-        // 處理數組格式的物品清單
-        for (const item of value) {
+        // ?��??��??��??�物?��???        for (const item of value) {
           if (item && item.name && item.name.trim()) {
             const quantity = parseInt(String(item.quantity || 0), 10) || 0;
             if (quantity > 0) {
@@ -313,11 +303,11 @@ export async function createOrder(
   clientIp?: string,
   userAgent?: string,
   orderSource?: string,
-  form?: Form // 新增 form 參數用於提取物品清單
+  form?: Form // ?��? form ?�數?�於?��??��?清單
 ): Promise<string> {
   const orderToken = generateToken();
   
-  // 提取物品清單
+  // ?��??��?清單
   let itemsSummary: Array<{ name: string; quantity: number }> | null = null;
   if (form) {
     itemsSummary = extractItemsSummary(form, orderData);
@@ -337,7 +327,7 @@ export async function createOrder(
       order_token: orderToken,
     });
 
-  if (error) throw new Error(`建立訂單失敗：${error.message}`);
+  if (error) throw new Error(`建�?訂單失�?�?{error.message}`);
   return orderToken;
 }
 
@@ -347,7 +337,7 @@ export async function updateOrder(orderToken: string, orderData: Record<string, 
     .update({ order_data: orderData })
     .eq('order_token', orderToken);
 
-  if (error) throw new Error(`更新訂單失敗：${error.message}`);
+  if (error) throw new Error(`?�新訂單失�?�?{error.message}`);
   return true;
 }
 
@@ -360,7 +350,7 @@ export async function getOrderByToken(token: string): Promise<Order | null> {
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`取得訂單失敗：${error.message}`);
+    throw new Error(`?��?訂單失�?�?{error.message}`);
   }
 
   return mapOrderFromDb(data);
@@ -373,7 +363,7 @@ export async function getOrdersByFormId(formId: number): Promise<Order[]> {
     .eq('form_id', formId)
     .order('created_at', { ascending: true });
 
-  if (error) throw new Error(`取得訂單列表失敗：${error.message}`);
+  if (error) throw new Error(`?��?訂單?�表失�?�?{error.message}`);
   return (data || []).map(mapOrderFromDb);
 }
 
@@ -383,11 +373,11 @@ export async function deleteOrder(orderToken: string): Promise<boolean> {
     .delete()
     .eq('order_token', orderToken);
 
-  if (error) throw new Error(`刪除訂單失敗：${error.message}`);
+  if (error) throw new Error(`?�除訂單失�?�?{error.message}`);
   return true;
 }
 
-// 系統設定相關操作
+// 系統設�??��??��?
 export async function getSetting(key: string): Promise<string | null> {
   const { data, error } = await getSupabase()
     .from('settings')
@@ -397,7 +387,7 @@ export async function getSetting(key: string): Promise<string | null> {
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(`取得設定失敗：${error.message}`);
+    throw new Error(`?��?設�?失�?�?{error.message}`);
   }
 
   return data?.value || null;
@@ -412,11 +402,11 @@ export async function setSetting(key: string, value: string): Promise<boolean> {
       updated_at: new Date().toISOString(),
     });
 
-  if (error) throw new Error(`儲存設定失敗：${error.message}`);
+  if (error) throw new Error(`?��?設�?失�?�?{error.message}`);
   return true;
 }
 
-// 輔助函數：將資料庫記錄映射為 Form 物件
+// 輔助?�數：�?資�?庫�??��?射為 Form ?�件
 function mapFormFromDb(row: any): Form {
   return {
     id: row.id,
@@ -443,7 +433,7 @@ function mapFormFromDb(row: any): Form {
   };
 }
 
-// 輔助函數：將資料庫記錄映射為 Order 物件
+// 輔助?�數：�?資�?庫�??��?射為 Order ?�件
 function mapOrderFromDb(row: any): Order {
   return {
     id: row.id,
@@ -461,8 +451,7 @@ function mapOrderFromDb(row: any): Order {
   };
 }
 
-// LINE 賣文記錄相關函數（Supabase）
-export async function recordLinePost(
+// LINE �??記�??��??�數（Supabase�?export async function recordLinePost(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -481,55 +470,26 @@ export async function recordLinePost(
       });
 
     if (error) {
-      console.error('記錄 LINE 賣文錯誤:', error);
+      console.error('記�? LINE �???�誤:', error);
       return false;
     }
     return true;
   } catch (error) {
-    console.error('記錄 LINE 賣文錯誤:', error);
+    console.error('記�? LINE �???�誤:', error);
     return false;
   }
 }
 
-export async function getRecentLinePosts(
-  groupId: string,
-  limit: number = 10
-): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
-  try {
-    const { data, error } = await getSupabase()
-      .from('line_posts')
-      .select('form_id, sender_name, post_content, posted_at')
-      .eq('group_id', groupId)
-      .order('posted_at', { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error('取得 LINE 賣文記錄錯誤:', error);
-      return [];
-    }
-
-    return (data || []).map(row => ({
-      formId: row.form_id,
-      senderName: row.sender_name || '',
-      postContent: row.post_content || '',
-      postedAt: row.posted_at,
-    }));
-  } catch (error) {
-    console.error('取得 LINE 賣文記錄錯誤:', error);
-    return [];
-  }
 }
 
-// 生成唯一 token
+// ?��??��? token
 function generateToken(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// 保留訂單排序（Supabase）
-export async function reserveOrderNumber(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// 保�?訂單?��?（Supabase�?export async function reserveOrderNumber(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
-    // 先清理過期保留（5分鐘）
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ?��??��??��??��?5?��?�?    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await getSupabase()
       .from('reserved_orders')
       .delete()
@@ -537,7 +497,7 @@ export async function reserveOrderNumber(formId: number, sessionId: string): Pro
       .lt('reserved_at', fiveMinutesAgo)
       .is('order_token', null);
 
-    // 檢查是否已有保留
+    // 檢查?�否已�?保�?
     const { data: existing } = await getSupabase()
       .from('reserved_orders')
       .select('*')
@@ -546,23 +506,20 @@ export async function reserveOrderNumber(formId: number, sessionId: string): Pro
       .single();
 
     if (existing) {
-      // 檢查是否已過期
-      const reservedAt = new Date(existing.reserved_at);
+      // 檢查?�否已�???      const reservedAt = new Date(existing.reserved_at);
       const now = new Date();
       if (now.getTime() - reservedAt.getTime() > 5 * 60 * 1000 && !existing.order_token) {
-        // 已過期，刪除並重新分配
-        await getSupabase()
+        // 已�??��??�除並�??��???        await getSupabase()
           .from('reserved_orders')
           .delete()
           .eq('id', existing.id);
       } else {
-        // 返回現有保留
+        // 返�??��?保�?
         return { success: true, orderNumber: existing.order_number };
       }
     }
 
-    // 取得當前已提交的訂單和已保留的數量
-    const { data: orders } = await getSupabase()
+    // ?��??��?已�?交�?訂單?�已保�??�數??    const { data: orders } = await getSupabase()
       .from('orders')
       .select('id')
       .eq('form_id', formId);
@@ -573,20 +530,17 @@ export async function reserveOrderNumber(formId: number, sessionId: string): Pro
       .eq('form_id', formId)
       .or(`order_token.not.is.null,reserved_at.gt.${fiveMinutesAgo}`);
 
-    // 計算下一個可用的排序號
-    const usedNumbers = new Set<number>();
+    // 計�?下�??�可?��??��???    const usedNumbers = new Set<number>();
     (reserved || []).forEach((r: any) => {
       usedNumbers.add(r.order_number);
     });
 
-    // 找到第一個可用的排序號
-    let orderNumber = 1;
+    // ?�到第�??�可?��??��???    let orderNumber = 1;
     while (usedNumbers.has(orderNumber)) {
       orderNumber++;
     }
 
-    // 插入保留記錄（使用 upsert 處理唯一約束）
-    const { error } = await getSupabase()
+    // ?�入保�?記�?（使??upsert ?��??��?約�?�?    const { error } = await getSupabase()
       .from('reserved_orders')
       .upsert({
         form_id: formId,
@@ -601,12 +555,12 @@ export async function reserveOrderNumber(formId: number, sessionId: string): Pro
 
     return { success: true, orderNumber };
   } catch (error: any) {
-    console.error('保留訂單排序錯誤:', error);
+    console.error('保�?訂單?��??�誤:', error);
     return { success: false, error: error.message };
   }
 }
 
-// 確認保留的排序（提交訂單時）
+// 確�?保�??��?序�??�交訂單?��?
 export async function confirmReservedOrder(formId: number, sessionId: string, orderToken: string): Promise<boolean> {
   try {
     const { error } = await getSupabase()
@@ -617,12 +571,12 @@ export async function confirmReservedOrder(formId: number, sessionId: string, or
 
     return !error;
   } catch (error) {
-    console.error('確認保留訂單錯誤:', error);
+    console.error('確�?保�?訂單?�誤:', error);
     return false;
   }
 }
 
-// 取得保留的排序號
+// ?��?保�??��?序�?
 export async function getReservedOrderNumber(formId: number, sessionId: string): Promise<number | null> {
   try {
     const { data } = await getSupabase()
@@ -635,12 +589,12 @@ export async function getReservedOrderNumber(formId: number, sessionId: string):
 
     return data ? data.order_number : null;
   } catch (error) {
-    console.error('取得保留訂單排序錯誤:', error);
+    console.error('?��?保�?訂單?��??�誤:', error);
     return null;
   }
 }
 
-// 清理過期保留
+// 清�??��?保�?
 export async function cleanupExpiredReservations(): Promise<void> {
   try {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -650,11 +604,11 @@ export async function cleanupExpiredReservations(): Promise<void> {
       .lt('reserved_at', fiveMinutesAgo)
       .is('order_token', null);
   } catch (error) {
-    console.error('清理過期保留錯誤:', error);
+    console.error('清�??��?保�??�誤:', error);
   }
 }
 
-// LINE 賣文記錄相關函數
+// LINE �??記�??��??�數
 export async function recordLinePost(
   formId: number,
   groupId: string,
@@ -675,8 +629,8 @@ export async function recordLinePost(
 
     if (error) throw error;
   } catch (error: any) {
-    console.error('記錄 LINE 賣文錯誤:', error);
-    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+    console.error('記�? LINE �???�誤:', error);
+    throw new Error(`記�? LINE �??失�?�?{error.message}`);
   }
 }
 
@@ -701,47 +655,44 @@ export async function getRecentLinePosts(
       postedAt: row.created_at,
     }));
   } catch (error: any) {
-    console.error('取得 LINE 賣文記錄錯誤:', error);
+    console.error('?��? LINE �??記�??�誤:', error);
     return [];
   }
 }
 
-// 初始化檢查（保持 API 相容性）
+// ?��??�檢?��?保�? API ?�容?��?
 export async function ensureDatabaseInitialized() {
-  // Supabase 不需要初始化，表結構已在 SQL Editor 中建立
-  // 但需要檢查 Supabase 連線是否正常
+  // Supabase 不�?要�?始�?，表結�?已在 SQL Editor 中建�?  // 但�?要檢??Supabase ????�否�?��
   try {
-    // 先檢查 supabaseAdmin 是否存在
+    // ?�檢??supabaseAdmin ?�否存在
     if (!supabaseAdmin) {
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
       const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
       
       if (!supabaseUrl) {
-        throw new Error('SUPABASE_URL 環境變數未設定。請在 Vercel Dashboard > Settings > Environment Variables 中設定。');
+        throw new Error('SUPABASE_URL ?��?變數?�設定。�???Vercel Dashboard > Settings > Environment Variables 中設定�?);
       }
       if (!supabaseServiceKey && !supabaseAnonKey) {
-        throw new Error('SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_ANON_KEY 環境變數未設定。請在 Vercel Dashboard > Settings > Environment Variables 中設定。');
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY ??SUPABASE_ANON_KEY ?��?變數?�設定。�???Vercel Dashboard > Settings > Environment Variables 中設定�?);
       }
-      throw new Error('Supabase 客戶端初始化失敗。請檢查環境變數設定。');
+      throw new Error('Supabase 客戶端�?始�?失�??��?檢查?��?變數設�???);
     }
     
     const supabase = getSupabase();
-    // 嘗試一個簡單的查詢來驗證連線
+    // ?�試一?�簡?��??�詢來�?證�??
     const { error } = await supabase.from('forms').select('id').limit(1);
     if (error && error.code !== 'PGRST116') {
-      // PGRST116 表示沒有記錄，這是正常的
-      // 其他錯誤表示連線或表結構有問題
-      if (error.code === '42P01') {
-        throw new Error('資料庫表不存在。請在 Supabase Dashboard > SQL Editor 中執行 supabase-complete-schema.sql 來建立表結構。');
+      // PGRST116 表示沒�?記�?，這是�?��??      // ?��??�誤表示????�表結�??��?�?      if (error.code === '42P01') {
+        throw new Error('資�?庫表不�??�。�???Supabase Dashboard > SQL Editor 中執�?supabase-complete-schema.sql 來建立表結�???);
       }
-      throw new Error(`Supabase 連線失敗：${error.message} (code: ${error.code})`);
+      throw new Error(`Supabase ???失�?�?{error.message} (code: ${error.code})`);
     }
     return true;
   } catch (error: any) {
-    if (error.message.includes('Supabase 未正確設定') || error.message.includes('環境變數')) {
-      throw error; // 重新拋出環境變數錯誤
+    if (error.message.includes('Supabase ?�正確設�?) || error.message.includes('?��?變數')) {
+      throw error; // ?�新?�出?��?變數?�誤
     }
-    throw new Error(`資料庫連線檢查失敗：${error.message}`);
+    throw new Error(`資�?庫�??檢查失�?�?{error.message}`);
   }
 }
