@@ -1343,3 +1343,7 @@ async function getFormByIdLiteSQLite(formId: number): Promise<Form | null> {
   return mapFormRow(row);
 }
 
+export const getFormByIdLite = DATABASE_TYPE === 'supabase'
+  ? dbModule.getFormByIdLite
+  : getFormByIdLiteSQLite;
+
