@@ -54,8 +54,9 @@ if (DATABASE_TYPE === 'sqlite') {
   dbAll = promisify(db.all.bind(db)) as (sql: string, params?: any[]) => Promise<any>;
 }
 
-// ????????async function initDatabaseSQLite() {
-  // ???????  await dbRun(`
+async function initDatabaseSQLite() {
+  // 建立 forms 表格（已註解，使用 ALTER TABLE 遷移）
+  // await dbRun(`
   //   CREATE TABLE IF NOT EXISTS forms (
   //     id INTEGER PRIMARY KEY AUTOINCREMENT,
   //     name TEXT NOT NULL,
@@ -165,7 +166,8 @@ if (DATABASE_TYPE === 'sqlite') {
     // column may already exist
   }
 
-  // ????  await dbRun(`
+  // 建立 orders 表格（已註解，使用 ALTER TABLE 遷移）
+  // await dbRun(`
   //   CREATE TABLE IF NOT EXISTS orders (
   //     id INTEGER PRIMARY KEY AUTOINCREMENT,
   //     form_id INTEGER NOT NULL,
@@ -215,7 +217,8 @@ if (DATABASE_TYPE === 'sqlite') {
     // column may already exist
   }
 
-  // ???????  await dbRun(`
+  // 建立 settings 表格（已註解，使用 ALTER TABLE 遷移）
+  // await dbRun(`
   //   CREATE TABLE IF NOT EXISTS settings (
   //     key TEXT PRIMARY KEY,
   //     value TEXT NOT NULL,
@@ -224,20 +227,25 @@ if (DATABASE_TYPE === 'sqlite') {
   // `);
 
   // ????????????????????????
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS reserved_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      form_id INTEGER NOT NULL,
-      session_id TEXT NOT NULL,
-      order_number INTEGER NOT NULL,
-      reserved_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      order_token TEXT,
-      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
-      UNIQUE(form_id, session_id)
-    )
-  `);
+  try {
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS reserved_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        session_id TEXT NOT NULL,
+        order_number INTEGER NOT NULL,
+        reserved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        order_token TEXT,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
+        UNIQUE(form_id, session_id)
+      )
+    `);
+  } catch (e: any) {
+    // Table may already exist
+  }
 
-  // LINE ???????????????????????????  await dbRun(`
+  // LINE 賣文記錄表格（已註解，使用 ALTER TABLE 遷移）
+  // await dbRun(`
   //   CREATE TABLE IF NOT EXISTS line_posts (
   //     id INTEGER PRIMARY KEY AUTOINCREMENT,
   //     form_id INTEGER NOT NULL,
@@ -959,7 +967,8 @@ export function generateSessionId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-// ??????????QLite??async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
+// ??????????QLite??
+async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
     await ensureDatabaseInitialized();
     
@@ -1058,7 +1067,8 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
   }
 }
 
-// LINE ?????????????QLite ?????async function recordLinePostSQLite(
+// LINE ?????????????QLite ??
+async function recordLinePostSQLite(
   formId: number,
   groupId: string,
   messageId: string | null,
@@ -1222,10 +1232,13 @@ async function markLineSaleFirstWarningSentSQLite(saleId: number): Promise<void>
   await dbRun('UPDATE line_posts SET first_warning_sent = 1 WHERE id = ?', [saleId]);
 }
 
-// ??????????????????????????let dbInitialized = false;
+// ??????????????????????????
+let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
   if (DATABASE_TYPE === 'supabase') {
-    // Supabase ???????????????????SQL Editor ?????    // ?????????dbModule ??????    if (!dbModule) {
+    // Supabase ???????????????????SQL Editor ??
+    // ?????????dbModule ??
+    if (!dbModule) {
       throw new Error('Supabase ??????????????????????????????');
     }
     return dbModule.ensureDatabaseInitialized();
