@@ -5,7 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
  * 每 3 分鐘自動掃描一次 Facebook 留言
  * 
  * 使用方式：
- * 1. 在 Vercel Cron Jobs 中設定：*/3 * * * * (每 3 分鐘)
+ * 1. 在 Vercel Cron Jobs 中設定：每 3 分鐘執行一次 (cron 表達式: 每 3 分鐘)
  * 2. 或在其他定時任務服務中呼叫此 API
  */
 
