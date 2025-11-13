@@ -23,7 +23,9 @@ function markCommentAsProcessed(formId: number, commentId: string): void {
   // 限制快取大小（最多保留 10000 筆）
   if (processedComments.size > 10000) {
     const firstKey = processedComments.values().next().value;
-    processedComments.delete(firstKey);
+    if (firstKey) {
+      processedComments.delete(firstKey);
+    }
   }
 }
 
