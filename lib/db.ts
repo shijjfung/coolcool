@@ -273,7 +273,7 @@ if (DATABASE_TYPE === 'sqlite') {
   } catch (e: any) {}
 }
 
-// ?????????
+// ===== 資料結構定義 =====
 export interface FormField {
   name: string;
   label: string;
