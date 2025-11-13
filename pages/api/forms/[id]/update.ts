@@ -19,7 +19,7 @@ export default async function handler(
     }
 
     const formId = Number(id);
-    const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl } = req.body;
+    const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl, facebookPostUrl, facebookPostAuthor, facebookKeywords, facebookAutoMonitor, facebookReplyMessage, linePostAuthor } = req.body;
 
     if (!name || !fields || !deadline) {
       return res.status(400).json({ error: '缺少必要欄位' });
@@ -53,7 +53,13 @@ export default async function handler(
       orderLimit ? parseInt(String(orderLimit)) : undefined,
       pickupTime,
       facebookCommentUrl,
-      lineCommentUrl
+      lineCommentUrl,
+      facebookPostUrl,
+      facebookPostAuthor,
+      facebookKeywords,
+      facebookAutoMonitor ? 1 : 0,
+      facebookReplyMessage,
+      linePostAuthor
     );
 
     const updatedForm = await getFormById(formId);

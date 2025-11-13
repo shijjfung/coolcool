@@ -113,6 +113,36 @@ async function initDatabaseSQLite() {
   } catch (e: any) {
     // 欄位已存在，忽略錯誤
   }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_url TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_author TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_keywords TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN line_post_author TEXT`);
+  } catch (e: any) {
+    // 欄位已存在，忽略錯誤
+  }
 
   // 訂單表
   await dbRun(`
@@ -177,6 +207,31 @@ async function initDatabaseSQLite() {
       UNIQUE(form_id, session_id)
     )
   `);
+
+  // LINE 賣文記錄表（記錄賣文與表單的對應關係）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS line_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id INTEGER NOT NULL,
+      group_id TEXT NOT NULL,
+      message_id TEXT,
+      sender_name TEXT,
+      post_content TEXT,
+      posted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+    )
+  `);
+  
+  // 建立索引
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_group_id ON line_posts(group_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_line_posts_posted_at ON line_posts(posted_at)`);
+  } catch (e: any) {}
   
   // 建立索引
   try {
@@ -216,6 +271,12 @@ export interface Form {
   form_token: string;
   facebook_comment_url?: string;
   line_comment_url?: string;
+  facebook_post_url?: string; // Facebook 貼文連結（用於自動監控）
+  facebook_post_author?: string; // Facebook 發文者姓名
+  facebook_keywords?: string; // Facebook 關鍵字列表（JSON 陣列）
+  facebook_auto_monitor?: number; // 是否啟用 Facebook 自動監控 (0/1)
+  facebook_reply_message?: string; // Facebook 回覆訊息
+  line_post_author?: string; // LINE 發文者姓名（用於識別要監控的賣文）
 }
 
 async function createFormSQLite(
@@ -226,11 +287,17 @@ async function createFormSQLite(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string
 ): Promise<number> {
   const formToken = generateToken();
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_keywords, facebook_auto_monitor, facebook_reply_message, line_post_author, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       name,
       JSON.stringify(fields),
@@ -240,6 +307,12 @@ async function createFormSQLite(
       pickupTime || null,
       facebookCommentUrl || null,
       lineCommentUrl || null,
+      facebookPostUrl || null,
+      facebookPostAuthor || null,
+      facebookKeywords || null,
+      facebookAutoMonitor || 0,
+      facebookReplyMessage || null,
+      linePostAuthor || null,
       formToken,
     ]
   );
@@ -266,6 +339,12 @@ async function getFormByTokenSQLite(token: string): Promise<Form | null> {
     form_token: row.form_token,
     facebook_comment_url: row.facebook_comment_url || undefined,
     line_comment_url: row.line_comment_url || undefined,
+    facebook_post_url: row.facebook_post_url || undefined,
+    facebook_post_author: row.facebook_post_author || undefined,
+    facebook_keywords: row.facebook_keywords || undefined,
+    facebook_auto_monitor: row.facebook_auto_monitor || 0,
+    facebook_reply_message: row.facebook_reply_message || undefined,
+    line_post_author: row.line_post_author || undefined,
   };
 }
 
@@ -291,6 +370,12 @@ async function getFormByIdSQLite(id: number, includeDeleted: boolean = false): P
     form_token: row.form_token,
     facebook_comment_url: row.facebook_comment_url || undefined,
     line_comment_url: row.line_comment_url || undefined,
+    facebook_post_url: row.facebook_post_url || undefined,
+    facebook_post_author: row.facebook_post_author || undefined,
+    facebook_keywords: row.facebook_keywords || undefined,
+    facebook_auto_monitor: row.facebook_auto_monitor || 0,
+    facebook_reply_message: row.facebook_reply_message || undefined,
+    line_post_author: row.line_post_author || undefined,
   };
 }
 
@@ -313,6 +398,11 @@ async function getAllFormsSQLite(includeDeleted: boolean = false): Promise<Form[
     form_token: row.form_token,
     facebook_comment_url: row.facebook_comment_url || undefined,
     line_comment_url: row.line_comment_url || undefined,
+    facebook_post_url: row.facebook_post_url || undefined,
+    facebook_post_author: row.facebook_post_author || undefined,
+    facebook_keywords: row.facebook_keywords || undefined,
+    facebook_auto_monitor: row.facebook_auto_monitor || 0,
+    facebook_reply_message: row.facebook_reply_message || undefined,
   }));
 }
 
@@ -352,10 +442,16 @@ async function updateFormSQLite(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string
 ): Promise<boolean> {
   await dbRun(
-    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ? WHERE id = ?',
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, line_post_author = ? WHERE id = ?',
     [
       name,
       JSON.stringify(fields),
@@ -365,6 +461,12 @@ async function updateFormSQLite(
       pickupTime || null,
       facebookCommentUrl || null,
       lineCommentUrl || null,
+      facebookPostUrl || null,
+      facebookPostAuthor || null,
+      facebookKeywords || null,
+      facebookAutoMonitor || 0,
+      facebookReplyMessage || null,
+      linePostAuthor || null,
       formId,
     ]
   );
@@ -905,6 +1007,77 @@ async function cleanupExpiredReservationsSQLite(): Promise<void> {
   }
 }
 
+// LINE 賣文記錄相關函數（SQLite 版本）
+async function recordLinePostSQLite(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null
+): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    // 確保 line_posts 表存在
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    await dbRun(
+      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
+      [formId, groupId, messageId, senderName, postContent]
+    );
+  } catch (error: any) {
+    console.error('記錄 LINE 賣文錯誤:', error);
+    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+  }
+}
+
+async function getRecentLinePostsSQLite(
+  groupId: string,
+  limit: number = 10
+): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
+  try {
+    await ensureDatabaseInitialized();
+    // 確保 line_posts 表存在
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    const rows = await dbAll(
+      'SELECT form_id, sender_name, post_content, created_at FROM line_posts WHERE group_id = ? ORDER BY created_at DESC LIMIT ?',
+      [groupId, limit]
+    ) as any[];
+
+    return rows.map((row: any) => ({
+      formId: row.form_id,
+      senderName: row.sender_name || '',
+      postContent: row.post_content || '',
+      postedAt: row.created_at,
+    }));
+  } catch (error: any) {
+    console.error('取得 LINE 賣文記錄錯誤:', error);
+    return [];
+  }
+}
+
 // 初始化資料庫（在第一次使用時調用）
 let dbInitialized = false;
 export async function ensureDatabaseInitialized() {
@@ -1024,6 +1197,86 @@ export const getReservedOrderNumber = DATABASE_TYPE === 'supabase'
 export const cleanupExpiredReservations = DATABASE_TYPE === 'supabase'
   ? dbModule.cleanupExpiredReservations
   : cleanupExpiredReservationsSQLite;
+
+// LINE 賣文記錄相關函數（SQLite）
+async function recordLinePostSQLite(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null
+): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    // 確保 line_posts 表存在
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    await dbRun(
+      'INSERT INTO line_posts (form_id, group_id, message_id, sender_name, post_content) VALUES (?, ?, ?, ?, ?)',
+      [formId, groupId, messageId || null, senderName, postContent || null]
+    );
+  } catch (error: any) {
+    console.error('記錄 LINE 賣文錯誤:', error);
+    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+  }
+}
+
+async function getRecentLinePostsSQLite(
+  groupId: string,
+  limit: number = 10
+): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
+  try {
+    await ensureDatabaseInitialized();
+    // 確保 line_posts 表存在
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS line_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT,
+        sender_name TEXT NOT NULL,
+        post_content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    
+    const rows = await dbAll(
+      'SELECT form_id, sender_name, post_content, created_at FROM line_posts WHERE group_id = ? ORDER BY created_at DESC LIMIT ?',
+      [groupId, limit]
+    ) as any[];
+    
+    return rows.map((row: any) => ({
+      formId: row.form_id,
+      senderName: row.sender_name || '',
+      postContent: row.post_content || '',
+      postedAt: row.created_at,
+    }));
+  } catch (error: any) {
+    console.error('取得 LINE 賣文記錄錯誤:', error);
+    return [];
+  }
+}
+
+// LINE 賣文記錄相關函數
+export const recordLinePost = DATABASE_TYPE === 'supabase'
+  ? dbModule.recordLinePost
+  : recordLinePostSQLite;
+
+export const getRecentLinePosts = DATABASE_TYPE === 'supabase'
+  ? dbModule.getRecentLinePosts
+  : getRecentLinePostsSQLite;
 
 // generateSessionId 已在上面定義並導出
 

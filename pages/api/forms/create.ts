@@ -45,7 +45,7 @@ export default async function handler(
     // 處理請求
     if (dbInitialized) {
       try {
-        const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl } = req.body;
+        const { name, fields, deadline, orderDeadline, orderLimit, pickupTime, facebookCommentUrl, lineCommentUrl, facebookPostUrl, facebookPostAuthor, facebookKeywords, facebookAutoMonitor, facebookReplyMessage, linePostAuthor } = req.body;
 
         if (!name || !fields || !deadline) {
           setJsonHeaders(res);
@@ -74,7 +74,13 @@ export default async function handler(
           orderLimit ? parseInt(String(orderLimit)) : undefined,
           pickupTime,
           facebookCommentUrl,
-          lineCommentUrl
+          lineCommentUrl,
+          facebookPostUrl,
+          facebookPostAuthor,
+          facebookKeywords,
+          facebookAutoMonitor ? 1 : 0,
+          facebookReplyMessage,
+          linePostAuthor
         );
         const form = await getFormById(formId);
 

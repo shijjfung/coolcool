@@ -26,7 +26,13 @@ export async function createForm(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string
 ): Promise<number> {
   const formToken = generateToken();
   const { data, error } = await getSupabase()
@@ -40,6 +46,12 @@ export async function createForm(
       pickup_time: pickupTime || null,
       facebook_comment_url: facebookCommentUrl || null,
       line_comment_url: lineCommentUrl || null,
+      facebook_post_url: facebookPostUrl || null,
+      facebook_post_author: facebookPostAuthor || null,
+      facebook_keywords: facebookKeywords || null,
+      facebook_auto_monitor: facebookAutoMonitor || 0,
+      facebook_reply_message: facebookReplyMessage || null,
+      line_post_author: linePostAuthor || null,
       form_token: formToken,
     })
     .select('id')
@@ -121,7 +133,13 @@ export async function updateForm(
   orderLimit?: number,
   pickupTime?: string,
   facebookCommentUrl?: string,
-  lineCommentUrl?: string
+  lineCommentUrl?: string,
+  facebookPostUrl?: string,
+  facebookPostAuthor?: string,
+  facebookKeywords?: string,
+  facebookAutoMonitor?: number,
+  facebookReplyMessage?: string,
+  linePostAuthor?: string
 ): Promise<boolean> {
   const { error } = await getSupabase()
     .from('forms')
@@ -134,6 +152,12 @@ export async function updateForm(
       pickup_time: pickupTime || null,
       facebook_comment_url: facebookCommentUrl || null,
       line_comment_url: lineCommentUrl || null,
+      facebook_post_url: facebookPostUrl || null,
+      facebook_post_author: facebookPostAuthor || null,
+      facebook_keywords: facebookKeywords || null,
+      facebook_auto_monitor: facebookAutoMonitor || 0,
+      facebook_reply_message: facebookReplyMessage || null,
+      line_post_author: linePostAuthor || null,
     })
     .eq('id', formId);
 
@@ -410,6 +434,12 @@ function mapFormFromDb(row: any): Form {
     form_token: row.form_token,
     facebook_comment_url: row.facebook_comment_url || undefined,
     line_comment_url: row.line_comment_url || undefined,
+    facebook_post_url: row.facebook_post_url || undefined,
+    facebook_post_author: row.facebook_post_author || undefined,
+    facebook_keywords: row.facebook_keywords || undefined,
+    facebook_auto_monitor: row.facebook_auto_monitor || 0,
+    facebook_reply_message: row.facebook_reply_message || undefined,
+    line_post_author: row.line_post_author || undefined,
   };
 }
 
@@ -429,6 +459,65 @@ function mapOrderFromDb(row: any): Order {
     updated_at: row.updated_at,
     order_token: row.order_token,
   };
+}
+
+// LINE 賣文記錄相關函數（Supabase）
+export async function recordLinePost(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string
+): Promise<boolean> {
+  try {
+    const { error } = await getSupabase()
+      .from('line_posts')
+      .insert({
+        form_id: formId,
+        group_id: groupId,
+        message_id: messageId || null,
+        sender_name: senderName,
+        post_content: postContent,
+      });
+
+    if (error) {
+      console.error('記錄 LINE 賣文錯誤:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('記錄 LINE 賣文錯誤:', error);
+    return false;
+  }
+}
+
+export async function getRecentLinePosts(
+  groupId: string,
+  limit: number = 10
+): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
+  try {
+    const { data, error } = await getSupabase()
+      .from('line_posts')
+      .select('form_id, sender_name, post_content, posted_at')
+      .eq('group_id', groupId)
+      .order('posted_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('取得 LINE 賣文記錄錯誤:', error);
+      return [];
+    }
+
+    return (data || []).map(row => ({
+      formId: row.form_id,
+      senderName: row.sender_name || '',
+      postContent: row.post_content || '',
+      postedAt: row.posted_at,
+    }));
+  } catch (error) {
+    console.error('取得 LINE 賣文記錄錯誤:', error);
+    return [];
+  }
 }
 
 // 生成唯一 token
@@ -562,6 +651,58 @@ export async function cleanupExpiredReservations(): Promise<void> {
       .is('order_token', null);
   } catch (error) {
     console.error('清理過期保留錯誤:', error);
+  }
+}
+
+// LINE 賣文記錄相關函數
+export async function recordLinePost(
+  formId: number,
+  groupId: string,
+  messageId: string | null,
+  senderName: string,
+  postContent: string | null
+): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from('line_posts')
+      .insert({
+        form_id: formId,
+        group_id: groupId,
+        message_id: messageId,
+        sender_name: senderName,
+        post_content: postContent,
+      });
+
+    if (error) throw error;
+  } catch (error: any) {
+    console.error('記錄 LINE 賣文錯誤:', error);
+    throw new Error(`記錄 LINE 賣文失敗：${error.message}`);
+  }
+}
+
+export async function getRecentLinePosts(
+  groupId: string,
+  limit: number = 10
+): Promise<Array<{ formId: number; senderName: string; postContent: string; postedAt: string }>> {
+  try {
+    const { data, error } = await getSupabase()
+      .from('line_posts')
+      .select('form_id, sender_name, post_content, created_at')
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      formId: row.form_id,
+      senderName: row.sender_name || '',
+      postContent: row.post_content || '',
+      postedAt: row.created_at,
+    }));
+  } catch (error: any) {
+    console.error('取得 LINE 賣文記錄錯誤:', error);
+    return [];
   }
 }
 

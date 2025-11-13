@@ -81,6 +81,19 @@ export default function AdminDashboard() {
   const [selectedGroupIdId, setSelectedGroupIdId] = useState<string>('');
   const [newGroupIdName, setNewGroupIdName] = useState('');
   
+  // Facebook Token 狀態
+  const [facebookTokenStatus, setFacebookTokenStatus] = useState<{
+    configured: boolean;
+    valid?: boolean;
+    expires_at?: string | null;
+    days_remaining?: number | null;
+    message?: string;
+  } | null>(null);
+  const [loadingTokenStatus, setLoadingTokenStatus] = useState(false);
+  const [refreshingToken, setRefreshingToken] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [autoDeployEnabled, setAutoDeployEnabled] = useState(false);
+  
   // 從資料庫載入群組 ID 列表
   const loadGroupIds = async () => {
     try {
@@ -479,10 +492,108 @@ export default function AdminDashboard() {
     fetchForms();
     checkAutoReports();
     loadGroupIds(); // 載入群組 ID 列表
-    // 每 5 分鐘檢查一次
-    const interval = setInterval(checkAutoReports, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    loadFacebookTokenStatus(); // 載入 Facebook Token 狀態
+    
+    // 從 localStorage 載入自動刷新設定
+    if (typeof window !== 'undefined') {
+      const autoRefresh = localStorage.getItem('facebook-auto-refresh');
+      if (autoRefresh === 'true') {
+        setAutoRefreshEnabled(true);
+      }
+      const autoDeploy = localStorage.getItem('facebook-auto-deploy');
+      if (autoDeploy === 'true') {
+        setAutoDeployEnabled(true);
+      }
+    }
+    
+    // 每 5 分鐘檢查一次報表
+    const reportInterval = setInterval(checkAutoReports, 5 * 60 * 1000);
+    
+    // 每 1 小時檢查一次 Token 狀態（如果啟用自動刷新）
+    let tokenInterval: NodeJS.Timeout | null = null;
+    if (autoRefreshEnabled) {
+      tokenInterval = setInterval(() => {
+        loadFacebookTokenStatus();
+      }, 60 * 60 * 1000);
+    }
+    
+    return () => {
+      clearInterval(reportInterval);
+      if (tokenInterval) {
+        clearInterval(tokenInterval);
+      }
+    };
   }, [authChecked]);
+
+  // 載入 Facebook Token 狀態
+  const loadFacebookTokenStatus = async () => {
+    setLoadingTokenStatus(true);
+    try {
+      const res = await fetch('/api/facebook/token-status');
+      const data = await res.json();
+      setFacebookTokenStatus(data);
+      
+      // 如果啟用自動刷新，且 Token 剩餘天數少於 10 天，自動刷新
+      const shouldAutoRefresh = autoRefreshEnabled && data.valid && data.days_remaining !== null && data.days_remaining < 10;
+      if (shouldAutoRefresh) {
+        // 延遲執行，避免阻塞 UI
+        setTimeout(() => {
+          handleRefreshToken(true, autoDeployEnabled);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('載入 Facebook Token 狀態錯誤:', error);
+    } finally {
+      setLoadingTokenStatus(false);
+    }
+  };
+
+  // 刷新 Facebook Token
+  const handleRefreshToken = async (autoRefresh = false, autoDeploy = false) => {
+    if (!autoRefresh && !confirm('確定要刷新 Facebook Token 嗎？這會延長 Token 有效期 60 天。')) {
+      return;
+    }
+
+    setRefreshingToken(true);
+    try {
+      // 如果啟用自動部署，使用自動刷新部署 API
+      const apiEndpoint = autoDeploy ? '/api/facebook/auto-refresh-deploy' : '/api/facebook/refresh-token';
+      const res = await fetch(apiEndpoint, {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        const message = autoDeploy
+          ? (autoRefresh ? '✅ Token 已自動刷新並部署（剩餘天數少於 10 天）' : '✅ Token 已刷新，環境變數已更新，部署已觸發！')
+          : (autoRefresh ? '✅ Token 已自動刷新（剩餘天數少於 10 天）' : '✅ Token 已成功刷新！');
+        
+        showToast(message);
+        // 重新載入狀態
+        await loadFacebookTokenStatus();
+        
+        // 提醒用戶更新環境變數（如果不是自動部署）
+        if (!autoRefresh && !autoDeploy) {
+          alert(`Token 已成功刷新！\n\n新的 Token：${data.access_token}\n\n⚠️ 重要：請將新的 Token 更新到環境變數 FACEBOOK_ACCESS_TOKEN\n\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
+        } else if (!autoRefresh && autoDeploy) {
+          alert(`Token 已成功刷新並部署！\n\n✅ Vercel 環境變數已自動更新\n✅ 重新部署已觸發\n\n部署 ID：${data.deployment_id || 'N/A'}\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
+        }
+      } else {
+        showToast(`❌ 刷新失敗：${data.error || '未知錯誤'}`);
+        if (!autoRefresh) {
+          alert(`刷新 Token 失敗：${data.error || '未知錯誤'}\n\n提示：${data.hint || ''}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('刷新 Facebook Token 錯誤:', error);
+      showToast('❌ 刷新時發生錯誤');
+      if (!autoRefresh) {
+        alert('刷新時發生錯誤：' + error.message);
+      }
+    } finally {
+      setRefreshingToken(false);
+    }
+  };
 
   const fetchForms = async () => {
     try {
@@ -844,6 +955,126 @@ export default function AdminDashboard() {
         </div>
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
+        {/* Facebook Token 狀態卡片 */}
+        {facebookTokenStatus && (
+          <div className="mb-4 p-4 bg-white rounded-lg shadow border-l-4 border-blue-500">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  🔑 Facebook Token 狀態
+                </h3>
+                {loadingTokenStatus ? (
+                  <p className="text-sm text-gray-600">載入中...</p>
+                ) : (
+                  <div className="space-y-1">
+                    {!facebookTokenStatus.configured ? (
+                      <p className="text-sm text-orange-600">⚠️ 未設定 Facebook Access Token</p>
+                    ) : !facebookTokenStatus.valid ? (
+                      <p className="text-sm text-red-600">❌ Token 無效或已過期</p>
+                    ) : (
+                      <>
+                        <p className="text-sm text-gray-700">
+                          {facebookTokenStatus.days_remaining !== null ? (
+                            <>
+                              {facebookTokenStatus.days_remaining > 10 ? (
+                                <span className="text-green-600">✅ Token 有效，剩餘 <strong>{facebookTokenStatus.days_remaining}</strong> 天</span>
+                              ) : facebookTokenStatus.days_remaining > 0 ? (
+                                <span className="text-orange-600">⚠️ Token 即將到期，剩餘 <strong>{facebookTokenStatus.days_remaining}</strong> 天</span>
+                              ) : (
+                                <span className="text-red-600">❌ Token 已過期</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-gray-600">✅ Token 有效</span>
+                          )}
+                        </p>
+                        {facebookTokenStatus.expires_at && (
+                          <p className="text-xs text-gray-500">
+                            到期時間：{new Date(facebookTokenStatus.expires_at).toLocaleString('zh-TW')}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {facebookTokenStatus.configured && facebookTokenStatus.valid && (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoRefreshEnabled}
+                          onChange={(e) => {
+                            setAutoRefreshEnabled(e.target.checked);
+                            if (e.target.checked) {
+                              localStorage.setItem('facebook-auto-refresh', 'true');
+                              if (facebookTokenStatus.days_remaining !== null && facebookTokenStatus.days_remaining < 10) {
+                                handleRefreshToken(true, autoDeployEnabled);
+                              }
+                            } else {
+                              localStorage.removeItem('facebook-auto-refresh');
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <span>自動刷新</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoDeployEnabled}
+                          onChange={(e) => {
+                            setAutoDeployEnabled(e.target.checked);
+                            if (e.target.checked) {
+                              localStorage.setItem('facebook-auto-deploy', 'true');
+                            } else {
+                              localStorage.removeItem('facebook-auto-deploy');
+                            }
+                          }}
+                          disabled={!autoRefreshEnabled}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <span className={!autoRefreshEnabled ? 'text-gray-400' : ''}>自動部署</span>
+                      </label>
+                    </div>
+                    <button
+                      onClick={() => handleRefreshToken(false, autoDeployEnabled)}
+                      disabled={refreshingToken}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        refreshingToken
+                          ? 'bg-gray-400 text-white cursor-not-allowed'
+                          : facebookTokenStatus.days_remaining !== null && facebookTokenStatus.days_remaining < 10
+                          ? 'bg-orange-600 text-white hover:bg-orange-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {refreshingToken ? '刷新中...' : '🔄 刷新 Token'}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={loadFacebookTokenStatus}
+                  disabled={loadingTokenStatus}
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {loadingTokenStatus ? '載入中...' : '🔄'}
+                </button>
+              </div>
+            </div>
+            {autoRefreshEnabled && (
+              <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                💡 自動刷新已啟用{autoDeployEnabled ? '（含自動部署）' : ''}：當 Token 剩餘天數少於 10 天時，系統會自動刷新{autoDeployEnabled ? '並部署' : ''}
+                {autoDeployEnabled && (
+                  <div className="mt-1 text-orange-600">
+                    ⚠️ 需要設定 VERCEL_TOKEN 和 VERCEL_PROJECT_ID 環境變數
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4">表單管理</h1>
           <div className="w-full flex justify-center">

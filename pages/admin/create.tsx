@@ -39,6 +39,17 @@ export default function CreateForm() {
   const [pickupTimeMode, setPickupTimeMode] = useState<'single' | 'range'>('single'); // 單一時間或時間範圍
   const [facebookCommentUrl, setFacebookCommentUrl] = useState('');
   const [lineCommentUrl, setLineCommentUrl] = useState('');
+  // Facebook 自動監控設定
+  const [facebookPostUrl, setFacebookPostUrl] = useState('');
+  const [facebookPostAuthor, setFacebookPostAuthor] = useState('');
+  const [facebookKeywords, setFacebookKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
+  const [facebookAutoMonitor, setFacebookAutoMonitor] = useState(false);
+  const [facebookReplyMessage, setFacebookReplyMessage] = useState('已登記');
+  const [newKeyword, setNewKeyword] = useState('');
+  // LINE 自動監控設定
+  const [linePostAuthor, setLinePostAuthor] = useState('');
+  const [lineKeywords, setLineKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
+  const [newLineKeyword, setNewLineKeyword] = useState('');
   // 表單頁面會自動顯示「姓名」和「電話」欄位，所以這裡不需要預設欄位
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
@@ -95,6 +106,15 @@ export default function CreateForm() {
         setFields(form.fields || []);
         setFacebookCommentUrl(form.facebook_comment_url || '');
         setLineCommentUrl(form.line_comment_url || '');
+        // Facebook 自動監控設定
+        setFacebookPostUrl(form.facebook_post_url || '');
+        setFacebookPostAuthor(form.facebook_post_author || '');
+        setFacebookKeywords(form.facebook_keywords ? JSON.parse(form.facebook_keywords) : ['+1', '+2', '+3', '加一', '加1']);
+        setFacebookAutoMonitor(form.facebook_auto_monitor === 1);
+        setFacebookReplyMessage(form.facebook_reply_message || '已登記');
+        // LINE 自動監控設定
+        setLinePostAuthor(form.line_post_author || '');
+        setLineKeywords(['+1', '+2', '+3', '加一', '加1']); // LINE 關鍵字暫時使用預設值
       } else {
         alert('載入表單失敗');
         router.push('/admin');
@@ -227,6 +247,12 @@ export default function CreateForm() {
             })(), // 取貨時間（可選）
             facebookCommentUrl: facebookCommentUrl.trim() || undefined,
             lineCommentUrl: lineCommentUrl.trim() || undefined,
+            facebookPostUrl: facebookPostUrl.trim() || undefined,
+            facebookPostAuthor: facebookPostAuthor.trim() || undefined,
+            facebookKeywords: JSON.stringify(facebookKeywords),
+            facebookAutoMonitor: facebookAutoMonitor,
+            facebookReplyMessage: facebookReplyMessage.trim() || undefined,
+            linePostAuthor: linePostAuthor.trim() || undefined,
           }),
         });
 
@@ -269,6 +295,12 @@ export default function CreateForm() {
             })(), // 取貨時間（可選）
             facebookCommentUrl: facebookCommentUrl.trim() || undefined,
             lineCommentUrl: lineCommentUrl.trim() || undefined,
+            facebookPostUrl: facebookPostUrl.trim() || undefined,
+            facebookPostAuthor: facebookPostAuthor.trim() || undefined,
+            facebookKeywords: JSON.stringify(facebookKeywords),
+            facebookAutoMonitor: facebookAutoMonitor,
+            facebookReplyMessage: facebookReplyMessage.trim() || undefined,
+            linePostAuthor: linePostAuthor.trim() || undefined,
           }),
         });
 
@@ -620,6 +652,250 @@ export default function CreateForm() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   💡 客戶下單完成後會看到「LINE 留言 +1」按鈕，導向這個群組。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Facebook 自動監控設定 */}
+          <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <div className="flex items-center gap-3 mb-4">
+              <input
+                type="checkbox"
+                id="facebookAutoMonitor"
+                checked={facebookAutoMonitor}
+                onChange={(e) => setFacebookAutoMonitor(e.target.checked)}
+                className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+              />
+              <label htmlFor="facebookAutoMonitor" className="text-base font-bold text-gray-700 cursor-pointer">
+                🤖 Facebook 自動監控留言
+              </label>
+            </div>
+            {facebookAutoMonitor && (
+              <div className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Facebook 貼文連結 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={facebookPostUrl}
+                    onChange={(e) => setFacebookPostUrl(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    placeholder="https://www.facebook.com/groups/xxx/posts/xxx"
+                    autoComplete="off"
+                    required={facebookAutoMonitor}
+                  />
+                  <div className="text-xs text-gray-600 mt-2 space-y-1">
+                    <p className="font-medium">📋 如何取得貼文連結：</p>
+                    <ol className="list-decimal list-inside ml-2 space-y-1">
+                      <li>前往 Facebook 社團</li>
+                      <li>找到您要監控的貼文</li>
+                      <li>點擊貼文右上角的「⋯」或「時間」</li>
+                      <li>選擇「複製連結」或「複製貼文連結」</li>
+                      <li>貼上到上方欄位</li>
+                    </ol>
+                    <p className="text-purple-600 mt-2">
+                      ✅ 系統會自動從連結中識別：<br/>
+                      • 社團 ID（例如：123456789）<br/>
+                      • 貼文 ID（例如：987654321）<br/>
+                      • 然後使用完整格式（123456789_987654321）來取得留言
+                    </p>
+                    <p className="text-gray-500 mt-1">
+                      💡 系統會每 3 分鐘自動掃描此貼文的留言
+                    </p>
+                    <p className="text-orange-600 mt-1">
+                      ⚠️ 重要：請確保 Facebook Access Token 有該社團的存取權限
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    發文者姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookPostAuthor}
+                    onChange={(e) => setFacebookPostAuthor(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    placeholder="例如：愛買"
+                    autoComplete="off"
+                    required={facebookAutoMonitor}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    關鍵字列表 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {facebookKeywords.map((keyword, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                      >
+                        {keyword}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFacebookKeywords(facebookKeywords.filter((_, i) => i !== index));
+                          }}
+                          className="text-purple-600 hover:text-purple-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && newKeyword.trim()) {
+                          e.preventDefault();
+                          if (!facebookKeywords.includes(newKeyword.trim())) {
+                            setFacebookKeywords([...facebookKeywords, newKeyword.trim()]);
+                            setNewKeyword('');
+                          }
+                        }
+                      }}
+                      className="flex-1 px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                      placeholder="輸入關鍵字後按 Enter 新增（例如：烤雞半隻+1）"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newKeyword.trim() && !facebookKeywords.includes(newKeyword.trim())) {
+                          setFacebookKeywords([...facebookKeywords, newKeyword.trim()]);
+                          setNewKeyword('');
+                        }
+                      }}
+                      className="px-4 py-2.5 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                    >
+                      新增
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 系統會自動匹配包含這些關鍵字的留言（例如：烤雞半隻+1、半隻+1、半隻加一、+1半隻）
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    自動回覆訊息
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookReplyMessage}
+                    onChange={(e) => setFacebookReplyMessage(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    placeholder="已登記"
+                    autoComplete="off"
+                  />
+                  <div className="text-xs text-gray-600 mt-2 space-y-1">
+                    <p className="font-medium">💬 自動回覆說明：</p>
+                    <ul className="list-disc list-inside ml-2 space-y-1">
+                      <li>當系統抓到符合關鍵字的留言時，會自動在該留言下方回覆此訊息</li>
+                      <li>回覆使用的帳號是 <code className="bg-gray-100 px-1 rounded">FACEBOOK_ACCESS_TOKEN</code> 對應的 Facebook 帳號</li>
+                      <li>如果留空，預設回覆「已登記」</li>
+                    </ul>
+                    <p className="text-purple-600 mt-2">
+                      ✅ 範例：客戶留言「+1」→ 系統自動回覆「已登記」
+                    </p>
+                    <p className="text-orange-600 mt-1">
+                      ⚠️ 重要：請確保 FACEBOOK_ACCESS_TOKEN 對應的帳號有該社團的回覆權限
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* LINE 自動監控設定 */}
+          <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+            <label className="block text-base font-bold text-gray-700 mb-4">
+              💬 LINE 自動監控設定
+            </label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  LINE 發文者姓名 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={linePostAuthor}
+                  onChange={(e) => setLinePostAuthor(e.target.value)}
+                  className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                  placeholder="例如：愛買（系統會根據此姓名識別要監控的賣文）"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 當 LINE 群組中有此發文者的賣文時，系統會自動監控該賣文下方的留言
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  關鍵字列表（用於匹配留言）
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {lineKeywords.map((keyword, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                    >
+                      {keyword}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLineKeywords(lineKeywords.filter((_, i) => i !== index));
+                        }}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newLineKeyword}
+                    onChange={(e) => setNewLineKeyword(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && newLineKeyword.trim()) {
+                        e.preventDefault();
+                        if (!lineKeywords.includes(newLineKeyword.trim())) {
+                          setLineKeywords([...lineKeywords, newLineKeyword.trim()]);
+                          setNewLineKeyword('');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                    placeholder="輸入關鍵字後按 Enter 新增（例如：水果1斤+1、5斤+1）"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newLineKeyword.trim() && !lineKeywords.includes(newLineKeyword.trim())) {
+                        setLineKeywords([...lineKeywords, newLineKeyword.trim()]);
+                        setNewLineKeyword('');
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                  >
+                    新增
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 系統會自動匹配包含這些關鍵字的留言（例如：+1、+2、水果1斤+1、5斤+1、烤雞半隻+1）
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  ⚠️ 重要：系統會根據「LINE 發文者姓名」和「關鍵字」來精準匹配表單，避免入錯單
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  💡 提示：如果群組內同時有多個賣文，系統會根據關鍵字匹配度選擇最符合的表單
                 </p>
               </div>
             </div>
