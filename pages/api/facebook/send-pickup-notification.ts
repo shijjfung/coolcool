@@ -3,6 +3,7 @@ import {
   ensureDatabaseInitialized,
   getOrdersByIds,
   markFacebookPickupNotified,
+  type Order,
 } from '@/lib/db';
 
 interface SuccessResult {
@@ -55,7 +56,7 @@ export default async function handler(
     }
 
     const targets = orders.filter(
-      (order) =>
+      (order: Order) =>
         (order.order_source || '').toLowerCase() === 'facebook' &&
         order.facebook_comment_id
     );

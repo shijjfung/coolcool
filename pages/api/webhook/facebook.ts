@@ -138,7 +138,7 @@ export default async function handler(
           undefined,
           'facebook',
           form,
-          comment.id
+          comment.comment_id
         );
 
         console.log('Facebook 訂單已建立:', {

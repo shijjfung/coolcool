@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-import { getFormByToken, getAllForms, createOrder, ensureDatabaseInitialized, FormField, recordLinePost, getLatestLineSale, markLineSaleEndAnnounced, markLineSaleFirstWarningSent } from '@/lib/db';
+import { getFormByToken, getAllForms, createOrder, ensureDatabaseInitialized, FormField, recordLinePost, getLatestLineSale, markLineSaleEndAnnounced, markLineSaleFirstWarningSent, type Form } from '@/lib/db';
 
 /**
  * LINE Webhook API
@@ -176,7 +176,7 @@ export default async function handler(
       if (!messageText) continue;
       const messageLower = messageText.toLowerCase();
       const groupId = event.source.groupId || '';
-      const quoteToken = event.message.quoteToken;
+      const quoteToken = (event.message as any).quoteToken;
       if (!groupId) {
         continue;
       }
@@ -252,7 +252,7 @@ export default async function handler(
       // 🔥 優先處理：檢測是否為發文者的賣文
       // 檢查發送者是否為任何表單設定的 LINE 發文者
       const formsWithMatchingAuthor = allForms.filter(
-        form => form.line_post_author && 
+        (form: Form) => form.line_post_author && 
                 form.line_post_author.trim() !== '' &&
                 senderName &&
                 (senderName.includes(form.line_post_author.trim()) || 
@@ -260,7 +260,7 @@ export default async function handler(
       );
 
       if (formsWithMatchingAuthor.length > 0) {
-        const identifierMatchedForm = formsWithMatchingAuthor.find(form => {
+        const identifierMatchedForm = formsWithMatchingAuthor.find((form: Form) => {
           const deadline = form.order_deadline
             ? new Date(form.order_deadline)
             : new Date(form.deadline);
@@ -393,7 +393,7 @@ export default async function handler(
       }
 
       if (!targetForm) {
-        const identifierMatchedForm = allForms.find(form => {
+        const identifierMatchedForm = allForms.find((form: Form) => {
           if (form.deleted && form.deleted !== 0) return false;
           const identifiers = extractLineIdentifiers(form);
           if (identifiers.length === 0) return false;
@@ -413,14 +413,14 @@ export default async function handler(
       if (!targetForm) {
         // 取得所有有設定 LINE 發文者姓名的表單
         const formsWithLineAuthor = allForms.filter(
-          form => form.line_post_author && 
+          (form: Form) => form.line_post_author && 
                   form.line_post_author.trim() !== '' &&
                   (form.deleted === 0 || !form.deleted)
         );
 
         // 檢查結單時間（使用 order_deadline 或 deadline）
         const now = new Date();
-        const activeForms = formsWithLineAuthor.filter(form => {
+        const activeForms = formsWithLineAuthor.filter((form: Form) => {
           const deadline = form.order_deadline ? new Date(form.order_deadline) : new Date(form.deadline);
           return now <= deadline;
         });
@@ -490,6 +490,45 @@ export default async function handler(
       }
 
       const saleRecord = await getLatestLineSale(groupId, targetForm.id);
+
+      // 移除表單代碼部分（如果有的話）
+      const cleanMessage = messageText.replace(/@\w+\s*/, '').trim();
+
+      // 取得表單設定的關鍵字列表
+      const formKeywords = targetForm.facebook_keywords 
+        ? JSON.parse(targetForm.facebook_keywords) as string[]
+        : ['+1', '+2', '+3', '加一', '加1'];
+
+      // 改進的關鍵字匹配：支援靈活的模式
+      // 匹配：+1、+2、+3、加一、加1、水果1斤+1、5斤+1、烤雞半隻+1 等
+      const matchesFormKeywords = formKeywords.some((keyword: string) => {
+        const lowerKeyword = keyword.toLowerCase();
+        const lowerMessage = cleanMessage.toLowerCase();
+        
+        // 精確匹配
+        if (lowerMessage.includes(lowerKeyword)) {
+          return true;
+        }
+        
+        // 支援變體：+1 和 加一、加1
+        if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
+          return true;
+        }
+        if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
+          return true;
+        }
+        
+        // 支援模式：數字+數字（例如：1斤+1、5斤+1）
+        const keywordPattern = lowerKeyword.replace(/\+/g, '\\+').replace(/\d+/g, '\\d+');
+        const regex = new RegExp(keywordPattern);
+        if (regex.test(lowerMessage)) {
+          return true;
+        }
+        
+        return false;
+      });
+
+      const hasPlusOnePattern = matchesFormKeywords;
 
       // 檢查截止時間（使用記錄中的 deadline 或表單設定）
       const deadline = saleRecord?.deadline
@@ -621,8 +660,8 @@ export default async function handler(
             const orderToken = await createOrder(
               targetForm.id,
               orderData,
-              parsed.customerName,
-              parsed.customerPhone,
+              parsed?.customerName || senderName,
+              parsed?.customerPhone || '',
               undefined,
               undefined,
               'line',

@@ -1297,6 +1297,10 @@ export const markFacebookPickupNotified = DATABASE_TYPE === 'supabase'
   ? dbModule.markFacebookPickupNotified
   : markFacebookPickupNotifiedSQLite;
 
+export const recordLinePost = DATABASE_TYPE === 'supabase'
+  ? dbModule.recordLinePost
+  : recordLinePostSQLite;
+
 export const getLatestLineSale = DATABASE_TYPE === 'supabase'
   ? dbModule.getLatestLineSale
   : getLatestLineSaleSQLite;
