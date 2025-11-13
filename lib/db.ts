@@ -36,7 +36,7 @@ if (DATABASE_TYPE === 'sqlite') {
     throw new Error('無法取得 SQLite 資料庫檔案路徑');
   }
 
-  // ???????????????  if (!fs.existsSync(dbPath)) {
+  if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');
   }
 
