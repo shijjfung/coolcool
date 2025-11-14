@@ -333,28 +333,33 @@ export default async function handler(
 
       // 如果沒有表單代碼，根據 LINE 發文者姓名和關鍵字匹配表單
       if (!targetForm) {
-        // 取得所有有設定 LINE 發文者姓名的表單
-        const formsWithLineAuthor = allForms.filter(
-          (form: Form) => form.line_post_author && 
-                  form.line_post_author.trim() !== '' &&
-                  (form.deleted === 0 || !form.deleted)
-        );
-
-        // 檢查結單時間（使用 order_deadline 或 deadline）
+        // 取得所有啟用的表單（不一定要有 LINE 發文者姓名）
         const now = new Date();
-        const activeForms = formsWithLineAuthor.filter((form: Form) => {
+        const activeForms = allForms.filter((form: Form) => {
+          if (form.deleted && form.deleted !== 0) return false;
           const deadline = form.order_deadline ? new Date(form.order_deadline) : new Date(form.deadline);
           return now <= deadline;
         });
 
+        console.log(`[LINE] 開始匹配表單，訊息：${messageText}，發送者：${senderName}，群組：${groupId}`);
+        console.log(`[LINE] 啟用的表單數量：${activeForms.length}`);
+
         // 根據關鍵字匹配表單（支援靈活的模式）
-        const matchedForms: Array<{ form: any; score: number }> = [];
+        const matchedForms: Array<{ form: any; score: number; reason: string }> = [];
         
         for (const form of activeForms) {
           const keywords = form.facebook_keywords ? JSON.parse(form.facebook_keywords) : [];
           
+          if (keywords.length === 0) {
+            console.log(`[LINE] 表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過`);
+            continue;
+          }
+
+          console.log(`[LINE] 檢查表單 ${form.id} (${form.name})，關鍵字：${JSON.stringify(keywords)}`);
+          
           // 檢查訊息是否符合關鍵字（使用改進的匹配邏輯）
           let matchScore = 0;
+          let matchReason = '';
           for (const keyword of keywords) {
             const lowerKeyword = keyword.toLowerCase();
             const lowerMessage = messageLower;
@@ -362,13 +367,17 @@ export default async function handler(
             // 精確匹配（分數最高）
             if (lowerMessage.includes(lowerKeyword)) {
               matchScore += 10;
+              matchReason = `精確匹配關鍵字：${keyword}`;
+              break;
             }
             // 變體匹配
             else if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
               matchScore += 8;
+              matchReason = `變體匹配：${keyword} -> ${lowerKeyword.replace('+', '加')}`;
             }
             else if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
               matchScore += 8;
+              matchReason = `變體匹配：${keyword} -> ${lowerKeyword.replace('加', '+')}`;
             }
             // 模式匹配（例如：1斤+1、5斤+1）
             else {
@@ -377,6 +386,7 @@ export default async function handler(
                 const regex = new RegExp(keywordPattern);
                 if (regex.test(lowerMessage)) {
                   matchScore += 6;
+                  matchReason = `模式匹配：${keywordPattern}`;
                 }
               } catch (e) {
                 // 忽略正則表達式錯誤
@@ -385,7 +395,10 @@ export default async function handler(
           }
 
           if (matchScore > 0) {
-            matchedForms.push({ form, score: matchScore });
+            console.log(`[LINE] ✅ 表單 ${form.id} (${form.name}) 匹配成功，分數：${matchScore}，原因：${matchReason}`);
+            matchedForms.push({ form, score: matchScore, reason: matchReason });
+          } else {
+            console.log(`[LINE] ❌ 表單 ${form.id} (${form.name}) 關鍵字不匹配`);
           }
         }
 
@@ -393,17 +406,23 @@ export default async function handler(
         if (matchedForms.length > 0) {
           matchedForms.sort((a, b) => b.score - a.score);
           targetForm = matchedForms[0].form;
+          console.log(`[LINE] 🎯 選擇表單：${targetForm.id} (${targetForm.name})，分數：${matchedForms[0].score}`);
+        } else {
+          console.log(`[LINE] ⚠️ 沒有表單匹配關鍵字`);
         }
 
         // 如果還是沒有匹配到，使用預設表單
         if (!targetForm && formToken) {
           targetForm = await getFormByToken(formToken);
+          if (targetForm) {
+            console.log(`[LINE] 📌 使用預設表單：${targetForm.id} (${targetForm.name})`);
+          }
         }
       }
 
       if (!targetForm) {
         // 找不到表單時靜默，不回覆任何訊息
-        console.log('找不到對應的表單，靜默處理:', { messageText, senderName, groupId });
+        console.log('[LINE] ❌ 找不到對應的表單，靜默處理:', { messageText, senderName, groupId, allFormsCount: allForms.length });
         continue;
       }
 
@@ -454,9 +473,25 @@ export default async function handler(
 
       // 🔥 重要：如果訊息不符合關鍵字，靜默處理，不回覆
       if (!hasPlusOnePattern) {
-        console.log('訊息不符合關鍵字，靜默處理:', { messageText, formKeywords, senderName });
+        console.log('[LINE] ❌ 訊息不符合關鍵字，靜默處理:', { 
+          messageText, 
+          cleanMessage,
+          formKeywords, 
+          senderName,
+          formId: targetForm.id,
+          formName: targetForm.name
+        });
         continue;
       }
+
+      console.log('[LINE] ✅ 訊息符合關鍵字，開始處理訂單:', { 
+        messageText, 
+        cleanMessage,
+        formKeywords, 
+        senderName,
+        formId: targetForm.id,
+        formName: targetForm.name
+      });
 
       // 檢查截止時間（使用記錄中的 deadline 或表單設定）
       const deadline = saleRecord?.deadline
@@ -596,6 +631,13 @@ export default async function handler(
       }
 
       // 建立訂單
+      console.log('[LINE] 📝 開始建立訂單:', { 
+        formId: targetForm.id, 
+        orderData, 
+        customerName: parsed.customerName,
+        customerPhone: parsed.customerPhone 
+      });
+      
       const orderToken = await createOrder(
         targetForm.id,
         orderData,
@@ -608,6 +650,8 @@ export default async function handler(
         undefined
       );
 
+      console.log('[LINE] ✅ 訂單建立成功:', { orderToken, formId: targetForm.id });
+
       // 回覆確認訊息（簡化版本，符合用戶需求）
       const itemsText = mergedItems
         .map((item: any) => `${item.productName} x${item.quantity}`)
@@ -618,12 +662,16 @@ export default async function handler(
         ? '✅ 已登記'
         : `✅ 訂單已建立！\n\n商品：${itemsText}\n訂單代碼：${orderToken}\n\n您可以使用此代碼修改訂單。`;
       
+      console.log('[LINE] 💬 準備回覆訊息:', { replyText, hasPlusOnePattern });
+      
       await replyMessage(
         event.replyToken!,
         replyText,
         channelAccessToken,
         quoteToken
       );
+      
+      console.log('[LINE] ✅ 已回覆訊息給客戶');
     }
 
     return res.status(200).json({ message: 'OK' });

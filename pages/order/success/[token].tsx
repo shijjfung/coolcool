@@ -319,28 +319,37 @@ export default function OrderSuccess() {
   const handleLeavePage = () => {
     if (typeof window === 'undefined') return;
 
-    const attemptClose = () => {
-      window.open('', '_self');
-      window.close();
-    };
-
-    if (window.history.length > 1) {
-      window.history.go(-1);
-      setTimeout(() => {
-        attemptClose();
-      }, 200);
-    } else {
-      attemptClose();
-    }
-
-    setTimeout(() => {
-      if (!document.hidden) {
-        window.location.href = 'about:blank';
-        setTimeout(() => {
-          router.replace('/');
-        }, 300);
+    try {
+      // 檢查視窗是否由腳本打開（可以關閉）
+      const isOpenedByScript = window.opener !== null || window.history.length <= 1;
+      
+      if (isOpenedByScript) {
+        // 嘗試關閉視窗（僅在由腳本打開時有效）
+        try {
+          window.close();
+          // 如果關閉失敗，則導航到首頁
+          setTimeout(() => {
+            if (!document.hidden) {
+              router.push('/');
+            }
+          }, 100);
+        } catch (e) {
+          // 關閉失敗，導航到首頁
+          router.push('/');
+        }
+      } else {
+        // 正常瀏覽情況，返回上一頁或導航到首頁
+        if (window.history.length > 1) {
+          router.back();
+        } else {
+          router.push('/');
+        }
       }
-    }, 400);
+    } catch (error) {
+      // 發生錯誤時，簡單地導航到首頁
+      console.error('離開頁面時發生錯誤:', error);
+      router.push('/');
+    }
   };
 
   if (loading) {
