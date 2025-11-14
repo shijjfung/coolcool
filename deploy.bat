@@ -67,4 +67,25 @@ echo.
 echo 📦 Vercel 會自動偵測 main 分支的變更並開始部署
 echo ⏳ 通常 1～3 分鐘即可完成
 echo.
+
+:: 檢查 Vercel 部署狀態
+echo [步驟 5] 檢查 Vercel 部署狀態...
+echo.
+echo 📋 如果 Vercel 沒有自動部署，請檢查：
+echo.
+echo 1. GitHub Webhook 設定：
+echo    - 前往: https://github.com/shijjfung/coolcool/settings/hooks
+echo    - 確認是否有 Vercel 的 webhook（URL 包含 vercel.com）
+echo    - 確認狀態為 Active（綠色勾號）
+echo.
+echo 2. Vercel 專案設定：
+echo    - 前往: https://vercel.com/dashboard
+echo    - 選擇專案 ^> Settings ^> Git
+echo    - 確認已連接到正確的 GitHub 倉庫
+echo    - 確認 Production Branch 設定為 "main"
+echo.
+echo 3. 手動觸發部署：
+echo    - 在 Vercel Dashboard 點擊 "Redeploy" 按鈕
+echo    - 或使用 Vercel CLI: vercel --prod
+echo.
 pause

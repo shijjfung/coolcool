@@ -67,7 +67,7 @@ export default async function handler(
 
         // 取得報表輸出資料夾設定（僅用於記錄，實際保存由客戶端處理）
         const reportOutputFolder = await getSetting('report_output_folder');
-        const hasOutputFolder = reportOutputFolder && reportOutputFolder.trim() !== '';
+        const hasOutputFolder = reportOutputFolder && typeof reportOutputFolder === 'string' && reportOutputFolder.trim() !== '';
 
         // 為每個表單生成報表
         for (const form of formsReady) {
@@ -84,10 +84,10 @@ export default async function handler(
           // 注意：在 Vercel 無伺服器環境中，無法直接寫入本機檔案系統
           // 檔案保存功能改由客戶端（瀏覽器）使用 File System Access API 處理
           // 這裡僅記錄是否有設定輸出資料夾
-          let savedPath = null;
-          if (hasOutputFolder) {
+          let savedPath: string | null = null;
+          if (hasOutputFolder && reportOutputFolder) {
             // 記錄已設定輸出資料夾（實際保存由客戶端處理）
-            savedPath = `已設定輸出資料夾：${reportOutputFolder!.trim()}`;
+            savedPath = `已設定輸出資料夾：${reportOutputFolder.trim()}`;
             console.log(`ℹ 報表已生成，將由客戶端保存到設定的資料夾`);
           } else {
             console.log(`ℹ 報表已生成，用戶可在管理頁面下載`);
