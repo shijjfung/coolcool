@@ -37,8 +37,22 @@ interface FacebookComment {
  * - https://www.facebook.com/groups/{group_id}/posts/{post_id}/
  * - https://www.facebook.com/groups/{group_id}/permalink/{post_id}/
  * - https://m.facebook.com/groups/{group_id}/posts/{post_id}/
+ * - https://www.facebook.com/groups/{group_id}/?multi_permalinks={post_id}&...
  */
 function parseFacebookPostUrl(postUrl: string): { groupId?: string; postId: string } {
+  // 先嘗試從查詢參數中提取（格式：?multi_permalinks={post_id}）
+  const urlObj = new URL(postUrl);
+  const multiPermalinks = urlObj.searchParams.get('multi_permalinks');
+  if (multiPermalinks) {
+    // 從 URL 路徑中提取群組 ID
+    const groupMatch = postUrl.match(/\/groups\/(\d+)/);
+    if (groupMatch) {
+      return { groupId: groupMatch[1], postId: multiPermalinks };
+    }
+    // 如果沒有群組 ID，只返回貼文 ID
+    return { postId: multiPermalinks };
+  }
+  
   // 移除查詢參數和錨點
   const cleanUrl = postUrl.split('?')[0].split('#')[0];
   
