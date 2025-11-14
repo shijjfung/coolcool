@@ -274,6 +274,11 @@ export default async function handler(
     const results = [];
     let totalScanned = 0;
     let totalProcessed = 0;
+    
+    console.log(`[Facebook] ========== 開始掃描 Facebook 留言 ==========`);
+    console.log(`[Facebook] 時間：${new Date().toISOString()}`);
+    console.log(`[Facebook] 啟用監控的表單數量：${monitoringForms.length}`);
+    console.log(`[Facebook] Access Token：${fbAccessToken ? '已設定' : '未設定'}`);
 
     // 掃描每個表單的留言
     for (const form of monitoringForms) {
@@ -321,14 +326,25 @@ export default async function handler(
         console.log(`表單 ${form.id} (${form.name})：社團 ID=${urlInfo.groupId || '無'}, 貼文 ID=${urlInfo.postId}, 發文者：${form.facebook_post_author || '未設定'}`);
         
         // 取得留言
+        console.log(`[Facebook] 開始取得留言，表單：${form.id} (${form.name})，貼文 URL：${form.facebook_post_url}`);
         const comments = await fetchFacebookComments(form.facebook_post_url!, fbAccessToken);
+        console.log(`[Facebook] 取得 ${comments.length} 筆留言`);
+        
+        if (comments.length === 0) {
+          console.log(`[Facebook] ⚠️ 表單 ${form.id} (${form.name}) 沒有取得任何留言，可能原因：`);
+          console.log(`  - Access Token 無效或過期`);
+          console.log(`  - 貼文 URL 格式錯誤`);
+          console.log(`  - 沒有權限存取該貼文`);
+          console.log(`  - 貼文確實沒有留言`);
+        }
+        
         totalScanned += comments.length;
         
         // 取得資料庫中已處理的留言 ID 列表
         const processedCommentIds = await getProcessedFacebookComments(form.id);
         const processedSet = new Set(processedCommentIds);
         
-        console.log(`表單 ${form.id} (${form.name})：掃描到 ${comments.length} 筆留言，資料庫中已處理 ${processedSet.size} 筆`);
+        console.log(`[Facebook] 表單 ${form.id} (${form.name})：掃描到 ${comments.length} 筆留言，資料庫中已處理 ${processedSet.size} 筆`);
         
         // 比對留言數量
         if (comments.length > processedSet.size) {
@@ -351,9 +367,15 @@ export default async function handler(
           }
 
           // 檢查是否符合關鍵字
-          if (!matchesKeywords(comment.message, keywords)) {
+          const matches = matchesKeywords(comment.message, keywords);
+          console.log(`[Facebook] 檢查留言 ${comment.id}：${comment.message.substring(0, 50)}... 是否符合關鍵字：${matches ? '✅' : '❌'}`);
+          
+          if (!matches) {
+            console.log(`[Facebook] 留言不符合關鍵字，跳過：${comment.message}`);
             continue;
           }
+          
+          console.log(`[Facebook] ✅ 留言符合關鍵字，開始處理：${comment.from.name} - ${comment.message}`);
 
           // 🔥 智能處理：如果看到 +1，直接建立簡單訂單（客戶名稱 = 留言者姓名，數量 = 1）
           const isSimplePlusOne = /\+1|加一|加1|\+\s*1|加\s*一|加\s*1/i.test(comment.message);
@@ -439,6 +461,14 @@ export default async function handler(
           }
 
           // 建立訂單
+          console.log(`[Facebook] 📝 準備建立訂單：`, {
+            formId: form.id,
+            formName: form.name,
+            orderData,
+            customerName,
+            customerPhone
+          });
+          
           const orderToken = await createOrder(
             form.id,
             orderData,
@@ -449,15 +479,22 @@ export default async function handler(
             'facebook',
             form
           );
+          
+          console.log(`[Facebook] ✅ 訂單建立成功：${orderToken}`);
 
           // 自動回覆留言（使用表單設定的回覆訊息，或預設「已登記」）
           const replyMessage = form.facebook_reply_message || '已登記';
+          console.log(`[Facebook] 💬 準備回覆留言 ${comment.id}：${replyMessage}`);
+          
           const replySuccess = await replyToFacebookComment(comment.id, replyMessage, fbAccessToken);
           
           if (replySuccess) {
-            console.log(`✅ 已回覆留言 ${comment.id}：${replyMessage}`);
+            console.log(`[Facebook] ✅ 已回覆留言 ${comment.id}：${replyMessage}`);
           } else {
-            console.warn(`⚠️ 回覆留言 ${comment.id} 失敗`);
+            console.warn(`[Facebook] ⚠️ 回覆留言 ${comment.id} 失敗，可能原因：`);
+            console.warn(`  - Access Token 無效或過期`);
+            console.warn(`  - 沒有回覆留言的權限`);
+            console.warn(`  - 留言 ID 錯誤`);
           }
 
           // 標記為已處理（使用資料庫記錄）
@@ -479,12 +516,12 @@ export default async function handler(
         // 更新表單最後掃描時間（無論是否有處理留言）
         try {
           await updateFormLastScanAt(form.id);
-          console.log(`✅ 已更新表單 ${form.id} (${form.name}) 最後掃描時間`);
+          console.log(`[Facebook] ✅ 已更新表單 ${form.id} (${form.name}) 最後掃描時間`);
         } catch (error: any) {
-          console.error(`更新表單 ${form.id} 最後掃描時間失敗:`, error);
+          console.error(`[Facebook] 更新表單 ${form.id} 最後掃描時間失敗:`, error);
         }
       } catch (error: any) {
-        console.error(`掃描表單 ${form.id} 錯誤:`, error);
+        console.error(`[Facebook] ❌ 掃描表單 ${form.id} 錯誤:`, error);
         results.push({
           formId: form.id,
           formName: form.name,
@@ -492,6 +529,10 @@ export default async function handler(
         });
       }
     }
+
+    console.log(`[Facebook] ========== 掃描完成 ==========`);
+    console.log(`[Facebook] 總共掃描：${totalScanned} 筆留言`);
+    console.log(`[Facebook] 總共處理：${totalProcessed} 筆訂單`);
 
     return res.status(200).json({
       success: true,

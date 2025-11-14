@@ -758,27 +758,49 @@ export default function CreateForm() {
                       • 貼文 ID（例如：987654321）<br/>
                       • 然後使用完整格式（123456789_987654321）來取得留言
                     </p>
-                    <p className="text-gray-500 mt-1">
-                      💡 系統會每 3 分鐘自動掃描此貼文的留言
-                    </p>
                     <p className="text-orange-600 mt-1">
                       ⚠️ 重要：請確保 Facebook Access Token 有該社團的存取權限
                     </p>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    發文者姓名 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={facebookPostAuthor}
-                    onChange={(e) => setFacebookPostAuthor(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                    placeholder="例如：愛買"
-                    autoComplete="off"
-                    required={facebookAutoMonitor}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      發文者姓名 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={facebookPostAuthor}
+                      onChange={(e) => setFacebookPostAuthor(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                      placeholder="例如：愛買"
+                      autoComplete="off"
+                      required={facebookAutoMonitor}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      掃描間隔（分鐘） <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={facebookScanInterval}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        if (!isNaN(value) && value >= 1 && value <= 60) {
+                          setFacebookScanInterval(value);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                      placeholder="3"
+                      required={facebookAutoMonitor}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      💡 建議：3-10 分鐘
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -836,29 +858,6 @@ export default function CreateForm() {
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
                     💡 系統會自動匹配包含這些關鍵字的留言（例如：烤雞半隻+1、半隻+1、半隻加一、+1半隻）
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    掃描間隔（分鐘） <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={facebookScanInterval}
-                    onChange={(e) => {
-                      const value = parseInt(e.target.value, 10);
-                      if (!isNaN(value) && value >= 1 && value <= 60) {
-                        setFacebookScanInterval(value);
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                    placeholder="3"
-                    required={facebookAutoMonitor}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 系統會每隔設定的分鐘數掃描一次 Facebook 留言（建議：3-10 分鐘）
                   </p>
                 </div>
                 <div>

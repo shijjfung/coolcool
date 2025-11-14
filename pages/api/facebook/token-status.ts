@@ -35,15 +35,30 @@ export default async function handler(
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Facebook Token 驗證失敗:', errorText);
       return res.status(200).json({
         configured: true,
         valid: false,
         message: 'Token 無效或已過期',
         error: '無法驗證 Token',
+        details: errorText,
       });
     }
 
     const data = await response.json();
+    
+    // 檢查是否有錯誤訊息
+    if (data.error) {
+      console.error('Facebook API 錯誤:', data.error);
+      return res.status(200).json({
+        configured: true,
+        valid: false,
+        message: 'Token 無效或已過期',
+        error: data.error.message || '未知錯誤',
+        error_code: data.error.code,
+      });
+    }
 
     if (data.data && data.data.is_valid) {
       const expiresAt = data.data.expires_at 

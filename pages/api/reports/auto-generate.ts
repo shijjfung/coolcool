@@ -8,8 +8,8 @@ import {
   ensureDatabaseInitialized 
 } from '@/lib/db';
 import { generateGroupBuyReportCSV, generateReportFileName } from '@/lib/report-generator';
-import fs from 'fs';
-import path from 'path';
+// 注意：在 Vercel 無伺服器環境中，無法使用 fs 和 path 模組寫入本機檔案
+// 檔案保存功能改由客戶端（瀏覽器）使用 File System Access API 處理
 
 // 確保響應頭設置為 JSON
 function setJsonHeaders(res: NextApiResponse) {
@@ -65,9 +65,9 @@ export default async function handler(
 
         const generatedForms = [];
 
-        // 取得報表輸出資料夾設定
+        // 取得報表輸出資料夾設定（僅用於記錄，實際保存由客戶端處理）
         const reportOutputFolder = await getSetting('report_output_folder');
-        const shouldAutoSave = reportOutputFolder && reportOutputFolder.trim() !== '';
+        const hasOutputFolder = reportOutputFolder && reportOutputFolder.trim() !== '';
 
         // 為每個表單生成報表
         for (const form of formsReady) {
@@ -81,28 +81,16 @@ export default async function handler(
           // 使用統一的報表生成函數生成 CSV 內容
           const csvWithBom = generateGroupBuyReportCSV(fullForm, orders);
 
-          // 如果設定了輸出資料夾，自動保存報表
+          // 注意：在 Vercel 無伺服器環境中，無法直接寫入本機檔案系統
+          // 檔案保存功能改由客戶端（瀏覽器）使用 File System Access API 處理
+          // 這裡僅記錄是否有設定輸出資料夾
           let savedPath = null;
-          if (shouldAutoSave) {
-            try {
-              const outputFolder = reportOutputFolder!.trim();
-              
-              // 確保資料夾存在
-              if (fs.existsSync(outputFolder)) {
-                // 使用統一的檔案名稱生成函數
-                const fileName = generateReportFileName(fullForm.name);
-                const filePath = path.join(outputFolder, fileName);
-
-                // 寫入檔案
-                fs.writeFileSync(filePath, csvWithBom, 'utf8');
-                savedPath = filePath;
-                console.log(`✓ 報表已自動保存到: ${filePath}`);
-              } else {
-                console.warn(`⚠ 報表輸出資料夾不存在: ${outputFolder}`);
-              }
-            } catch (error: any) {
-              console.error(`✗ 保存報表失敗:`, error.message);
-            }
+          if (hasOutputFolder) {
+            // 記錄已設定輸出資料夾（實際保存由客戶端處理）
+            savedPath = `已設定輸出資料夾：${reportOutputFolder!.trim()}`;
+            console.log(`ℹ 報表已生成，將由客戶端保存到設定的資料夾`);
+          } else {
+            console.log(`ℹ 報表已生成，用戶可在管理頁面下載`);
           }
 
           // 標記報表已生成

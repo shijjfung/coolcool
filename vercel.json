@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/facebook-token-refresh",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/facebook-monitor",
+      "schedule": "*/3 * * * *"
+    },
+    {
+      "path": "/api/cron/line-deadline-check",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

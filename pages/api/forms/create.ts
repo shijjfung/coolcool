@@ -118,6 +118,24 @@ export default async function handler(
         );
         const form = await getFormById(formId);
 
+        // 如果啟用了 Facebook 自動監控，立即觸發一次掃描
+        if (facebookAutoMonitor && facebookPostUrl) {
+          try {
+            // 非同步觸發掃描，不等待結果（使用內部 API 調用）
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+            fetch(`${baseUrl}/api/facebook/scan-comments`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ formId }),
+            }).catch(err => {
+              console.error('觸發 Facebook 掃描失敗:', err);
+            });
+          } catch (error) {
+            console.error('觸發 Facebook 掃描錯誤:', error);
+          }
+        }
+
         setJsonHeaders(res);
         return res.status(200).json({ success: true, formId, formToken: form?.form_token });
       } catch (error: any) {

@@ -47,11 +47,8 @@ export default async function handler(
         return res.status(400).json({ error: '請提供有效的資料夾路徑' });
       }
 
-      // 驗證資料夾路徑是否存在（如果存在）
-      const fs = require('fs');
-      if (folderPath.trim() && !fs.existsSync(folderPath.trim())) {
-        return res.status(400).json({ error: '指定的資料夾不存在，請先建立資料夾' });
-      }
+      // 注意：在 Vercel 無伺服器環境中，無法驗證本機資料夾路徑
+      // 此設定僅用於記錄，實際檔案保存由客戶端（瀏覽器）使用 File System Access API 處理
 
       const success = await setSetting('report_output_folder', folderPath.trim());
       

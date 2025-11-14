@@ -79,6 +79,17 @@ export default function AdminDashboard() {
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [generatingNotification, setGeneratingNotification] = useState<number | null>(null);
+  // 即時訂單通知
+  const [realtimeNotifications, setRealtimeNotifications] = useState<Array<{
+    id: string;
+    formId: number;
+    formName: string;
+    customerName: string;
+    productName?: string;
+    quantity: number;
+    source: 'line' | 'facebook' | 'web';
+    timestamp: Date;
+  }>>([]);
   const [lineNotificationModal, setLineNotificationModal] = useState<{
     formId: number;
     formName: string;
@@ -563,6 +574,95 @@ export default function AdminDashboard() {
       }
     };
   }, [authChecked]);
+  
+  // 即時訂單檢查（當表單列表更新時重新啟動）
+  useEffect(() => {
+    if (!authChecked || forms.length === 0) return;
+    
+    // 清除舊的定時器
+    if (typeof window !== 'undefined') {
+      const oldIntervalId = (window as any).__realtimeOrderCheckInterval;
+      if (oldIntervalId) {
+        clearInterval(oldIntervalId);
+      }
+    }
+    
+    // 記錄已處理的訂單 ID（避免重複通知）
+    const processedOrderIds = new Set<string>();
+    
+    // 每 10 秒檢查一次新訂單
+    const checkRealtimeOrders = async () => {
+      try {
+        for (const form of forms) {
+          const res = await fetch(`/api/orders/realtime?formId=${form.id}&limit=1`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.orders && data.orders.length > 0) {
+              const latestOrder = data.orders[0];
+              const notificationId = `order-${latestOrder.id}-${latestOrder.created_at}`;
+              
+              // 檢查是否已經處理過
+              if (!processedOrderIds.has(notificationId)) {
+                processedOrderIds.add(notificationId);
+                
+                // 提取商品名稱和數量
+                const orderData = latestOrder.order_data || {};
+                const quantityField = form.fields.find((f: any) => 
+                  f.label.includes('數量') || f.label.includes('訂購數量') || f.type === 'number'
+                );
+                const productField = form.fields.find((f: any) => 
+                  f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+                );
+                
+                const quantity = quantityField ? (orderData[quantityField.name] || 1) : 1;
+                const productName = productField ? orderData[productField.name] : undefined;
+                
+                const notification = {
+                  id: notificationId,
+                  formId: form.id,
+                  formName: form.name,
+                  customerName: latestOrder.customer_name || '未知客戶',
+                  productName,
+                  quantity,
+                  source: (latestOrder.order_source as 'line' | 'facebook' | 'web') || 'web',
+                  timestamp: new Date(latestOrder.created_at),
+                };
+                
+                setRealtimeNotifications(prev => {
+                  // 檢查是否已存在
+                  const exists = prev.some(n => n.id === notificationId);
+                  if (exists) return prev;
+                  
+                  // 只保留最近 20 條通知
+                  return [notification, ...prev].slice(0, 20);
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('檢查即時訂單錯誤:', error);
+      }
+    };
+    
+    // 立即執行一次
+    checkRealtimeOrders();
+    
+    // 設定定時器
+    if (typeof window !== 'undefined') {
+      const intervalId = setInterval(checkRealtimeOrders, 10000); // 每 10 秒
+      (window as any).__realtimeOrderCheckInterval = intervalId;
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        const intervalId = (window as any).__realtimeOrderCheckInterval;
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      }
+    };
+  }, [authChecked, forms]);
 
   // 載入 Facebook Token 狀態
   const loadFacebookTokenStatus = async () => {
@@ -1273,6 +1373,62 @@ export default function AdminDashboard() {
                 )}
               </div>
             )}
+          </div>
+        )}
+        {/* 即時訂單通知區域 */}
+        {realtimeNotifications.length > 0 && (
+          <div className="mb-4 p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                🔔 即時訂單通知
+              </h3>
+              <button
+                onClick={() => setRealtimeNotifications([])}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                清除全部
+              </button>
+            </div>
+            <div className="space-y-1">
+              {realtimeNotifications.map((notification) => {
+                const sourceIcon = notification.source === 'facebook' ? '📘' : 
+                                  notification.source === 'line' ? '💬' : '🌐';
+                const sourceText = notification.source === 'facebook' ? '臉書' : 
+                                 notification.source === 'line' ? 'LINE' : '網頁';
+                const timeAgo = Math.floor((Date.now() - notification.timestamp.getTime()) / 1000);
+                const timeText = timeAgo < 60 ? `${timeAgo}秒前` : 
+                               timeAgo < 3600 ? `${Math.floor(timeAgo / 60)}分鐘前` : 
+                               `${Math.floor(timeAgo / 3600)}小時前`;
+                
+                return (
+                  <div
+                    key={notification.id}
+                    className="text-xs text-gray-700 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-base">{sourceIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-purple-600">{notification.formName}</span>
+                        <span className="mx-1">·</span>
+                        <span className="font-medium">{notification.customerName}</span>
+                        {notification.productName && (
+                          <>
+                            <span className="mx-1">·</span>
+                            <span className="text-gray-600">{notification.productName}</span>
+                          </>
+                        )}
+                        <span className="mx-1">·</span>
+                        <span className="text-blue-600">數量 {notification.quantity}</span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span className="text-gray-500">{sourceText}</span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span className="text-gray-400">{timeText}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
         <div className="mb-6 sm:mb-8">
