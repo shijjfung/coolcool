@@ -101,62 +101,150 @@ async function fetchFacebookComments(
     // 解析 URL 取得社團 ID 和貼文 ID
     const { groupId, postId } = parseFacebookPostUrl(postUrl);
     
-    console.log(`解析 Facebook URL：社團 ID=${groupId || '無'}, 貼文 ID=${postId}`);
+    console.log(`[Facebook] 解析 URL：社團 ID=${groupId || '無'}, 貼文 ID=${postId}`);
+    console.log(`[Facebook] 原始 URL：${postUrl}`);
     
-    // 使用 Facebook Graph API 取得留言
-    // 注意：對於私密社團，需要社團管理員權限
-    // 
-    // API 端點說明：
-    // - 如果有社團 ID，可以使用：{group_id}_{post_id} 作為完整貼文 ID
-    // - 或直接使用貼文 ID：{post_id}
-    // - 對於社團貼文，建議使用完整格式：{group_id}_{post_id}
+    // 嘗試多種 API 端點格式
+    const apiEndpoints: Array<{ name: string; url: string }> = [];
     
-    // 構建完整的貼文 ID（如果有社團 ID）
-    const fullPostId = groupId ? `${groupId}_${postId}` : postId;
-    
-    console.log(`使用完整貼文 ID：${fullPostId}`);
-    
-    // 使用分頁取得所有留言
-    let allComments: FacebookComment[] = [];
-    let nextUrl = `https://graph.facebook.com/v18.0/${fullPostId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`;
-    
-    while (nextUrl) {
-      const response = await fetch(nextUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+    if (groupId) {
+      // 方法 1: 使用完整格式 {group_id}_{post_id}
+      apiEndpoints.push({
+        name: '完整格式 (group_id_post_id)',
+        url: `https://graph.facebook.com/v18.0/${groupId}_${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
       });
+      
+      // 方法 2: 使用社團 feed 然後過濾（需要先取得貼文）
+      // 這個方法較複雜，先不實作
+      
+      // 方法 3: 直接使用貼文 ID（不帶群組 ID）
+      apiEndpoints.push({
+        name: '直接貼文 ID',
+        url: `https://graph.facebook.com/v18.0/${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
+      });
+    } else {
+      // 如果沒有群組 ID，直接使用貼文 ID
+      apiEndpoints.push({
+        name: '貼文 ID',
+        url: `https://graph.facebook.com/v18.0/${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
+      });
+    }
+    
+    // 嘗試每個端點
+    for (const endpoint of apiEndpoints) {
+      try {
+        console.log(`[Facebook] 嘗試端點：${endpoint.name}`);
+        console.log(`[Facebook] API URL：${endpoint.url.replace(accessToken, 'TOKEN_HIDDEN')}`);
+        
+        let allComments: FacebookComment[] = [];
+        let nextUrl = endpoint.url;
+        let attemptCount = 0;
+        const maxAttempts = 10; // 最多嘗試 10 頁
+        
+        while (nextUrl && attemptCount < maxAttempts) {
+          attemptCount++;
+          const response = await fetch(nextUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Facebook API 錯誤:', error);
-        // 如果是權限錯誤，返回空陣列而不是拋出錯誤
-        if (response.status === 403 || response.status === 401) {
-          console.warn('Facebook API 權限不足，無法取得留言');
-          return [];
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorData: any = {};
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              // 如果不是 JSON，直接使用文字
+            }
+            
+            console.error(`[Facebook] API 錯誤 (${endpoint.name}):`, errorText);
+            
+            // 檢查錯誤類型
+            if (errorData.error) {
+              const errorCode = errorData.error.code;
+              const errorSubcode = errorData.error.error_subcode;
+              const errorMessage = errorData.error.message;
+              
+              console.error(`[Facebook] 錯誤代碼：${errorCode}, 子代碼：${errorSubcode}`);
+              console.error(`[Facebook] 錯誤訊息：${errorMessage}`);
+              
+              // 錯誤代碼 100 + 子代碼 33 通常表示權限不足或物件不存在
+              if (errorCode === 100 && errorSubcode === 33) {
+                console.warn(`[Facebook] 物件不存在或權限不足 (${endpoint.name})`);
+                // 繼續嘗試下一個端點
+                break;
+              }
+              
+              // 如果是權限錯誤，嘗試下一個端點
+              if (response.status === 403 || response.status === 401) {
+                console.warn(`[Facebook] 權限不足 (${endpoint.name})`);
+                break;
+              }
+            }
+            
+            // 如果不是第一個端點，嘗試下一個
+            if (endpoint !== apiEndpoints[0]) {
+              break;
+            }
+            
+            // 如果是第一個端點且是權限錯誤，嘗試下一個
+            throw new Error(`Facebook API 錯誤: ${response.status}`);
+          }
+
+          const data = await response.json();
+          
+          // 檢查是否有錯誤
+          if (data.error) {
+            console.error(`[Facebook] API 返回錯誤 (${endpoint.name}):`, data.error);
+            // 嘗試下一個端點
+            break;
+          }
+          
+          if (data.data) {
+            allComments = allComments.concat(data.data);
+            console.log(`[Facebook] 成功取得 ${data.data.length} 筆留言 (${endpoint.name})，累計 ${allComments.length} 筆`);
+          }
+          
+          // 檢查是否有下一頁
+          nextUrl = data.paging?.next || null;
+          
+          // 限制最多取得 500 筆留言（避免過多）
+          if (allComments.length >= 500) {
+            console.log(`[Facebook] 已達到 500 筆留言上限`);
+            break;
+          }
         }
-        throw new Error(`Facebook API 錯誤: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.data) {
-        allComments = allComments.concat(data.data);
-      }
-      
-      // 檢查是否有下一頁
-      nextUrl = data.paging?.next || null;
-      
-      // 限制最多取得 500 筆留言（避免過多）
-      if (allComments.length >= 500) {
-        break;
+        
+        // 如果成功取得留言，返回結果
+        if (allComments.length > 0) {
+          console.log(`[Facebook] ✅ 成功使用 ${endpoint.name} 取得 ${allComments.length} 筆留言`);
+          return allComments;
+        }
+        
+        console.log(`[Facebook] ⚠️ ${endpoint.name} 未取得任何留言，嘗試下一個端點...`);
+      } catch (endpointError: any) {
+        console.error(`[Facebook] 端點 ${endpoint.name} 發生錯誤:`, endpointError.message);
+        // 繼續嘗試下一個端點
+        continue;
       }
     }
     
-    return allComments;
+    // 所有端點都失敗
+    console.warn(`[Facebook] ⚠️ 所有 API 端點都無法取得留言`);
+    console.warn(`[Facebook] 可能原因：`);
+    console.warn(`  1. Access Token 權限不足（需要 groups_read_content, groups_access_member_info）`);
+    console.warn(`  2. 貼文 ID 不正確或貼文不存在`);
+    console.warn(`  3. 貼文屬於私密社團，且 Token 沒有該社團的存取權限`);
+    console.warn(`[Facebook] 建議檢查：`);
+    console.warn(`  - 在 Graph API Explorer 中測試 Token 權限`);
+    console.warn(`  - 確認貼文 URL 是否正確`);
+    console.warn(`  - 確認 Token 是否為該社團的管理員或成員`);
+    
+    return [];
   } catch (error: any) {
-    console.error('取得 Facebook 留言錯誤:', error);
-    // 如果無法取得留言，返回空陣列而不是拋出錯誤
+    console.error('[Facebook] 取得留言時發生未預期錯誤:', error);
     return [];
   }
 }

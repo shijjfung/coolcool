@@ -1309,9 +1309,9 @@ export default function AdminDashboard() {
               })}
             </div>
           </div>
-          )}
-          {/* Facebook Token 狀態（小型版本，靠右對齊） */}
-          {facebookTokenStatus && (
+            )}
+            {/* Facebook Token 狀態（小型版本，靠右對齊） */}
+            {facebookTokenStatus && (
             <div className={`p-2 bg-white rounded-lg shadow border-l-4 border-blue-500 min-w-[280px] ${realtimeNotifications.length === 0 ? 'ml-auto' : ''}`}>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <h3 className="text-xs font-semibold text-gray-800 flex items-center gap-1">
@@ -1401,8 +1401,9 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-4">
