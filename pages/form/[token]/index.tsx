@@ -312,26 +312,30 @@ export default function FormEntry() {
 
           {/* 三個主要按鈕 */}
           <div className="mt-8 space-y-4">
+            {/* 修改訂單和刪除訂單按鈕（左右對稱） */}
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setShowModifyDialog(true)}
+                className="w-full bg-blue-600 text-white px-6 py-4 rounded-lg hover:bg-blue-700 transition-colors text-lg font-semibold shadow-md"
+              >
+                ✏️ 修改訂單
+              </button>
+              
+              <button
+                onClick={() => setShowDeleteDialog(true)}
+                className="w-full bg-red-600 text-white px-6 py-4 rounded-lg hover:bg-red-700 transition-colors text-lg font-semibold shadow-md"
+              >
+                🗑️ 刪除訂單
+              </button>
+            </div>
+            
+            {/* 購物下單按鈕（全寬） */}
             <Link
               href={`/form/${token}/order`}
               className="block w-full bg-green-600 text-white px-6 py-4 rounded-lg hover:bg-green-700 transition-colors text-center text-lg font-semibold shadow-md"
             >
               🛒 購物下單
             </Link>
-            
-            <button
-              onClick={() => setShowModifyDialog(true)}
-              className="w-full bg-blue-600 text-white px-6 py-4 rounded-lg hover:bg-blue-700 transition-colors text-lg font-semibold shadow-md"
-            >
-              ✏️ 修改訂單
-            </button>
-            
-            <button
-              onClick={() => setShowDeleteDialog(true)}
-              className="w-full bg-red-600 text-white px-6 py-4 rounded-lg hover:bg-red-700 transition-colors text-lg font-semibold shadow-md"
-            >
-              🗑️ 刪除訂單
-            </button>
           </div>
         </div>
       </div>

@@ -1024,30 +1024,57 @@ export default function CustomerForm() {
                                         placeholder="物品名稱"
                                         required={field.required && index === 0}
                                       />
-                                      <input
-                                        type="number"
-                                        value={item.quantity}
-                                        onChange={(e) => {
-                                          const value = e.target.value;
-                                          // 只接受整數
-                                          if (value === '' || (parseInt(value, 10) > 0 && !value.includes('.'))) {
-                                            updateItem(index, 'quantity', value);
-                                          } else if (value.includes('.')) {
-                                            alert('數量只能輸入整數');
-                                          }
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === '.' || e.key === ',') {
-                                            e.preventDefault();
-                                            alert('數量只能輸入整數');
-                                          }
-                                        }}
-                                        className="px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
-                                        placeholder="數量"
-                                        min="0"
-                                        step="1"
-                                        required={field.required && index === 0}
-                                      />
+                                      <div className="flex items-center border border-gray-300 rounded overflow-hidden">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentQty = parseInt(item.quantity || '0', 10) || 0;
+                                            if (currentQty > 0) {
+                                              updateItem(index, 'quantity', String(currentQty - 1));
+                                            }
+                                          }}
+                                          disabled={!item.quantity || parseInt(item.quantity || '0', 10) <= 0}
+                                          className="px-2 sm:px-3 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-base sm:text-lg font-bold text-gray-700 min-w-[36px] sm:min-w-[40px] touch-manipulation"
+                                          aria-label="減少數量"
+                                        >
+                                          −
+                                        </button>
+                                        <input
+                                          type="number"
+                                          value={item.quantity}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            // 只接受整數
+                                            if (value === '' || (parseInt(value, 10) > 0 && !value.includes('.'))) {
+                                              updateItem(index, 'quantity', value);
+                                            } else if (value.includes('.')) {
+                                              alert('數量只能輸入整數');
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === '.' || e.key === ',') {
+                                              e.preventDefault();
+                                              alert('數量只能輸入整數');
+                                            }
+                                          }}
+                                          className="w-12 sm:w-16 px-1 sm:px-2 py-2 text-center border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs sm:text-sm font-medium"
+                                          placeholder="0"
+                                          min="0"
+                                          step="1"
+                                          required={field.required && index === 0}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentQty = parseInt(item.quantity || '0', 10) || 0;
+                                            updateItem(index, 'quantity', String(currentQty + 1));
+                                          }}
+                                          className="px-2 sm:px-3 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors text-base sm:text-lg font-bold text-gray-700 min-w-[36px] sm:min-w-[40px] touch-manipulation"
+                                          aria-label="增加數量"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
                                     </div>
                                     {items.length > 1 && (
                                       <button
@@ -1071,94 +1098,134 @@ export default function CustomerForm() {
                               </div>
                             );
                           })()}
-                          {field.type === 'number' && (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={order.order_data[field.name] || ''}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  const fieldName = field.name;
-                                  
-                                  // 允許空值
-                                  if (value === '') {
-                                    previousValues.current[fieldName] = '';
-                                    handleFieldChange(fieldName, '');
-                                    return;
-                                  }
-                                  
-                                  // 檢查是否包含小數點或逗號
-                                  if (value.includes('.') || value.includes(',')) {
-                                    alert('只能輸入整數，請勿輸入小數點');
-                                    // 恢復到前一個有效值
-                                    const prevValue = previousValues.current[fieldName] || '';
-                                    if (prevValue === '') {
-                                      handleFieldChange(fieldName, '');
-                                    } else {
-                                      const prevInt = parseInt(prevValue, 10);
-                                      if (!isNaN(prevInt) && prevInt >= 0) {
-                                        handleFieldChange(fieldName, prevInt);
-                                      } else {
-                                        handleFieldChange(fieldName, '');
-                                      }
-                                    }
-                                    return;
-                                  }
-                                  
-                                  // 檢查是否為有效的整數
-                                  const intValue = parseInt(value, 10);
-                                  if (!isNaN(intValue) && intValue >= 0) {
-                                    // 保存當前有效值
-                                    previousValues.current[fieldName] = String(intValue);
-                                    handleFieldChange(fieldName, intValue);
-                                  } else if (value === '-') {
-                                    // 允許輸入負號（但最終會被拒絕，因為 min="0"）
-                                    previousValues.current[fieldName] = '';
-                                    handleFieldChange(fieldName, '');
+                          {field.type === 'number' && (() => {
+                            const currentValue = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
+                            
+                            const handleDecrease = () => {
+                              if (currentValue > 0) {
+                                const newValue = currentValue - 1;
+                                previousValues.current[field.name] = String(newValue);
+                                handleFieldChange(field.name, newValue);
+                              }
+                            };
+                            
+                            const handleIncrease = () => {
+                              const newValue = currentValue + 1;
+                              previousValues.current[field.name] = String(newValue);
+                              handleFieldChange(field.name, newValue);
+                            };
+                            
+                            const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                              const value = e.target.value;
+                              const fieldName = field.name;
+                              
+                              // 允許空值
+                              if (value === '') {
+                                previousValues.current[fieldName] = '';
+                                handleFieldChange(fieldName, '');
+                                return;
+                              }
+                              
+                              // 檢查是否包含小數點或逗號
+                              if (value.includes('.') || value.includes(',')) {
+                                alert('只能輸入整數，請勿輸入小數點');
+                                // 恢復到前一個有效值
+                                const prevValue = previousValues.current[fieldName] || '';
+                                if (prevValue === '') {
+                                  handleFieldChange(fieldName, '');
+                                } else {
+                                  const prevInt = parseInt(prevValue, 10);
+                                  if (!isNaN(prevInt) && prevInt >= 0) {
+                                    handleFieldChange(fieldName, prevInt);
                                   } else {
-                                    // 如果不是有效數字，拒絕輸入並恢復
-                                    alert('只能輸入大於等於 0 的整數');
-                                    const prevValue = previousValues.current[fieldName] || '';
-                                    if (prevValue === '') {
-                                      handleFieldChange(fieldName, '');
-                                    } else {
-                                      const prevInt = parseInt(prevValue, 10);
-                                      if (!isNaN(prevInt) && prevInt >= 0) {
-                                        handleFieldChange(fieldName, prevInt);
-                                      } else {
-                                        handleFieldChange(fieldName, '');
+                                    handleFieldChange(fieldName, '');
+                                  }
+                                }
+                                return;
+                              }
+                              
+                              // 檢查是否為有效的整數
+                              const intValue = parseInt(value, 10);
+                              if (!isNaN(intValue) && intValue >= 0) {
+                                // 保存當前有效值
+                                previousValues.current[fieldName] = String(intValue);
+                                handleFieldChange(fieldName, intValue);
+                              } else if (value === '-') {
+                                // 允許輸入負號（但最終會被拒絕，因為 min="0"）
+                                previousValues.current[fieldName] = '';
+                                handleFieldChange(fieldName, '');
+                              } else {
+                                // 如果不是有效數字，拒絕輸入並恢復
+                                alert('只能輸入大於等於 0 的整數');
+                                const prevValue = previousValues.current[fieldName] || '';
+                                if (prevValue === '') {
+                                  handleFieldChange(fieldName, '');
+                                } else {
+                                  const prevInt = parseInt(prevValue, 10);
+                                  if (!isNaN(prevInt) && prevInt >= 0) {
+                                    handleFieldChange(fieldName, prevInt);
+                                  } else {
+                                    handleFieldChange(fieldName, '');
+                                  }
+                                }
+                              }
+                            };
+                            
+                            return (
+                              <div className="flex items-center gap-2">
+                                {/* 數量選擇器：- 按鈕 + 輸入框 + + 按鈕 */}
+                                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={handleDecrease}
+                                    disabled={currentValue <= 0}
+                                    className="px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-lg sm:text-xl font-bold text-gray-700 min-w-[40px] sm:min-w-[44px] touch-manipulation"
+                                    aria-label="減少數量"
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={currentValue || ''}
+                                    onChange={handleInputChange}
+                                    onKeyDown={(e) => {
+                                      // 阻止輸入小數點
+                                      if (e.key === '.' || e.key === ',') {
+                                        e.preventDefault();
+                                        alert('只能輸入整數，請勿輸入小數點');
                                       }
-                                    }
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  // 阻止輸入小數點
-                                  if (e.key === '.' || e.key === ',') {
-                                    e.preventDefault();
-                                    alert('只能輸入整數，請勿輸入小數點');
-                                  }
-                                }}
-                                className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
-                                required={field.required}
-                                min="0"
-                                step="1"
-                                placeholder="0"
-                              />
-                              {field.price !== undefined && field.price !== null && field.price > 0 && (
-                                <div className="text-xs sm:text-sm text-gray-600 min-w-[60px] sm:min-w-[80px] text-right">
-                                  {(() => {
-                                    const quantity = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
-                                    const itemTotal = quantity * field.price;
-                                    return itemTotal > 0 ? (
-                                      <span className="text-green-600 font-semibold">
-                                        = {itemTotal.toFixed(0)}元
-                                      </span>
-                                    ) : null;
-                                  })()}
+                                    }}
+                                    className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs sm:text-sm font-medium"
+                                    required={field.required}
+                                    min="0"
+                                    step="1"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={handleIncrease}
+                                    className="px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors text-lg sm:text-xl font-bold text-gray-700 min-w-[40px] sm:min-w-[44px] touch-manipulation"
+                                    aria-label="增加數量"
+                                  >
+                                    +
+                                  </button>
                                 </div>
-                              )}
-                            </div>
-                          )}
+                                {field.price !== undefined && field.price !== null && field.price > 0 && (
+                                  <div className="text-xs sm:text-sm text-gray-600 min-w-[60px] sm:min-w-[80px] text-right">
+                                    {(() => {
+                                      const quantity = currentValue;
+                                      const itemTotal = quantity * field.price;
+                                      return itemTotal > 0 ? (
+                                        <span className="text-green-600 font-semibold">
+                                          = {itemTotal.toFixed(0)}元
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
