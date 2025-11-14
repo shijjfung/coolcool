@@ -59,7 +59,9 @@ export default function AdminDashboard() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [checkingReports, setCheckingReports] = useState(false);
   const [selectedForms, setSelectedForms] = useState<Set<number>>(new Set());
+  const [selectedFormsForMerge, setSelectedFormsForMerge] = useState<Set<number>>(new Set());
   const [batchMoving, setBatchMoving] = useState(false);
+  const [mergingReports, setMergingReports] = useState(false);
   const [draggedButton, setDraggedButton] = useState<string | null>(null);
   const [dragOverButton, setDragOverButton] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -782,6 +784,61 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleMergeReports = async () => {
+    if (selectedFormsForMerge.size === 0) {
+      alert('請至少選擇一張表單');
+      return;
+    }
+
+    setMergingReports(true);
+    try {
+      const formIds = Array.from(selectedFormsForMerge);
+      const res = await fetch('/api/reports/merge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ formIds }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`✗ 合併報表失敗：${error.error || '未知錯誤'}`);
+        return;
+      }
+
+      // 下載合併後的報表
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // 從 Content-Disposition 標頭取得檔名，或使用預設檔名
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let fileName = '合併報表.csv';
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (fileNameMatch && fileNameMatch[1]) {
+          fileName = decodeURIComponent(fileNameMatch[1].replace(/['"]/g, ''));
+        }
+      }
+      
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      alert(`✓ 已成功合併 ${formIds.length} 張表單的報表！`);
+      setSelectedFormsForMerge(new Set());
+    } catch (error: any) {
+      console.error('合併報表錯誤:', error);
+      alert(`✗ 合併報表失敗：無法連接到伺服器`);
+    } finally {
+      setMergingReports(false);
+    }
+  };
+
   const copyToClipboard = async (text: string) => {
     if (!text) return false;
     try {
@@ -1429,17 +1486,7 @@ export default function AdminDashboard() {
 
         {loading ? (
           <div className="text-center py-12">載入中...</div>
-        ) : forms.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-600 mb-4">還沒有建立任何表單</p>
-            <Link
-              href="/admin/create"
-              className="text-blue-600 hover:underline"
-            >
-              立即建立第一個表單
-            </Link>
-          </div>
-        ) : (
+        ) : forms.length === 0 ? null : (
           <>
             {/* 批量操作工具列 */}
             {forms.length > 0 && (
@@ -1460,17 +1507,33 @@ export default function AdminDashboard() {
                     <span className="text-sm text-gray-600">
                       已選擇 {selectedForms.size} 張表單
                     </span>
+                    {selectedFormsForMerge.size > 0 && (
+                      <span className="text-sm text-green-600">
+                        已選擇 {selectedFormsForMerge.size} 張表單合併報表
+                      </span>
+                    )}
                   </div>
                 </div>
-                {selectedForms.size > 0 && (
-                  <button
-                    onClick={handleBatchMoveToTrash}
-                    disabled={batchMoving}
-                    className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  >
-                    {batchMoving ? '處理中...' : `🗑️ 批量移到垃圾桶 (${selectedForms.size})`}
-                  </button>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {selectedForms.size > 0 && (
+                    <button
+                      onClick={handleBatchMoveToTrash}
+                      disabled={batchMoving}
+                      className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {batchMoving ? '處理中...' : `🗑️ 批量移到垃圾桶 (${selectedForms.size})`}
+                    </button>
+                  )}
+                  {selectedFormsForMerge.size > 0 && (
+                    <button
+                      onClick={handleMergeReports}
+                      disabled={mergingReports}
+                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {mergingReports ? '合併中...' : `📊 合併報表 (${selectedFormsForMerge.size} 張)`}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1553,6 +1616,26 @@ export default function AdminDashboard() {
                         </>
                       )}
                     </div>
+                  </div>
+                  <div className="mb-2">
+                    <label className="flex items-center gap-1 cursor-pointer text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={selectedFormsForMerge.has(form.id)}
+                        onChange={() => {
+                          const newSet = new Set(selectedFormsForMerge);
+                          if (newSet.has(form.id)) {
+                            newSet.delete(form.id);
+                          } else {
+                            newSet.add(form.id);
+                          }
+                          setSelectedFormsForMerge(newSet);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-3 h-3 text-green-600 rounded focus:ring-green-500"
+                      />
+                      <span>合併報表</span>
+                    </label>
                   </div>
                 <div className="text-xs sm:text-sm text-gray-500 mb-2">
                   <div>截止時間: {new Date(form.deadline).toLocaleString('zh-TW', { 

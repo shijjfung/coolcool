@@ -46,6 +46,7 @@ export default function CreateForm() {
   const [facebookKeywords, setFacebookKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
   const [facebookAutoMonitor, setFacebookAutoMonitor] = useState(false);
   const [facebookReplyMessage, setFacebookReplyMessage] = useState('已登記');
+  const [facebookScanInterval, setFacebookScanInterval] = useState<number>(3); // 掃描間隔（分鐘）
   const [newKeyword, setNewKeyword] = useState('');
   // LINE 自動監控設定
   const [lineAutoMonitor, setLineAutoMonitor] = useState(false);
@@ -117,6 +118,7 @@ export default function CreateForm() {
         setFacebookKeywords(form.facebook_keywords ? JSON.parse(form.facebook_keywords) : ['+1', '+2', '+3', '加一', '加1']);
         setFacebookAutoMonitor(form.facebook_auto_monitor === 1);
         setFacebookReplyMessage(form.facebook_reply_message || '已登記');
+        setFacebookScanInterval(form.facebook_scan_interval || 3);
         // LINE 自動監控設定
         // 如果有設定 LINE 發文者姓名，則認為已啟用 LINE 自動監控
         setLineAutoMonitor(!!form.line_post_author);
@@ -302,6 +304,7 @@ export default function CreateForm() {
             facebookKeywords: facebookAutoMonitor ? JSON.stringify(facebookKeywords) : undefined,
             facebookAutoMonitor: facebookAutoMonitor ? 1 : 0,
             facebookReplyMessage: facebookAutoMonitor ? (facebookReplyMessage.trim() || undefined) : undefined,
+            facebookScanInterval: facebookAutoMonitor ? (facebookScanInterval || 3) : undefined,
             linePostAuthor: lineAutoMonitor ? (linePostAuthor.trim() || undefined) : undefined,
             lineCustomIdentifier: lineAutoMonitor && useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
             useCustomLineIdentifier: lineAutoMonitor && useCustomLineIdentifier,
@@ -833,6 +836,29 @@ export default function CreateForm() {
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
                     💡 系統會自動匹配包含這些關鍵字的留言（例如：烤雞半隻+1、半隻+1、半隻加一、+1半隻）
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    掃描間隔（分鐘） <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={facebookScanInterval}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      if (!isNaN(value) && value >= 1 && value <= 60) {
+                        setFacebookScanInterval(value);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    placeholder="3"
+                    required={facebookAutoMonitor}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 系統會每隔設定的分鐘數掃描一次 Facebook 留言（建議：3-10 分鐘）
                   </p>
                 </div>
                 <div>

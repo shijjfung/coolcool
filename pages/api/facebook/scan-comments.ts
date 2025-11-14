@@ -287,6 +287,18 @@ export default async function handler(
           continue;
         }
 
+        // 檢查掃描間隔時間
+        const scanInterval = form.facebook_scan_interval || 3; // 預設 3 分鐘
+        const lastScanAt = form.facebook_last_scan_at ? new Date(form.facebook_last_scan_at) : null;
+        
+        if (lastScanAt) {
+          const minutesSinceLastScan = (now.getTime() - lastScanAt.getTime()) / (1000 * 60);
+          if (minutesSinceLastScan < scanInterval) {
+            console.log(`表單 ${form.id} (${form.name}) 距離上次掃描僅 ${Math.round(minutesSinceLastScan)} 分鐘，未達間隔 ${scanInterval} 分鐘，跳過處理`);
+            continue;
+          }
+        }
+
         const keywords = JSON.parse(form.facebook_keywords || '[]') as string[];
         
         if (keywords.length === 0) {
@@ -429,6 +441,14 @@ export default async function handler(
             orderToken,
             replySuccess,
           });
+        }
+
+        // 更新表單最後掃描時間（無論是否有處理留言）
+        try {
+          await updateFormLastScanAt(form.id);
+          console.log(`✅ 已更新表單 ${form.id} (${form.name}) 最後掃描時間`);
+        } catch (error: any) {
+          console.error(`更新表單 ${form.id} 最後掃描時間失敗:`, error);
         }
       } catch (error: any) {
         console.error(`掃描表單 ${form.id} 錯誤:`, error);

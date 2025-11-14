@@ -138,7 +138,17 @@ async function initDatabaseSQLite() {
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0`);
   } catch (e: any) {
-    // ??????????????????
+    // 欄位可能已存在
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_scan_interval INTEGER DEFAULT 3`);
+  } catch (e: any) {
+    // 欄位可能已存在
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_last_scan_at TEXT`);
+  } catch (e: any) {
+    // 欄位可能已存在
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT`);
@@ -322,6 +332,8 @@ export interface Form {
   facebook_keywords?: string;
   facebook_auto_monitor?: number;
   facebook_reply_message?: string;
+  facebook_scan_interval?: number; // 掃描間隔（分鐘）
+  facebook_last_scan_at?: string | null; // 最後掃描時間
   line_post_author?: string;
   post_deadline_reply_message?: string;
   line_custom_identifier?: string;
@@ -351,6 +363,8 @@ function mapFormRow(row: any): Form {
     facebook_keywords: row.facebook_keywords || undefined,
     facebook_auto_monitor: row.facebook_auto_monitor || 0,
     facebook_reply_message: row.facebook_reply_message || undefined,
+    facebook_scan_interval: row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined ? row.facebook_scan_interval : 3,
+    facebook_last_scan_at: row.facebook_last_scan_at || undefined,
     line_post_author: row.line_post_author || undefined,
     post_deadline_reply_message: row.post_deadline_reply_message || undefined,
     line_custom_identifier: row.line_custom_identifier || undefined,
@@ -395,6 +409,7 @@ async function createFormSQLite(
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
+  facebookScanInterval?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -412,7 +427,7 @@ async function createFormSQLite(
       ? postDeadlineReplyMessage.trim()
       : null;
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_keywords, facebook_auto_monitor, facebook_reply_message, line_post_author, post_deadline_reply_message, line_custom_identifier, line_use_custom_identifier, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_keywords, facebook_auto_monitor, facebook_reply_message, facebook_scan_interval, line_post_author, post_deadline_reply_message, line_custom_identifier, line_use_custom_identifier, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       name,
       JSON.stringify(fields),
@@ -427,6 +442,7 @@ async function createFormSQLite(
       facebookKeywords || null,
       facebookAutoMonitor || 0,
       facebookReplyMessage || null,
+      facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
       linePostAuthor || null,
       storedPostDeadlineReply,
       storedCustomIdentifier,
@@ -486,6 +502,7 @@ async function updateFormSQLite(
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
+  facebookScanInterval?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -502,7 +519,7 @@ async function updateFormSQLite(
       ? postDeadlineReplyMessage.trim()
       : null;
   await dbRun(
-    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, line_post_author = ?, post_deadline_reply_message = ?, line_custom_identifier = ?, line_use_custom_identifier = ? WHERE id = ?',
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, facebook_scan_interval = ?, line_post_author = ?, post_deadline_reply_message = ?, line_custom_identifier = ?, line_use_custom_identifier = ? WHERE id = ?',
     [
       name,
       JSON.stringify(fields),
@@ -517,6 +534,7 @@ async function updateFormSQLite(
       facebookKeywords || null,
       facebookAutoMonitor || 0,
       facebookReplyMessage || null,
+      facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
       linePostAuthor || null,
       storedPostDeadlineReply,
       storedCustomIdentifier,
@@ -1256,6 +1274,26 @@ export const updateForm = DATABASE_TYPE === 'supabase'
 export const updateFormName = DATABASE_TYPE === 'supabase'
   ? dbModule.updateFormName
   : updateFormNameSQLite;
+
+// ==================== 更新表單最後掃描時間 ====================
+
+async function updateFormLastScanAtSQLite(formId: number): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    const now = new Date().toISOString();
+    await dbRun(
+      'UPDATE forms SET facebook_last_scan_at = ? WHERE id = ?',
+      [now, formId]
+    );
+  } catch (error: any) {
+    console.error('更新表單最後掃描時間失敗:', error);
+    throw new Error(`更新表單最後掃描時間失敗：${error.message}`);
+  }
+}
+
+export const updateFormLastScanAt = DATABASE_TYPE === 'supabase'
+  ? dbModule.updateFormLastScanAt
+  : updateFormLastScanAtSQLite;
 
 export const markReportGenerated = DATABASE_TYPE === 'supabase'
   ? dbModule.markReportGenerated

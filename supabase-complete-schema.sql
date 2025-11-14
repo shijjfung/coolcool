@@ -200,6 +200,14 @@ END $$;
                         WHERE table_name = 'forms' AND column_name = 'facebook_reply_message') THEN
            ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT;
          END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_scan_interval') THEN
+           ALTER TABLE forms ADD COLUMN facebook_scan_interval INTEGER DEFAULT 3;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_last_scan_at') THEN
+           ALTER TABLE forms ADD COLUMN facebook_last_scan_at TIMESTAMPTZ;
+         END IF;
        END $$;
 
        -- 添加 LINE 自動監控相關欄位到 forms 表（如果不存在）

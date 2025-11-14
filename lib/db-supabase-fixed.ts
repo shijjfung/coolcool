@@ -30,6 +30,8 @@ type Form = {
   facebook_keywords?: string;
   facebook_auto_monitor?: number;
   facebook_reply_message?: string;
+  facebook_scan_interval?: number; // 掃描間隔（分鐘）
+  facebook_last_scan_at?: string | null; // 最後掃描時間
   line_post_author?: string;
   post_deadline_reply_message?: string;
   line_custom_identifier?: string;
@@ -79,6 +81,7 @@ export async function createForm(
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
+  facebookScanInterval?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -103,6 +106,7 @@ export async function createForm(
       facebook_keywords: facebookKeywords || null,
       facebook_auto_monitor: facebookAutoMonitor || 0,
       facebook_reply_message: facebookReplyMessage || null,
+      facebook_scan_interval: facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
       line_post_author: linePostAuthor || null,
       post_deadline_reply_message: postDeadlineReplyMessage?.trim() || null,
       line_custom_identifier: useCustomIdentifier ? trimmedCustomIdentifier : null,
@@ -210,6 +214,7 @@ export async function updateForm(
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
+  facebookScanInterval?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -233,6 +238,7 @@ export async function updateForm(
       facebook_keywords: facebookKeywords || null,
       facebook_auto_monitor: facebookAutoMonitor || 0,
       facebook_reply_message: facebookReplyMessage || null,
+      facebook_scan_interval: facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
       line_post_author: linePostAuthor || null,
       post_deadline_reply_message: postDeadlineReplyMessage?.trim() || null,
       line_custom_identifier: useCustomIdentifier ? trimmedCustomIdentifier : null,
@@ -541,6 +547,8 @@ function mapFormFromDb(row: any): Form {
     facebook_keywords: row.facebook_keywords || undefined,
     facebook_auto_monitor: row.facebook_auto_monitor || 0,
     facebook_reply_message: row.facebook_reply_message || undefined,
+    facebook_scan_interval: row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined ? row.facebook_scan_interval : 3,
+    facebook_last_scan_at: row.facebook_last_scan_at || undefined,
     line_post_author: row.line_post_author || undefined,
     post_deadline_reply_message: row.post_deadline_reply_message || undefined,
     line_custom_identifier: row.line_custom_identifier || undefined,
@@ -945,6 +953,22 @@ export async function getProcessedFacebookComments(formId: number): Promise<stri
   } catch (error: any) {
     console.error('取得已處理 Facebook 留言失敗:', error);
     return [];
+  }
+}
+
+export async function updateFormLastScanAt(formId: number): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from('forms')
+      .update({ facebook_last_scan_at: new Date().toISOString() })
+      .eq('id', formId);
+
+    if (error) {
+      throw new Error(`更新表單最後掃描時間失敗：${error.message}`);
+    }
+  } catch (error: any) {
+    console.error('更新表單最後掃描時間失敗:', error);
+    throw error;
   }
 }
 
