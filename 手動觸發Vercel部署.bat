@@ -60,15 +60,31 @@ if %errorlevel% equ 0 (
         npx vercel --prod
     ) else (
         echo.
-        echo 選項 2：在 Vercel Dashboard 手動部署
-        echo.
-        echo 請按照以下步驟：
-        echo 1. 前往 https://vercel.com/dashboard
-        echo 2. 選擇專案 coolcool
-        echo 3. 點擊 Deployments 標籤
-        echo 4. 點擊右上角的 "Redeploy" 按鈕
-        echo 5. 選擇最新的提交或輸入提交 hash
-        echo 6. 點擊 "Redeploy"
+    echo 選項 2：在 Vercel Dashboard 手動部署
+    echo.
+    echo 請按照以下步驟：
+    echo.
+    echo 步驟 1：前往 https://vercel.com/dashboard
+    echo 步驟 2：點擊專案名稱 coolcool
+    echo 步驟 3：點擊 Deployments 標籤
+    echo.
+    echo 步驟 4：觸發新部署（三種方式）：
+    echo.
+    echo   方式 A：從部署記錄觸發
+    echo   - 點擊任何一個部署記錄
+    echo   - 進入詳情頁面
+    echo   - 點擊右上角的 "..." 選單
+    echo   - 選擇 "Redeploy"
+    echo.
+    echo   方式 B：檢查是否有自動部署
+    echo   - 查看部署列表最上方
+    echo   - 如果有新的部署正在進行，等待完成
+    echo.
+    echo   方式 C：從 Settings 重新連接
+    echo   - 點擊 Settings 標籤
+    echo   - 點擊左側 Git
+    echo   - 如果未連接，點擊 "Connect Git Repository"
+    echo   - 連接後會自動觸發部署
         echo.
         set /p openVercel="是否要開啟 Vercel Dashboard？(Y/N): "
         if /i "%openVercel%"=="Y" (

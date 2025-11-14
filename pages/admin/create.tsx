@@ -764,19 +764,19 @@ export default function CreateForm() {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      發文者姓名 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={facebookPostAuthor}
-                      onChange={(e) => setFacebookPostAuthor(e.target.value)}
-                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                      placeholder="例如：愛買"
-                      autoComplete="off"
-                      required={facebookAutoMonitor}
-                    />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    發文者姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookPostAuthor}
+                    onChange={(e) => setFacebookPostAuthor(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    placeholder="例如：愛買"
+                    autoComplete="off"
+                    required={facebookAutoMonitor}
+                  />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -903,23 +903,23 @@ export default function CreateForm() {
               />
               <label htmlFor="lineAutoMonitor" className="text-base font-bold text-gray-700 cursor-pointer">
                 🤖 LINE 自動監控留言
-              </label>
+            </label>
             </div>
             {lineAutoMonitor && (
               <div className="space-y-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    LINE 發文者姓名 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={linePostAuthor}
-                    onChange={(e) => setLinePostAuthor(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
-                    placeholder="例如：愛買（系統會根據此姓名識別要監控的賣文）"
-                    autoComplete="off"
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  LINE 發文者姓名 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={linePostAuthor}
+                  onChange={(e) => setLinePostAuthor(e.target.value)}
+                  className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                  placeholder="例如：愛買（系統會根據此姓名識別要監控的賣文）"
+                  autoComplete="off"
                     required={lineAutoMonitor}
-                  />
+                />
                 <p className="text-xs text-gray-500 mt-1">
                   💡 當 LINE 群組中有此發文者的賣文時，系統會自動監控該賣文下方的留言
                 </p>
@@ -1000,7 +1000,7 @@ export default function CreateForm() {
                     <code className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm">
                       {formToken ? `@${formToken}` : '儲存後系統會自動產生 6 碼代碼'}
                     </code>
-                  </div>
+            </div>
                   <p className="text-xs text-gray-600">
                     💡 請在賣文中加入這組代碼（建議放在文頭或文尾），系統會根據它鎖定對應的表單。
                   </p>

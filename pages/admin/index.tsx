@@ -283,7 +283,7 @@ export default function AdminDashboard() {
           const filtered = savedOrder.filter(b => allowedButtonIds.has(b.id));
           if (filtered.length > 0) {
             const savedIds = filtered.map((b: ButtonConfig) => b.id);
-            const missingButtons = defaultButtons.filter(b => !savedIds.includes(b.id));
+          const missingButtons = defaultButtons.filter(b => !savedIds.includes(b.id));
             return [...filtered, ...missingButtons];
           }
         } catch (e) {
@@ -302,7 +302,7 @@ export default function AdminDashboard() {
       if (newButtons.length === 0) {
         localStorage.removeItem('admin-button-order');
       } else {
-        localStorage.setItem('admin-button-order', JSON.stringify(newButtons));
+      localStorage.setItem('admin-button-order', JSON.stringify(newButtons));
       }
     }
   };
@@ -741,7 +741,7 @@ export default function AdminDashboard() {
       
       // 確保 data 是數組，如果不是則設置為空數組
       if (Array.isArray(data)) {
-        setForms(data);
+      setForms(data);
       } else {
         console.error('API 返回非數組數據:', data);
         setForms([]);
@@ -1659,38 +1659,38 @@ export default function AdminDashboard() {
             {forms.length > 0 && (
               <div className="mb-4 bg-white rounded-lg shadow p-4 flex flex-col gap-4">
                 <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedForms.size === forms.length && forms.length > 0}
-                        onChange={handleSelectAll}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        {selectedForms.size === forms.length ? '取消全選' : '全選'}
-                      </span>
-                    </label>
-                    <span className="text-sm text-gray-600">
-                      已選擇 {selectedForms.size} 張表單
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedForms.size === forms.length && forms.length > 0}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      {selectedForms.size === forms.length ? '取消全選' : '全選'}
                     </span>
+                  </label>
+                  <span className="text-sm text-gray-600">
+                    已選擇 {selectedForms.size} 張表單
+                  </span>
                     {selectedFormsForMerge.size > 0 && (
                       <span className="text-sm text-green-600">
                         已選擇 {selectedFormsForMerge.size} 張表單合併報表
                       </span>
                     )}
-                  </div>
+                </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectedForms.size > 0 && (
-                    <button
-                      onClick={handleBatchMoveToTrash}
-                      disabled={batchMoving}
-                      className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {batchMoving ? '處理中...' : `🗑️ 批量移到垃圾桶 (${selectedForms.size})`}
-                    </button>
-                  )}
+                {selectedForms.size > 0 && (
+                  <button
+                    onClick={handleBatchMoveToTrash}
+                    disabled={batchMoving}
+                    className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {batchMoving ? '處理中...' : `🗑️ 批量移到垃圾桶 (${selectedForms.size})`}
+                  </button>
+                )}
                 </div>
               </div>
             )}

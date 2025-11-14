@@ -89,7 +89,7 @@ export default async function handler(
             // 記錄已設定輸出資料夾（實際保存由客戶端處理）
             savedPath = `已設定輸出資料夾：${reportOutputFolder.trim()}`;
             console.log(`ℹ 報表已生成，將由客戶端保存到設定的資料夾`);
-          } else {
+              } else {
             console.log(`ℹ 報表已生成，用戶可在管理頁面下載`);
           }
 

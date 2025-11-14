@@ -215,7 +215,7 @@ export default function OrderSuccess() {
       if (typeof html2canvas !== 'function') {
         throw new Error('無法載入 html2canvas 套件，請確認是否已安裝。');
       }
-
+      
       const canvas = await html2canvas(printRef.current, {
         backgroundColor: '#ffffff',
         scale: 2,
@@ -232,20 +232,20 @@ export default function OrderSuccess() {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
       );
-
+      
       const blob: Blob | null = await new Promise((resolve) =>
         canvas.toBlob((result) => resolve(result), 'image/png')
       );
 
-      if (!blob) {
-        alert('生成圖片失敗，請稍後再試');
-        return;
-      }
+          if (!blob) {
+            alert('生成圖片失敗，請稍後再試');
+            return;
+          }
 
       if (isMobile) {
-        if (navigator.share && navigator.canShare) {
-          const file = new File([blob], fileName, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
+          if (navigator.share && navigator.canShare) {
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
             try {
               await navigator.share({
                 files: [file],
@@ -256,10 +256,10 @@ export default function OrderSuccess() {
             } catch (err) {
               console.log('分享失敗，改用開新視窗:', err);
             }
+            }
           }
-        }
 
-        openImageInNewWindow(blob);
+          openImageInNewWindow(blob);
       } else {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -312,7 +312,7 @@ export default function OrderSuccess() {
     if (isMobile) {
       await downloadAsImage();
     } else {
-      window.print();
+    window.print();
     }
   };
 
