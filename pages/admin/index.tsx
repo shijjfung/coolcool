@@ -1251,144 +1251,23 @@ export default function AdminDashboard() {
         </div>
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
-        {/* Facebook Token 狀態卡片 */}
-        {facebookTokenStatus && (
-          <div className="mb-4 p-4 bg-white rounded-lg shadow border-l-4 border-blue-500">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                  🔑 Facebook Token 狀態
-                </h3>
-                {loadingTokenStatus ? (
-                  <p className="text-sm text-gray-600">載入中...</p>
-                ) : (
-                  <div className="space-y-1">
-                    {!facebookTokenStatus.configured ? (
-                      <p className="text-sm text-orange-600">⚠️ 未設定 Facebook Access Token</p>
-                    ) : !facebookTokenStatus.valid ? (
-                      <p className="text-sm text-red-600">❌ Token 無效或已過期</p>
-                    ) : (
-                      <>
-                        <p className="text-sm text-gray-700">
-                          {facebookDaysRemaining != null ? (
-                            <>
-                              {facebookDaysRemaining > 10 ? (
-                                <span className="text-green-600">
-                                  ✅ Token 有效，剩餘 <strong>{facebookDaysRemaining}</strong> 天
-                                </span>
-                              ) : facebookDaysRemaining > 0 ? (
-                                <span className="text-orange-600">
-                                  ⚠️ Token 即將到期，剩餘 <strong>{facebookDaysRemaining}</strong> 天
-                                </span>
-                              ) : (
-                                <span className="text-red-600">❌ Token 已過期</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-gray-600">✅ Token 有效</span>
-                          )}
-                        </p>
-                        {facebookTokenStatus.expires_at && (
-                          <p className="text-xs text-gray-500">
-                            到期時間：{new Date(facebookTokenStatus.expires_at).toLocaleString('zh-TW')}
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {facebookTokenStatus.configured && facebookTokenStatus.valid && (
-                  <>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={autoRefreshEnabled}
-                          onChange={(e) => {
-                            setAutoRefreshEnabled(e.target.checked);
-                            if (e.target.checked) {
-                              localStorage.setItem('facebook-auto-refresh', 'true');
-                              if (facebookDaysRemaining != null && facebookDaysRemaining < 10) {
-                                handleRefreshToken(true, autoDeployEnabled);
-                              }
-                            } else {
-                              localStorage.removeItem('facebook-auto-refresh');
-                            }
-                          }}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span>自動刷新</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={autoDeployEnabled}
-                          onChange={(e) => {
-                            setAutoDeployEnabled(e.target.checked);
-                            if (e.target.checked) {
-                              localStorage.setItem('facebook-auto-deploy', 'true');
-                            } else {
-                              localStorage.removeItem('facebook-auto-deploy');
-                            }
-                          }}
-                          disabled={!autoRefreshEnabled}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        <span className={!autoRefreshEnabled ? 'text-gray-400' : ''}>自動部署</span>
-                      </label>
-                    </div>
-                    <button
-                      onClick={() => handleRefreshToken(false, autoDeployEnabled)}
-                      disabled={refreshingToken}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        refreshingToken
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : facebookDaysRemaining != null && facebookDaysRemaining < 10
-                          ? 'bg-orange-600 text-white hover:bg-orange-700'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {refreshingToken ? '刷新中...' : '🔄 刷新 Token'}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={loadFacebookTokenStatus}
-                  disabled={loadingTokenStatus}
-                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  {loadingTokenStatus ? '載入中...' : '🔄'}
-                </button>
-              </div>
-            </div>
-            {autoRefreshEnabled && (
-              <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
-                💡 自動刷新已啟用{autoDeployEnabled ? '（含自動部署）' : ''}：當 Token 剩餘天數少於 10 天時，系統會自動刷新{autoDeployEnabled ? '並部署' : ''}
-                {autoDeployEnabled && (
-                  <div className="mt-1 text-orange-600">
-                    ⚠️ 需要設定 VERCEL_TOKEN 和 VERCEL_PROJECT_ID 環境變數
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        {/* 即時訂單通知區域 */}
-        {realtimeNotifications.length > 0 && (
-          <div className="mb-4 p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                🔔 即時訂單通知
-              </h3>
-              <button
-                onClick={() => setRealtimeNotifications([])}
-                className="text-xs text-gray-500 hover:text-gray-700"
-              >
-                清除全部
-              </button>
-            </div>
+        {/* 即時訂單通知區域與 Facebook Token 狀態 */}
+        {(realtimeNotifications.length > 0 || facebookTokenStatus) && (
+          <div className="mb-4 flex items-start gap-4">
+            {/* 即時訂單通知區域 */}
+            {realtimeNotifications.length > 0 && (
+              <div className="flex-1 p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    🔔 即時訂單通知
+                  </h3>
+                  <button
+                    onClick={() => setRealtimeNotifications([])}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    清除全部
+                  </button>
+                </div>
             <div className="space-y-1">
               {realtimeNotifications.map((notification) => {
                 const sourceIcon = notification.source === 'facebook' ? '📘' : 
@@ -1430,7 +1309,100 @@ export default function AdminDashboard() {
               })}
             </div>
           </div>
-        )}
+          )}
+          {/* Facebook Token 狀態（小型版本，靠右對齊） */}
+          {facebookTokenStatus && (
+            <div className={`p-2 bg-white rounded-lg shadow border-l-4 border-blue-500 min-w-[280px] ${realtimeNotifications.length === 0 ? 'ml-auto' : ''}`}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <h3 className="text-xs font-semibold text-gray-800 flex items-center gap-1">
+                  🔑 Token
+                </h3>
+                <button
+                  onClick={loadFacebookTokenStatus}
+                  disabled={loadingTokenStatus}
+                  className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  title="重新載入"
+                >
+                  {loadingTokenStatus ? '...' : '🔄'}
+                </button>
+              </div>
+              {loadingTokenStatus ? (
+                <p className="text-xs text-gray-600">載入中...</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {!facebookTokenStatus.configured ? (
+                    <p className="text-xs text-orange-600">⚠️ 未設定</p>
+                  ) : !facebookTokenStatus.valid ? (
+                    <p className="text-xs text-red-600">❌ 無效或過期</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-700">
+                        {facebookDaysRemaining != null ? (
+                          <>
+                            {facebookDaysRemaining > 10 ? (
+                              <span className="text-green-600">
+                                ✅ 剩餘 <strong>{facebookDaysRemaining}</strong> 天
+                              </span>
+                            ) : facebookDaysRemaining > 0 ? (
+                              <span className="text-orange-600">
+                                ⚠️ 剩餘 <strong>{facebookDaysRemaining}</strong> 天
+                              </span>
+                            ) : (
+                              <span className="text-red-600">❌ 已過期</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-600">✅ 有效</span>
+                        )}
+                      </p>
+                      {facebookTokenStatus.expires_at && (
+                        <p className="text-xs text-gray-500">
+                          {new Date(facebookTokenStatus.expires_at).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {facebookTokenStatus.configured && facebookTokenStatus.valid && (
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <div className="flex items-center gap-1 mb-1">
+                    <input
+                      type="checkbox"
+                      checked={autoRefreshEnabled}
+                      onChange={(e) => {
+                        setAutoRefreshEnabled(e.target.checked);
+                        if (e.target.checked) {
+                          localStorage.setItem('facebook-auto-refresh', 'true');
+                          if (facebookDaysRemaining != null && facebookDaysRemaining < 10) {
+                            handleRefreshToken(true, autoDeployEnabled);
+                          }
+                        } else {
+                          localStorage.removeItem('facebook-auto-refresh');
+                        }
+                      }}
+                      className="w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-gray-700">自動刷新</span>
+                  </div>
+                  <button
+                    onClick={() => handleRefreshToken(false, autoDeployEnabled)}
+                    disabled={refreshingToken}
+                    className={`w-full px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      refreshingToken
+                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                        : facebookDaysRemaining != null && facebookDaysRemaining < 10
+                        ? 'bg-orange-600 text-white hover:bg-orange-700'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {refreshingToken ? '刷新中...' : '🔄 刷新'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-4">

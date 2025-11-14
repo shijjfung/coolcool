@@ -338,8 +338,8 @@ export default async function handler(
           if (allMonitoringForms.length === 1) {
             console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，但只有一個表單，使用此表單`);
           } else {
-            console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過處理`);
-            continue;
+          console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過處理`);
+          continue;
           }
         }
         
@@ -396,7 +396,7 @@ export default async function handler(
             console.log(`[Facebook] 留言不符合關鍵字，跳過：${comment.message}`);
             continue;
           }
-          
+
           console.log(`[Facebook] ✅ 留言符合關鍵字，開始處理：${comment.from.name} - ${comment.message}`);
 
           // 🔥 智能處理：如果看到 +1，直接建立簡單訂單（客戶名稱 = 留言者姓名，數量 = 1）
@@ -432,31 +432,31 @@ export default async function handler(
             customerPhone = '';
           } else {
             // 如果不是簡單的 +1，嘗試解析複雜訊息
-            const availableProducts = extractProductsFromForm(form.fields);
-            const parsed = parseOrderMessage(
-              comment.message,
-              availableProducts,
-              '預設商品',
-              'groupbuy'
-            );
+          const availableProducts = extractProductsFromForm(form.fields);
+          const parsed = parseOrderMessage(
+            comment.message,
+            availableProducts,
+            '預設商品',
+            'groupbuy'
+          );
 
             if (parsed && parsed.items.length > 0) {
               // 如果成功解析，使用解析結果
-              const mergedItems = mergeOrderItems(parsed.items);
+          const mergedItems = mergeOrderItems(parsed.items);
 
-              const productField = form.fields.find(
-                (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
-              );
-              if (productField && mergedItems.length > 0) {
-                orderData[productField.name] = mergedItems[0].productName;
-              }
+          const productField = form.fields.find(
+            (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+          );
+          if (productField && mergedItems.length > 0) {
+            orderData[productField.name] = mergedItems[0].productName;
+          }
 
-              const quantityField = form.fields.find(
-                (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
-              );
-              if (quantityField) {
-                const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-                orderData[quantityField.name] = totalQuantity;
+          const quantityField = form.fields.find(
+            (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+          );
+          if (quantityField) {
+            const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+            orderData[quantityField.name] = totalQuantity;
               }
 
               customerName = parsed.customerName || comment.from.name;

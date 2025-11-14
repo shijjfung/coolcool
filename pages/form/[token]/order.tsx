@@ -40,17 +40,7 @@ export default function CustomerForm() {
   const [submitting, setSubmitting] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showModifyDialog, setShowModifyDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [modifyOrderToken, setModifyOrderToken] = useState('');
-  const [modifyName, setModifyName] = useState('');
-  const [modifyPhone, setModifyPhone] = useState('');
-  const [deleteOrderToken, setDeleteOrderToken] = useState('');
-  const [deleteName, setDeleteName] = useState('');
-  const [deletePhone, setDeletePhone] = useState('');
-  const [deleting, setDeleting] = useState(false);
   const [clientIp, setClientIp] = useState<string>('');
   const [deviceType, setDeviceType] = useState<string>('');
   const [orderCount, setOrderCount] = useState<number>(0);
@@ -71,6 +61,25 @@ export default function CustomerForm() {
       const sourceParam = Array.isArray(router.query.source) ? router.query.source[0] : router.query.source;
       if (sourceParam && typeof sourceParam === 'string') {
         setSource(sourceParam);
+      }
+      
+      // 檢查是否從入口頁面帶來了編輯訂單的參數
+      const editParam = Array.isArray(router.query.edit) ? router.query.edit[0] : router.query.edit;
+      const orderDataParam = Array.isArray(router.query.orderData) ? router.query.orderData[0] : router.query.orderData;
+      
+      if (editParam === 'true' && orderDataParam && typeof orderDataParam === 'string') {
+        try {
+          const orderData = JSON.parse(decodeURIComponent(orderDataParam));
+          setOrder({
+            order_token: orderData.orderToken,
+            order_data: orderData.orderData || {},
+          });
+          setCustomerName(orderData.customerName || '');
+          setCustomerPhone(orderData.customerPhone || '');
+          setIsEditMode(true);
+        } catch (error) {
+          console.error('解析訂單資料錯誤:', error);
+        }
       }
     }
     if (token && typeof token === 'string') {
@@ -528,7 +537,11 @@ export default function CustomerForm() {
       return false;
     }
 
-    // 電話為選填，不需要驗證
+    // 驗證電話（必填）
+    if (!customerPhone.trim()) {
+      alert('請填寫「電話」');
+      return false;
+    }
 
     // 驗證表單欄位
     if (form) {
@@ -677,144 +690,6 @@ export default function CustomerForm() {
     }
   };
 
-
-  const handleModifyOrder = async () => {
-    if (!modifyOrderToken.trim() && (!modifyName.trim() || !modifyPhone.trim())) {
-      alert('請輸入訂單編號，或姓名和電話');
-      return;
-    }
-
-    setVerifying(true);
-    try {
-      let orderToLoad = null;
-
-      // 如果提供了訂單編號，直接使用它
-      if (modifyOrderToken.trim()) {
-        const res = await fetch(`/api/orders/${modifyOrderToken.trim()}?customerName=${encodeURIComponent(modifyName.trim())}&customerPhone=${encodeURIComponent(modifyPhone.trim())}`);
-        const data = await res.json();
-        
-        if (res.ok) {
-          orderToLoad = data;
-        } else {
-          alert(data.error || '驗證失敗，請確認訂單編號、姓名或電話是否正確');
-          setVerifying(false);
-          return;
-        }
-      } else {
-        // 如果沒有提供訂單編號，使用姓名和電話查找
-        const res = await fetch('/api/orders/find', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            formToken: token,
-            customerName: modifyName.trim(),
-            customerPhone: modifyPhone.trim(),
-          }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          orderToLoad = data.order;
-        } else {
-          alert(data.error || '找不到訂單，請確認姓名和電話是否正確');
-          setVerifying(false);
-          return;
-        }
-      }
-
-      // 載入訂單到表單
-      if (orderToLoad) {
-        setOrder(orderToLoad);
-        setCustomerName(orderToLoad.customer_name || '');
-        setCustomerPhone(orderToLoad.customer_phone || '');
-        setIsEditMode(true);
-        setShowModifyDialog(false);
-        setModifyOrderToken('');
-        setModifyName('');
-        setModifyPhone('');
-      }
-    } catch (error) {
-      console.error('載入訂單錯誤:', error);
-      alert('載入訂單時發生錯誤');
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleDeleteOrder = async () => {
-    if (!deleteOrderToken.trim() && (!deleteName.trim() || !deletePhone.trim())) {
-      alert('請輸入訂單編號，或姓名和電話');
-      return;
-    }
-
-    // 確認刪除
-    const confirmed = window.confirm('確定要刪除此訂單嗎？此操作無法復原！');
-    if (!confirmed) return;
-
-    setDeleting(true);
-    try {
-      let orderTokenToUse = deleteOrderToken.trim();
-
-      // 如果沒有提供訂單編號，使用姓名和電話查找
-      if (!orderTokenToUse) {
-        const res = await fetch('/api/orders/find', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            formToken: token,
-            customerName: deleteName.trim(),
-            customerPhone: deletePhone.trim(),
-          }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          orderTokenToUse = data.order.order_token;
-        } else {
-          alert(data.error || '找不到訂單，請確認姓名和電話是否正確');
-          setDeleting(false);
-          return;
-        }
-      }
-
-      // 刪除訂單
-      const res = await fetch(`/api/orders/${orderTokenToUse}/delete`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: deleteName.trim(),
-          customerPhone: deletePhone.trim(),
-          orderToken: orderTokenToUse,
-          formToken: token,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        alert('訂單已成功刪除！');
-        setShowDeleteDialog(false);
-        setDeleteOrderToken('');
-        setDeleteName('');
-        setDeletePhone('');
-        // 清空表單
-        setCustomerName('');
-        setCustomerPhone('');
-        setOrder({ order_data: {} });
-        setIsEditMode(false);
-      } else {
-        alert(data.error || '刪除失敗，請確認訂單編號、姓名或電話是否正確');
-      }
-    } catch (error) {
-      console.error('刪除訂單錯誤:', error);
-      alert('刪除訂單時發生錯誤');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const showToast = (message: string) => {
     if (!message) return;
     if (toastTimeoutRef.current) {
@@ -941,22 +816,6 @@ export default function CustomerForm() {
       )}
       <div className="container mx-auto px-2 sm:px-4 max-w-4xl">
         <div className="bg-white rounded-lg shadow p-4 sm:p-6 lg:p-8">
-          {/* 修改和刪除訂單按鈕 */}
-          <div className="mb-6 flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={() => setShowModifyDialog(true)}
-              className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
-            >
-              ✏️ 修改訂單
-            </button>
-            <button
-              onClick={() => setShowDeleteDialog(true)}
-              className="flex-1 bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm sm:text-base"
-            >
-              🗑️ 刪除訂單
-            </button>
-          </div>
-
           <div className="mb-4 sm:mb-6 text-center">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">涼涼冰品團購</h1>
             <p className="text-sm sm:text-base text-gray-600 mb-2">吼哩涼涼ㄟ妹!</p>
@@ -1094,7 +953,7 @@ export default function CustomerForm() {
                     <tr className="hover:bg-gray-50">
                       <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
                         電話
-                        <span className="text-gray-400 text-xs ml-1">（選填）</span>
+                        <span className="text-red-500 text-xs ml-1">*</span>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <input
@@ -1104,6 +963,7 @@ export default function CustomerForm() {
                           onFocus={handlePhoneFocus}
                           className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                           placeholder={phonePlaceholder}
+                          required
                         />
                       </td>
                     </tr>
@@ -1454,162 +1314,6 @@ export default function CustomerForm() {
                       className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                       {submitting ? '送出中...' : '確認送出'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 修改訂單對話框 */}
-          {showModifyDialog && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-                <div className="p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">修改訂單</h2>
-                  <p className="text-sm text-gray-600 mb-4">
-                    請輸入以下任一方式進行驗證：
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        訂單編號
-                      </label>
-                      <input
-                        type="text"
-                        value={modifyOrderToken}
-                        onChange={(e) => setModifyOrderToken(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入訂單編號"
-                      />
-                    </div>
-                    
-                    <div className="text-center text-sm text-gray-500">或</div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        姓名
-                      </label>
-                      <input
-                        type="text"
-                        value={modifyName}
-                        onChange={(e) => setModifyName(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入姓名"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        電話
-                      </label>
-                      <input
-                        type="tel"
-                        value={modifyPhone}
-                        onChange={(e) => setModifyPhone(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入電話"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 justify-end mt-6">
-                    <button
-                      onClick={() => {
-                        setShowModifyDialog(false);
-                        setModifyOrderToken('');
-                        setModifyName('');
-                        setModifyPhone('');
-                      }}
-                      className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleModifyOrder}
-                      disabled={verifying}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {verifying ? '驗證中...' : '確認'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 刪除訂單對話框 */}
-          {showDeleteDialog && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-                <div className="p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">刪除訂單</h2>
-                  <p className="text-sm text-gray-600 mb-4">
-                    請輸入以下任一方式進行驗證：
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        訂單編號
-                      </label>
-                      <input
-                        type="text"
-                        value={deleteOrderToken}
-                        onChange={(e) => setDeleteOrderToken(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                        placeholder="輸入訂單編號"
-                      />
-                    </div>
-                    
-                    <div className="text-center text-sm text-gray-500">或</div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        姓名
-                      </label>
-                      <input
-                        type="text"
-                        value={deleteName}
-                        onChange={(e) => setDeleteName(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                        placeholder="輸入姓名"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        電話
-                      </label>
-                      <input
-                        type="tel"
-                        value={deletePhone}
-                        onChange={(e) => setDeletePhone(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                        placeholder="輸入電話"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 justify-end mt-6">
-                    <button
-                      onClick={() => {
-                        setShowDeleteDialog(false);
-                        setDeleteOrderToken('');
-                        setDeleteName('');
-                        setDeletePhone('');
-                      }}
-                      className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleDeleteOrder}
-                      disabled={deleting}
-                      className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {deleting ? '刪除中...' : '確認刪除'}
                     </button>
                   </div>
                 </div>
