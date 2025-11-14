@@ -41,7 +41,7 @@ export default async function handler(
 
     const forms = await getAllForms();
     const monitoringForms = forms.filter(
-      form => form.facebook_auto_monitor === 1 &&
+      (form: Form) => form.facebook_auto_monitor === 1 &&
               form.facebook_post_url &&
               form.facebook_post_author &&
               form.facebook_keywords
