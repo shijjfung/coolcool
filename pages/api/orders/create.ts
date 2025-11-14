@@ -5,10 +5,18 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  await ensureDatabaseInitialized();
-  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    await ensureDatabaseInitialized();
+  } catch (error: any) {
+    console.error('資料庫初始化錯誤:', error);
+    return res.status(500).json({ 
+      error: '資料庫初始化失敗',
+      details: error?.message || '無法連接到資料庫'
+    });
   }
 
   try {
@@ -74,9 +82,12 @@ export default async function handler(
     }
 
     return res.status(200).json({ success: true, orderToken });
-  } catch (error) {
+  } catch (error: any) {
     console.error('建立訂單錯誤:', error);
-    return res.status(500).json({ error: '伺服器錯誤' });
+    return res.status(500).json({ 
+      error: '伺服器錯誤',
+      details: error?.message || '建立訂單時發生錯誤'
+    });
   }
 }
 

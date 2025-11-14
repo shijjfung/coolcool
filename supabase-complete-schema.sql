@@ -159,6 +159,70 @@ END $$;
          END IF;
        END $$;
 
+       -- 添加 facebook_comment_id 到 orders 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'orders' AND column_name = 'facebook_comment_id') THEN
+           ALTER TABLE orders ADD COLUMN facebook_comment_id TEXT;
+         END IF;
+       END $$;
+
+       -- 添加 facebook_pickup_notified_at 到 orders 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'orders' AND column_name = 'facebook_pickup_notified_at') THEN
+           ALTER TABLE orders ADD COLUMN facebook_pickup_notified_at TIMESTAMPTZ;
+         END IF;
+       END $$;
+
+       -- 添加 Facebook 自動監控相關欄位到 forms 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_post_url') THEN
+           ALTER TABLE forms ADD COLUMN facebook_post_url TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_post_author') THEN
+           ALTER TABLE forms ADD COLUMN facebook_post_author TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_keywords') THEN
+           ALTER TABLE forms ADD COLUMN facebook_keywords TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_auto_monitor') THEN
+           ALTER TABLE forms ADD COLUMN facebook_auto_monitor INTEGER DEFAULT 0;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'facebook_reply_message') THEN
+           ALTER TABLE forms ADD COLUMN facebook_reply_message TEXT;
+         END IF;
+       END $$;
+
+       -- 添加 LINE 自動監控相關欄位到 forms 表（如果不存在）
+       DO $$
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'line_post_author') THEN
+           ALTER TABLE forms ADD COLUMN line_post_author TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'post_deadline_reply_message') THEN
+           ALTER TABLE forms ADD COLUMN post_deadline_reply_message TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'line_custom_identifier') THEN
+           ALTER TABLE forms ADD COLUMN line_custom_identifier TEXT;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'forms' AND column_name = 'line_use_custom_identifier') THEN
+           ALTER TABLE forms ADD COLUMN line_use_custom_identifier BOOLEAN DEFAULT FALSE;
+         END IF;
+       END $$;
+
 -- 建立 LINE 賣文記錄表
 CREATE TABLE IF NOT EXISTS line_posts (
   id BIGSERIAL PRIMARY KEY,
@@ -167,6 +231,10 @@ CREATE TABLE IF NOT EXISTS line_posts (
   message_id TEXT,
   sender_name TEXT NOT NULL,
   post_content TEXT,
+  identifier TEXT,
+  deadline TIMESTAMPTZ,
+  end_announced BOOLEAN DEFAULT FALSE,
+  first_warning_sent BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -174,4 +242,25 @@ CREATE TABLE IF NOT EXISTS line_posts (
 CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id);
 CREATE INDEX IF NOT EXISTS idx_line_posts_group_id ON line_posts(group_id);
 CREATE INDEX IF NOT EXISTS idx_line_posts_created_at ON line_posts(created_at DESC);
+
+-- 添加 line_posts 表的新欄位（如果不存在）
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'line_posts' AND column_name = 'identifier') THEN
+    ALTER TABLE line_posts ADD COLUMN identifier TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'line_posts' AND column_name = 'deadline') THEN
+    ALTER TABLE line_posts ADD COLUMN deadline TIMESTAMPTZ;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'line_posts' AND column_name = 'end_announced') THEN
+    ALTER TABLE line_posts ADD COLUMN end_announced BOOLEAN DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'line_posts' AND column_name = 'first_warning_sent') THEN
+    ALTER TABLE line_posts ADD COLUMN first_warning_sent BOOLEAN DEFAULT FALSE;
+  END IF;
+END $$;
 
