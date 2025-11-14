@@ -243,6 +243,19 @@ CREATE INDEX IF NOT EXISTS idx_line_posts_form_id ON line_posts(form_id);
 CREATE INDEX IF NOT EXISTS idx_line_posts_group_id ON line_posts(group_id);
 CREATE INDEX IF NOT EXISTS idx_line_posts_created_at ON line_posts(created_at DESC);
 
+-- 建立 Facebook 已處理留言記錄表
+CREATE TABLE IF NOT EXISTS facebook_processed_comments (
+  id BIGSERIAL PRIMARY KEY,
+  form_id BIGINT NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  comment_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(form_id, comment_id)
+);
+
+-- 建立索引以提升查詢效能
+CREATE INDEX IF NOT EXISTS idx_facebook_processed_comments_form_id ON facebook_processed_comments(form_id);
+CREATE INDEX IF NOT EXISTS idx_facebook_processed_comments_comment_id ON facebook_processed_comments(comment_id);
+
 -- 添加 line_posts 表的新欄位（如果不存在）
 DO $$
 BEGIN

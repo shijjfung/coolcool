@@ -1359,3 +1359,78 @@ export const getFormByIdLite = DATABASE_TYPE === 'supabase'
   ? dbModule.getFormByIdLite
   : getFormByIdLiteSQLite;
 
+// ==================== Facebook 已處理留言相關函數 ====================
+
+async function isFacebookCommentProcessedSQLite(formId: number, commentId: string): Promise<boolean> {
+  try {
+    await ensureDatabaseInitialized();
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS facebook_processed_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        comment_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(form_id, comment_id),
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    const row = await dbGet(
+      'SELECT 1 FROM facebook_processed_comments WHERE form_id = ? AND comment_id = ?',
+      [formId, commentId]
+    ) as any;
+    return !!row;
+  } catch (error: any) {
+    console.error('檢查 Facebook 留言是否已處理失敗:', error);
+    return false;
+  }
+}
+
+async function markFacebookCommentAsProcessedSQLite(formId: number, commentId: string): Promise<void> {
+  try {
+    await ensureDatabaseInitialized();
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS facebook_processed_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        comment_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(form_id, comment_id),
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+      )
+    `);
+    await dbRun(
+      'INSERT OR IGNORE INTO facebook_processed_comments (form_id, comment_id) VALUES (?, ?)',
+      [formId, commentId]
+    );
+  } catch (error: any) {
+    console.error('標記 Facebook 留言為已處理失敗:', error);
+    throw new Error(`標記 Facebook 留言為已處理失敗：${error.message}`);
+  }
+}
+
+async function getProcessedFacebookCommentsSQLite(formId: number): Promise<string[]> {
+  try {
+    await ensureDatabaseInitialized();
+    const rows = await dbAll(
+      'SELECT comment_id FROM facebook_processed_comments WHERE form_id = ?',
+      [formId]
+    ) as any[];
+    return rows.map(row => row.comment_id);
+  } catch (error: any) {
+    console.error('取得已處理 Facebook 留言失敗:', error);
+    return [];
+  }
+}
+
+export const isFacebookCommentProcessed = DATABASE_TYPE === 'supabase'
+  ? dbModule.isFacebookCommentProcessed
+  : isFacebookCommentProcessedSQLite;
+
+export const markFacebookCommentAsProcessed = DATABASE_TYPE === 'supabase'
+  ? dbModule.markFacebookCommentAsProcessed
+  : markFacebookCommentAsProcessedSQLite;
+
+export const getProcessedFacebookComments = DATABASE_TYPE === 'supabase'
+  ? dbModule.getProcessedFacebookComments
+  : getProcessedFacebookCommentsSQLite;
+

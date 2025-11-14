@@ -882,3 +882,69 @@ export async function ensureDatabaseInitialized() {
   }
 }
 
+// ==================== Facebook 已處理留言相關函數 ====================
+
+export async function isFacebookCommentProcessed(formId: number, commentId: string): Promise<boolean> {
+  try {
+    const { data, error } = await getSupabase()
+      .from('facebook_processed_comments')
+      .select('id')
+      .eq('form_id', formId)
+      .eq('comment_id', commentId)
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 表示沒有找到記錄
+      console.error('檢查 Facebook 留言是否已處理失敗:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch (error: any) {
+    console.error('檢查 Facebook 留言是否已處理失敗:', error);
+    return false;
+  }
+}
+
+export async function markFacebookCommentAsProcessed(formId: number, commentId: string): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from('facebook_processed_comments')
+      .insert({
+        form_id: formId,
+        comment_id: commentId,
+      })
+      .select()
+      .single();
+
+    if (error && error.code !== '23505') { // 23505 表示唯一約束違反（已存在）
+      throw new Error(`標記 Facebook 留言為已處理失敗：${error.message}`);
+    }
+  } catch (error: any) {
+    if (error.message.includes('標記')) {
+      throw error;
+    }
+    console.error('標記 Facebook 留言為已處理失敗:', error);
+    throw new Error(`標記 Facebook 留言為已處理失敗：${error.message}`);
+  }
+}
+
+export async function getProcessedFacebookComments(formId: number): Promise<string[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from('facebook_processed_comments')
+      .select('comment_id')
+      .eq('form_id', formId);
+
+    if (error) {
+      console.error('取得已處理 Facebook 留言失敗:', error);
+      return [];
+    }
+
+    return data.map(row => row.comment_id);
+  } catch (error: any) {
+    console.error('取得已處理 Facebook 留言失敗:', error);
+    return [];
+  }
+}
+

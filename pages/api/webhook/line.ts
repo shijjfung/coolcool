@@ -249,7 +249,8 @@ export default async function handler(
       // 取得所有啟用的表單（用於上下文關聯匹配）
       const allForms = await getAllForms();
 
-      // 🔥 優先處理：檢測是否為發文者的賣文
+      // ==================== 推廣邏輯（推送開單訊息）====================
+      // 🔥 只有在看到特殊代碼時才推送開單訊息
       // 檢查發送者是否為任何表單設定的 LINE 發文者
       const formsWithMatchingAuthor = allForms.filter(
         (form: Form) => form.line_post_author && 
@@ -260,115 +261,33 @@ export default async function handler(
       );
 
       if (formsWithMatchingAuthor.length > 0) {
+        // 🔥 關鍵：只有在訊息中包含特殊代碼時才推送開單訊息
         const identifierMatchedForm = formsWithMatchingAuthor.find((form: Form) => {
           const deadline = form.order_deadline
             ? new Date(form.order_deadline)
             : new Date(form.deadline);
           if (new Date() > deadline) return false;
           const identifiers = extractLineIdentifiers(form);
+          // 必須包含特殊代碼才推送
           return identifiers.length > 0 && identifiers.some(id => messageLower.includes(id));
         });
 
         if (identifierMatchedForm) {
+          // 找到匹配的特殊代碼，推送開單訊息
           const identifiers = extractLineIdentifiers(identifierMatchedForm);
-          const matchedIdentifier = identifiers.find(id => messageLower.includes(id)) || identifierMatchedForm.form_token;
-          const deadlineDate = identifierMatchedForm.order_deadline
-            ? new Date(identifierMatchedForm.order_deadline)
-            : new Date(identifierMatchedForm.deadline);
-          const deadlineLabel = formatDeadline(deadlineDate);
-          const saleMessage = `本次「${identifierMatchedForm.name}」結單時間為 ${deadlineLabel}止，只要有下單的客戶小幫手會一一回覆喔！`;
-
-          try {
-            await recordLinePost(
-              identifierMatchedForm.id,
-              groupId,
-              null,
-              senderName,
-              messageText.substring(0, 500),
-              matchedIdentifier,
-              deadlineDate.toISOString()
-            );
-          } catch (error) {
-            console.error('記錄 LINE 賣文失敗:', error);
-          }
-
-          await sendPushMessage(groupId, saleMessage, channelAccessToken);
-          console.log(`✅ 透過識別碼偵測到賣文：${senderName}，表單：${identifierMatchedForm.name}`);
-          continue;
-        }
-      }
-
-      // 如果發送者匹配到表單的發文者，且訊息看起來像賣文（不是簡單的 +1 留言）
-      if (formsWithMatchingAuthor.length > 0 && messageText.length > 20) {
-        // 判斷是否為賣文（包含商品資訊、價格、結單時間等關鍵字）
-        // 排除明顯是留言的訊息（例如：+1、+2、加一 等）
-        const isCommentMessage = /^[\+\d加一1-9\s]+$/.test(messageText.trim()) || 
-                                 messageText.trim().length < 10;
-        
-        const isPostMessage = !isCommentMessage && (
-          /(商品|價格|結單|截止|收單|團購|預購|下單|數量|份|組|元|塊|斤|隻|個|罐|包|盒|售|賣|開團|開單)/i.test(messageText) ||
-          messageText.length > 50 // 長訊息可能是賣文
-        );
-
-        if (isPostMessage) {
-          // 找到最符合的表單（根據關鍵字匹配度）
-          let bestMatchForm: any = null;
-          let bestScore = 0;
-
-          for (const form of formsWithMatchingAuthor) {
-            // 檢查結單時間
-            const deadline = form.order_deadline 
-              ? new Date(form.order_deadline) 
-              : new Date(form.deadline);
-            const now = new Date();
-            if (now > deadline) {
-              continue; // 已過期的表單不處理
-            }
-
-            // 計算匹配分數（根據關鍵字）
-            const keywords = form.facebook_keywords ? JSON.parse(form.facebook_keywords) : [];
-            let score = 0;
-            const lowerMessage = messageLower;
-            
-            // 如果賣文中包含表單的關鍵字，增加分數
-            for (const keyword of keywords) {
-              const lowerKeyword = keyword.toLowerCase();
-              if (lowerMessage.includes(lowerKeyword)) {
-                score += 5;
-              } else if (lowerKeyword.includes('+') && lowerMessage.includes(lowerKeyword.replace('+', '加'))) {
-                score += 4;
-              } else if (lowerKeyword.includes('加') && lowerMessage.includes(lowerKeyword.replace('加', '+'))) {
-                score += 4;
-              }
-            }
-
-            // 如果賣文長度較長，可能是詳細的賣文
-            if (messageText.length > 100) {
-              score += 3;
-            }
-
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatchForm = form;
-            }
-          }
-
-          // 如果找到匹配的表單，回應確認訊息並記錄賣文
-          if (bestMatchForm) {
-            const identifiers = extractLineIdentifiers(bestMatchForm);
-            const matchedIdentifier = identifiers.find(id => messageLower.includes(id)) || bestMatchForm.form_token;
-            const deadlineDate = bestMatchForm.order_deadline
-              ? new Date(bestMatchForm.order_deadline)
-              : new Date(bestMatchForm.deadline);
+          const matchedIdentifier = identifiers.find(id => messageLower.includes(id));
+          if (matchedIdentifier) {
+            const deadlineDate = identifierMatchedForm.order_deadline
+              ? new Date(identifierMatchedForm.order_deadline)
+              : new Date(identifierMatchedForm.deadline);
             const deadlineLabel = formatDeadline(deadlineDate);
-            const saleMessage = `本次「${bestMatchForm.name}」結單時間為 ${deadlineLabel}止，只要有下單的客戶小幫手會一一回覆喔！`;
+            const saleMessage = `本次「${identifierMatchedForm.name}」結單時間為 ${deadlineLabel}止，只要有下單的客戶小幫手會一一回覆喔！`;
 
-            // 記錄賣文與表單的對應關係
             try {
               await recordLinePost(
-                bestMatchForm.id,
+                identifierMatchedForm.id,
                 groupId,
-                null, // LINE API 可能無法取得訊息 ID
+                null,
                 senderName,
                 messageText.substring(0, 500),
                 matchedIdentifier,
@@ -379,11 +298,14 @@ export default async function handler(
             }
 
             await sendPushMessage(groupId, saleMessage, channelAccessToken);
-            console.log(`✅ 檢測到發文者賣文：${senderName}，表單：${bestMatchForm.name}`);
-            continue;
+            console.log(`✅ 推廣：透過識別碼偵測到賣文：${senderName}，表單：${identifierMatchedForm.name}，識別碼：${matchedIdentifier}`);
+            continue; // 推送後不再處理回覆邏輯
           }
         }
       }
+      
+      // ==================== 回覆邏輯（回覆「已登記」）====================
+      // 🔥 只有在符合關鍵字時才回覆「已登記」
       
       // 優先檢查是否有表單代碼（例如：「@abc123 韭菜+2」）
       let targetForm = null;
@@ -480,12 +402,8 @@ export default async function handler(
       }
 
       if (!targetForm) {
-        await replyMessage(
-          event.replyToken!,
-          '找不到對應的表單，請確認：\n1. 是否已建立表單並設定 LINE 發文者姓名\n2. 訊息是否符合關鍵字格式\n3. 表單是否仍在有效期限內',
-          channelAccessToken,
-          quoteToken
-        );
+        // 找不到表單時靜默，不回覆任何訊息
+        console.log('找不到對應的表單，靜默處理:', { messageText, senderName, groupId });
         continue;
       }
 
@@ -520,15 +438,25 @@ export default async function handler(
         
         // 支援模式：數字+數字（例如：1斤+1、5斤+1）
         const keywordPattern = lowerKeyword.replace(/\+/g, '\\+').replace(/\d+/g, '\\d+');
-        const regex = new RegExp(keywordPattern);
-        if (regex.test(lowerMessage)) {
-          return true;
+        try {
+          const regex = new RegExp(keywordPattern);
+          if (regex.test(lowerMessage)) {
+            return true;
+          }
+        } catch (e) {
+          // 忽略正則表達式錯誤
         }
         
         return false;
       });
 
       const hasPlusOnePattern = matchesFormKeywords;
+
+      // 🔥 重要：如果訊息不符合關鍵字，靜默處理，不回覆
+      if (!hasPlusOnePattern) {
+        console.log('訊息不符合關鍵字，靜默處理:', { messageText, formKeywords, senderName });
+        continue;
+      }
 
       // 檢查截止時間（使用記錄中的 deadline 或表單設定）
       const deadline = saleRecord?.deadline
@@ -641,15 +569,8 @@ export default async function handler(
           }
         }
         
-        const suggestion = mode === 'proxy'
-          ? '無法解析訂單訊息。請使用格式：商品名稱（例如：我要買牛奶、牛奶一罐）'
-          : `無法解析訂單訊息。請使用格式：商品名+數量（例如：韭菜+2、高麗菜+1、半隻+1）\n\n支援的關鍵字：${formKeywords.join('、')}`;
-        await replyMessage(
-          event.replyToken!,
-          suggestion,
-          channelAccessToken,
-          quoteToken
-        );
+        // 如果訊息符合關鍵字但無法解析，靜默處理（避免打擾用戶）
+        console.log('訊息符合關鍵字但無法解析，靜默處理:', { messageText, formKeywords, senderName });
         continue;
       }
 

@@ -1,33 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAllForms, getFormByToken, createOrder, ensureDatabaseInitialized, FormField, type Form } from '@/lib/db';
+import { 
+  getAllForms, 
+  getFormByToken, 
+  createOrder, 
+  ensureDatabaseInitialized, 
+  FormField, 
+  type Form,
+  isFacebookCommentProcessed,
+  markFacebookCommentAsProcessed,
+  getProcessedFacebookComments
+} from '@/lib/db';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-
-// 已處理留言追蹤（使用記憶體快取，避免重複處理）
-const processedComments = new Set<string>();
-
-/**
- * 檢查留言是否已處理
- */
-function isCommentProcessed(formId: number, commentId: string): boolean {
-  const key = `${formId}_${commentId}`;
-  return processedComments.has(key);
-}
-
-/**
- * 標記留言為已處理
- */
-function markCommentAsProcessed(formId: number, commentId: string): void {
-  const key = `${formId}_${commentId}`;
-  processedComments.add(key);
-  
-  // 限制快取大小（最多保留 10000 筆）
-  if (processedComments.size > 10000) {
-    const firstKey = processedComments.values().next().value;
-    if (firstKey) {
-      processedComments.delete(firstKey);
-    }
-  }
-}
 
 /**
  * Facebook 留言掃描 API
@@ -319,12 +302,29 @@ export default async function handler(
         const comments = await fetchFacebookComments(form.facebook_post_url!, fbAccessToken);
         totalScanned += comments.length;
         
-        console.log(`表單 ${form.id} (${form.name})：掃描到 ${comments.length} 筆留言`);
+        // 取得資料庫中已處理的留言 ID 列表
+        const processedCommentIds = await getProcessedFacebookComments(form.id);
+        const processedSet = new Set(processedCommentIds);
+        
+        console.log(`表單 ${form.id} (${form.name})：掃描到 ${comments.length} 筆留言，資料庫中已處理 ${processedSet.size} 筆`);
+        
+        // 比對留言數量
+        if (comments.length > processedSet.size) {
+          console.log(`⚠️ 發現 ${comments.length - processedSet.size} 筆未處理的留言，開始檢查是否有遺漏`);
+        } else if (comments.length === processedSet.size) {
+          console.log(`✅ 留言數量匹配：Facebook ${comments.length} 筆 = 資料庫 ${processedSet.size} 筆`);
+        }
 
         // 處理每個留言
         for (const comment of comments) {
-          // 檢查是否已處理過
-          if (isCommentProcessed(form.id, comment.id)) {
+          // 檢查是否已處理過（使用資料庫記錄）
+          if (processedSet.has(comment.id)) {
+            continue;
+          }
+          
+          // 再次確認資料庫（避免並發問題）
+          if (await isFacebookCommentProcessed(form.id, comment.id)) {
+            processedSet.add(comment.id);
             continue;
           }
 
@@ -342,38 +342,63 @@ export default async function handler(
             'groupbuy'
           );
 
-          if (!parsed || parsed.items.length === 0) {
-            continue;
-          }
-
-          // 合併相同商品
-          const mergedItems = mergeOrderItems(parsed.items);
-
           // 建立訂單資料
           const orderData: Record<string, any> = {};
+          let customerName = comment.from.name;
+          let customerPhone = '';
 
-          const productField = form.fields.find(
-            (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
-          );
-          if (productField && mergedItems.length > 0) {
-            orderData[productField.name] = mergedItems[0].productName;
-          }
+          if (parsed && parsed.items.length > 0) {
+            // 如果成功解析，使用解析結果
+            const mergedItems = mergeOrderItems(parsed.items);
 
-          const quantityField = form.fields.find(
-            (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
-          );
-          if (quantityField) {
-            const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-            orderData[quantityField.name] = totalQuantity;
+            const productField = form.fields.find(
+              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+            );
+            if (productField && mergedItems.length > 0) {
+              orderData[productField.name] = mergedItems[0].productName;
+            }
+
+            const quantityField = form.fields.find(
+              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+            );
+            if (quantityField) {
+              const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+              orderData[quantityField.name] = totalQuantity;
+            }
+
+            customerName = parsed.customerName || comment.from.name;
+            customerPhone = parsed.customerPhone || '';
+          } else {
+            // 如果無法解析，但符合關鍵字，建立簡單訂單（數量為 1）
+            console.log(`留言符合關鍵字但無法解析，建立簡單訂單: ${comment.message}`);
+            
+            // 嘗試從訊息中提取商品名稱（移除 +1、加一等關鍵字）
+            const cleanMessage = comment.message
+              .replace(/\+1|加一|加1|\+\s*1|加\s*一|加\s*1/gi, '')
+              .trim();
+            
+            const productField = form.fields.find(
+              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+            );
+            if (productField) {
+              // 如果有商品欄位，使用清理後的訊息作為商品名稱，或使用表單名稱
+              orderData[productField.name] = cleanMessage || form.name || '商品';
+            }
+
+            const quantityField = form.fields.find(
+              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+            );
+            if (quantityField) {
+              orderData[quantityField.name] = 1; // 預設數量為 1
+            }
           }
 
           // 建立訂單
-          const customerName = parsed.customerName || comment.from.name;
           const orderToken = await createOrder(
             form.id,
             orderData,
             customerName,
-            parsed.customerPhone,
+            customerPhone,
             undefined,
             undefined,
             'facebook',
@@ -390,8 +415,9 @@ export default async function handler(
             console.warn(`⚠️ 回覆留言 ${comment.id} 失敗`);
           }
 
-          // 標記為已處理
-          markCommentAsProcessed(form.id, comment.id);
+          // 標記為已處理（使用資料庫記錄）
+          await markFacebookCommentAsProcessed(form.id, comment.id);
+          processedSet.add(comment.id);
 
           totalProcessed++;
           results.push({

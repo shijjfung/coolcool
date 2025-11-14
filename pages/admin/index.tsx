@@ -1219,7 +1219,36 @@ export default function AdminDashboard() {
           </div>
         )}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4">表單管理</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center sm:text-left">表單管理</h1>
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2">
+              <Link
+                href="/admin/create"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                + 建立新表單
+              </Link>
+              <button
+                onClick={checkAutoReports}
+                disabled={checkingReports}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 text-sm"
+              >
+                {checkingReports ? '檢查中...' : '🔍 檢查報表'}
+              </button>
+              <Link
+                href="/admin/trash"
+                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+              >
+                🗑️ 垃圾桶
+              </Link>
+              <Link
+                href="/admin/settings"
+                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+              >
+                ⚙️ 系統設定
+              </Link>
+            </div>
+          </div>
           {buttons.length > 0 && (
           <div className="w-full flex justify-center">
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 sm:gap-3">
@@ -1431,33 +1460,6 @@ export default function AdminDashboard() {
                     <span className="text-sm text-gray-600">
                       已選擇 {selectedForms.size} 張表單
                     </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href="/admin/create"
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                    >
-                      + 建立新表單
-                    </Link>
-                    <button
-                      onClick={checkAutoReports}
-                      disabled={checkingReports}
-                      className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 text-sm"
-                    >
-                      {checkingReports ? '檢查中...' : '🔍 檢查報表'}
-                    </button>
-                    <Link
-                      href="/admin/trash"
-                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
-                    >
-                      🗑️ 垃圾桶
-                    </Link>
-                    <Link
-                      href="/admin/settings"
-                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
-                    >
-                      ⚙️ 系統設定
-                    </Link>
                   </div>
                 </div>
                 {selectedForms.size > 0 && (
