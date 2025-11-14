@@ -1,6 +1,6 @@
 {
   "name": "order-management-system",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "訂單管理系統 - 老闆設定表單，客戶填寫訂單",
   "main": "electron/main.js",
   "scripts": {
