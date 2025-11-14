@@ -8,7 +8,8 @@ import {
   type Form,
   isFacebookCommentProcessed,
   markFacebookCommentAsProcessed,
-  getProcessedFacebookComments
+  getProcessedFacebookComments,
+  updateFormLastScanAt
 } from '@/lib/db';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
 
