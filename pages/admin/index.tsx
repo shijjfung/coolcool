@@ -1277,7 +1277,18 @@ export default function AdminDashboard() {
         )}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center sm:text-left">表單管理</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center sm:text-left">表單管理</h1>
+              {selectedFormsForMerge.size > 0 && (
+                <button
+                  onClick={handleMergeReports}
+                  disabled={mergingReports}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                >
+                  {mergingReports ? '合併中...' : `📊 合併報表 (${selectedFormsForMerge.size} 張)`}
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2">
               <Link
                 href="/admin/create"
@@ -1522,15 +1533,6 @@ export default function AdminDashboard() {
                       className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                       {batchMoving ? '處理中...' : `🗑️ 批量移到垃圾桶 (${selectedForms.size})`}
-                    </button>
-                  )}
-                  {selectedFormsForMerge.size > 0 && (
-                    <button
-                      onClick={handleMergeReports}
-                      disabled={mergingReports}
-                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {mergingReports ? '合併中...' : `📊 合併報表 (${selectedFormsForMerge.size} 張)`}
                     </button>
                   )}
                 </div>

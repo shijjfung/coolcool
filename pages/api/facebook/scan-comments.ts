@@ -302,9 +302,18 @@ export default async function handler(
 
         const keywords = JSON.parse(form.facebook_keywords || '[]') as string[];
         
+        // 如果沒有設定關鍵字，但只有一個表單，也處理（共用表單的情況）
         if (keywords.length === 0) {
-          console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過處理`);
-          continue;
+          const allMonitoringForms = monitoringForms.filter(f => {
+            const deadline = f.order_deadline ? new Date(f.order_deadline) : new Date(f.deadline);
+            return new Date() <= deadline;
+          });
+          if (allMonitoringForms.length === 1) {
+            console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，但只有一個表單，使用此表單`);
+          } else {
+            console.log(`表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過處理`);
+            continue;
+          }
         }
         
         // 解析貼文 URL 以取得社團資訊
@@ -346,63 +355,86 @@ export default async function handler(
             continue;
           }
 
-          // 解析留言訊息
-          const availableProducts = extractProductsFromForm(form.fields);
-          const parsed = parseOrderMessage(
-            comment.message,
-            availableProducts,
-            '預設商品',
-            'groupbuy'
-          );
-
-          // 建立訂單資料
-          const orderData: Record<string, any> = {};
+          // 🔥 智能處理：如果看到 +1，直接建立簡單訂單（客戶名稱 = 留言者姓名，數量 = 1）
+          const isSimplePlusOne = /\+1|加一|加1|\+\s*1|加\s*一|加\s*1/i.test(comment.message);
+          
+          let orderData: Record<string, any> = {};
           let customerName = comment.from.name;
           let customerPhone = '';
 
-          if (parsed && parsed.items.length > 0) {
-            // 如果成功解析，使用解析結果
-            const mergedItems = mergeOrderItems(parsed.items);
-
-            const productField = form.fields.find(
-              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
-            );
-            if (productField && mergedItems.length > 0) {
-              orderData[productField.name] = mergedItems[0].productName;
-            }
-
+          if (isSimplePlusOne) {
+            // 提取數量（如果訊息是 +2、+3 等）
+            const quantityMatch = comment.message.match(/\+(\d+)|加(\d+)|加一|加1/);
+            const quantity = quantityMatch ? (parseInt(quantityMatch[1] || quantityMatch[2] || '1', 10) || 1) : 1;
+            
+            console.log(`[Facebook] 建立簡單 +1 訂單: ${comment.from.name}, 數量: ${quantity}`);
+            
+            // 尋找數量欄位
             const quantityField = form.fields.find(
-              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量') || f.type === 'number'
             );
             if (quantityField) {
-              const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-              orderData[quantityField.name] = totalQuantity;
+              orderData[quantityField.name] = quantity;
+            } else {
+              // 如果沒有數量欄位，嘗試找第一個 number 類型的欄位
+              const firstNumberField = form.fields.find((f: FormField) => f.type === 'number');
+              if (firstNumberField) {
+                orderData[firstNumberField.name] = quantity;
+              }
             }
-
-            customerName = parsed.customerName || comment.from.name;
-            customerPhone = parsed.customerPhone || '';
+            
+            // 客戶名稱 = 留言者姓名，數量 = 1（或從訊息提取的數量）
+            customerName = comment.from.name;
+            customerPhone = '';
           } else {
-            // 如果無法解析，但符合關鍵字，建立簡單訂單（數量為 1）
-            console.log(`留言符合關鍵字但無法解析，建立簡單訂單: ${comment.message}`);
-            
-            // 嘗試從訊息中提取商品名稱（移除 +1、加一等關鍵字）
-            const cleanMessage = comment.message
-              .replace(/\+1|加一|加1|\+\s*1|加\s*一|加\s*1/gi, '')
-              .trim();
-            
-            const productField = form.fields.find(
-              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+            // 如果不是簡單的 +1，嘗試解析複雜訊息
+            const availableProducts = extractProductsFromForm(form.fields);
+            const parsed = parseOrderMessage(
+              comment.message,
+              availableProducts,
+              '預設商品',
+              'groupbuy'
             );
-            if (productField) {
-              // 如果有商品欄位，使用清理後的訊息作為商品名稱，或使用表單名稱
-              orderData[productField.name] = cleanMessage || form.name || '商品';
-            }
 
-            const quantityField = form.fields.find(
-              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
-            );
-            if (quantityField) {
-              orderData[quantityField.name] = 1; // 預設數量為 1
+            if (parsed && parsed.items.length > 0) {
+              // 如果成功解析，使用解析結果
+              const mergedItems = mergeOrderItems(parsed.items);
+
+              const productField = form.fields.find(
+                (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
+              );
+              if (productField && mergedItems.length > 0) {
+                orderData[productField.name] = mergedItems[0].productName;
+              }
+
+              const quantityField = form.fields.find(
+                (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
+              );
+              if (quantityField) {
+                const totalQuantity = mergedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+                orderData[quantityField.name] = totalQuantity;
+              }
+
+              customerName = parsed.customerName || comment.from.name;
+              customerPhone = parsed.customerPhone || '';
+            } else {
+              // 如果無法解析，但符合關鍵字，建立簡單訂單（數量為 1）
+              console.log(`[Facebook] 留言符合關鍵字但無法解析，建立簡單訂單: ${comment.message}`);
+              
+              const quantityField = form.fields.find(
+                (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量') || f.type === 'number'
+              );
+              if (quantityField) {
+                orderData[quantityField.name] = 1;
+              } else {
+                const firstNumberField = form.fields.find((f: FormField) => f.type === 'number');
+                if (firstNumberField) {
+                  orderData[firstNumberField.name] = 1;
+                }
+              }
+              
+              customerName = comment.from.name;
+              customerPhone = '';
             }
           }
 

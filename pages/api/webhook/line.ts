@@ -350,12 +350,19 @@ export default async function handler(
         for (const form of activeForms) {
           const keywords = form.facebook_keywords ? JSON.parse(form.facebook_keywords) : [];
           
-          if (keywords.length === 0) {
-            console.log(`[LINE] 表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過`);
-            continue;
-          }
-
           console.log(`[LINE] 檢查表單 ${form.id} (${form.name})，關鍵字：${JSON.stringify(keywords)}`);
+          
+          // 如果沒有設定關鍵字，但只有一個表單，也匹配（共用表單的情況）
+          if (keywords.length === 0) {
+            if (activeForms.length === 1) {
+              console.log(`[LINE] ⚠️ 表單 ${form.id} (${form.name}) 沒有設定關鍵字，但只有一個表單，使用此表單`);
+              matchedForms.push({ form, score: 1, reason: '唯一表單（無關鍵字）' });
+              continue;
+            } else {
+              console.log(`[LINE] 表單 ${form.id} (${form.name}) 沒有設定關鍵字，跳過`);
+              continue;
+            }
+          }
           
           // 檢查訊息是否符合關鍵字（使用改進的匹配邏輯）
           let matchScore = 0;
@@ -545,9 +552,65 @@ export default async function handler(
         }
       }
       
-      // 判斷模式：如果訊息包含「+數字」或「數字+」或「加一/加1」，使用團購模式；否則使用代購模式
-      const hasGroupbuyPattern = hasPlusOnePattern || 
-                                  (/[\+\d]/.test(cleanMessage) && !/我要買|買\s/.test(cleanMessage));
+      // 🔥 智能處理：如果看到 +1，直接建立簡單訂單（客戶名稱 = 留言者姓名，數量 = 1）
+      if (hasPlusOnePattern) {
+        // 提取數量（如果訊息是 +2、+3 等）
+        const quantityMatch = cleanMessage.match(/\+(\d+)|加(\d+)|加一|加1/);
+        const quantity = quantityMatch ? (parseInt(quantityMatch[1] || quantityMatch[2] || '1', 10) || 1) : 1;
+        
+        // 建立簡單訂單
+        const orderData: Record<string, any> = {};
+        
+        // 尋找數量欄位
+        const quantityField = targetForm.fields.find(
+          (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量') || f.type === 'number'
+        );
+        if (quantityField) {
+          orderData[quantityField.name] = quantity;
+        } else {
+          // 如果沒有數量欄位，嘗試找第一個 number 類型的欄位
+          const firstNumberField = targetForm.fields.find((f: FormField) => f.type === 'number');
+          if (firstNumberField) {
+            orderData[firstNumberField.name] = quantity;
+          }
+        }
+
+        console.log('[LINE] 📝 建立簡單 +1 訂單:', { 
+          formId: targetForm.id, 
+          orderData, 
+          customerName: senderName,
+          quantity
+        });
+        
+        // 建立訂單：客戶名稱 = 留言者姓名，數量 = 1（或從訊息提取的數量）
+        const orderToken = await createOrder(
+          targetForm.id,
+          orderData,
+          senderName, // 客戶名稱 = 留言者姓名
+          '', // 電話為空
+          undefined,
+          undefined,
+          'line',
+          targetForm,
+          undefined
+        );
+
+        console.log('[LINE] ✅ 訂單建立成功:', { orderToken, formId: targetForm.id, customerName: senderName, quantity });
+        
+        // 回覆確認訊息
+        await replyMessage(
+          event.replyToken!,
+          '✅ 已登記',
+          channelAccessToken,
+          quoteToken
+        );
+        
+        console.log('[LINE] ✅ 已回覆訊息給客戶');
+        continue;
+      }
+
+      // 如果不是簡單的 +1，嘗試解析複雜訊息
+      const hasGroupbuyPattern = /[\+\d]/.test(cleanMessage) && !/我要買|買\s/.test(cleanMessage);
       const mode = hasGroupbuyPattern ? 'groupbuy' : 'proxy';
 
       // 解析訊息
@@ -555,57 +618,8 @@ export default async function handler(
       const parsed = parseOrderMessage(cleanMessage, availableProducts, undefined, mode);
 
       if (!parsed || parsed.items.length === 0) {
-        // 如果訊息包含 +1 相關關鍵字但無法解析，仍然嘗試建立訂單
-        if (hasPlusOnePattern) {
-          // 嘗試提取商品名稱（從訊息中移除 +1、加一等關鍵字）
-          const productName = cleanMessage
-            .replace(/\+1|加一|加1|\+\s*1|加\s*一|加\s*1/gi, '')
-            .trim();
-          
-          if (productName) {
-            // 建立簡單訂單（數量為 1）
-            const orderData: Record<string, any> = {};
-            
-            const productField = targetForm.fields.find(
-              (f: FormField) => f.label.includes('商品') || f.label.includes('品項') || f.label.includes('口味')
-            );
-            if (productField) {
-              orderData[productField.name] = productName;
-            }
-
-            const quantityField = targetForm.fields.find(
-              (f: FormField) => f.label.includes('數量') || f.label.includes('訂購數量')
-            );
-            if (quantityField) {
-              orderData[quantityField.name] = 1;
-            }
-
-            // 建立訂單
-            const orderToken = await createOrder(
-              targetForm.id,
-              orderData,
-              parsed?.customerName || senderName,
-              parsed?.customerPhone || '',
-              undefined,
-              undefined,
-              'line',
-              targetForm,
-              undefined
-            );
-
-            // 回覆確認訊息
-            await replyMessage(
-              event.replyToken!,
-              `✅ 已登記！\n\n商品：${productName}\n數量：1\n訂單代碼：${orderToken}`,
-              channelAccessToken,
-              quoteToken
-            );
-            continue;
-          }
-        }
-        
-        // 如果訊息符合關鍵字但無法解析，靜默處理（避免打擾用戶）
-        console.log('訊息符合關鍵字但無法解析，靜默處理:', { messageText, formKeywords, senderName });
+        // 如果無法解析，靜默處理
+        console.log('[LINE] 訊息無法解析，靜默處理:', { messageText, formKeywords, senderName });
         continue;
       }
 
@@ -634,15 +648,15 @@ export default async function handler(
       console.log('[LINE] 📝 開始建立訂單:', { 
         formId: targetForm.id, 
         orderData, 
-        customerName: parsed.customerName,
+        customerName: parsed.customerName || senderName,
         customerPhone: parsed.customerPhone 
       });
       
       const orderToken = await createOrder(
         targetForm.id,
         orderData,
-        parsed.customerName,
-        parsed.customerPhone,
+        parsed.customerName || senderName,
+        parsed.customerPhone || '',
         undefined,
         undefined,
         'line',
@@ -652,17 +666,14 @@ export default async function handler(
 
       console.log('[LINE] ✅ 訂單建立成功:', { orderToken, formId: targetForm.id });
 
-      // 回覆確認訊息（簡化版本，符合用戶需求）
+      // 回覆確認訊息
       const itemsText = mergedItems
         .map((item: any) => `${item.productName} x${item.quantity}`)
         .join('、');
       
-      // 如果訊息包含 +1 相關關鍵字，使用簡短回覆
-      const replyText = hasPlusOnePattern
-        ? '✅ 已登記'
-        : `✅ 訂單已建立！\n\n商品：${itemsText}\n訂單代碼：${orderToken}\n\n您可以使用此代碼修改訂單。`;
+      const replyText = `✅ 訂單已建立！\n\n商品：${itemsText}\n訂單代碼：${orderToken}\n\n您可以使用此代碼修改訂單。`;
       
-      console.log('[LINE] 💬 準備回覆訊息:', { replyText, hasPlusOnePattern });
+      console.log('[LINE] 💬 準備回覆訊息:', { replyText });
       
       await replyMessage(
         event.replyToken!,

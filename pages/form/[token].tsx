@@ -528,11 +528,7 @@ export default function CustomerForm() {
       return false;
     }
 
-    // 驗證電話（必填）
-    if (!customerPhone.trim()) {
-      alert('請填寫「電話」');
-      return false;
-    }
+    // 電話為選填，不需要驗證
 
     // 驗證表單欄位
     if (form) {
@@ -1098,7 +1094,7 @@ export default function CustomerForm() {
                     <tr className="hover:bg-gray-50">
                       <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
                         電話
-                        <span className="text-red-500 text-xs ml-1">*</span>
+                        <span className="text-gray-400 text-xs ml-1">（選填）</span>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <input
@@ -1108,7 +1104,6 @@ export default function CustomerForm() {
                           onFocus={handlePhoneFocus}
                           className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
                           placeholder={phonePlaceholder}
-                          required
                         />
                       </td>
                     </tr>
