@@ -746,20 +746,22 @@ export default function CreateForm() {
                   <div className="text-xs text-gray-600 mt-2 space-y-1">
                     <p className="font-medium">📋 如何取得貼文連結：</p>
                     <ol className="list-decimal list-inside ml-2 space-y-1">
-                      <li>前往 Facebook 社團</li>
+                      <li>前往 Facebook 社團（公開或私密社團都可以）</li>
                       <li>找到您要監控的貼文</li>
                       <li>點擊貼文右上角的「⋯」或「時間」</li>
                       <li>選擇「複製連結」或「複製貼文連結」</li>
                       <li>貼上到上方欄位</li>
                     </ol>
                     <p className="text-purple-600 mt-2">
-                      ✅ 系統會自動從連結中識別：<br/>
-                      • 社團 ID（例如：123456789）<br/>
-                      • 貼文 ID（例如：987654321）<br/>
-                      • 然後使用完整格式（123456789_987654321）來取得留言
+                      ✅ 系統使用 Puppeteer（瀏覽器自動化）自動抓取留言：<br/>
+                      • 支援公開和私密社團<br/>
+                      • 自動滾動載入所有留言<br/>
+                      • 自動回覆符合關鍵字的留言
                     </p>
                     <p className="text-orange-600 mt-1">
-                      ⚠️ 重要：請確保 Facebook Access Token 有該社團的存取權限
+                      ⚠️ 重要：請先設定 Facebook Cookie（使用 Cookie-Editor 擴充功能取得）<br/>
+                      • 環境變數：FACEBOOK_COOKIES<br/>
+                      • 詳細說明請參考：Puppeteer快速開始.md
                     </p>
                   </div>
                 </div>
@@ -1108,7 +1110,7 @@ export default function CreateForm() {
                           }
                           className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="text">文字</option>
+                          <option value="text">文字選項</option>
                           <option value="number">數字</option>
                           <option value="costco">好事多代購</option>
                         </select>

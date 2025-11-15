@@ -127,19 +127,6 @@ export default function AdminDashboard() {
   const [selectedGroupIdId, setSelectedGroupIdId] = useState<string>('');
   const [newGroupIdName, setNewGroupIdName] = useState('');
   
-  // Facebook Token 狀態
-  const [facebookTokenStatus, setFacebookTokenStatus] = useState<{
-    configured: boolean;
-    valid?: boolean;
-    expires_at?: string | null;
-    days_remaining?: number | null;
-    message?: string;
-  } | null>(null);
-  const [loadingTokenStatus, setLoadingTokenStatus] = useState(false);
-  const [refreshingToken, setRefreshingToken] = useState(false);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
-  const [autoDeployEnabled, setAutoDeployEnabled] = useState(false);
-  const facebookDaysRemaining = facebookTokenStatus?.days_remaining ?? null;
   
   // 從資料庫載入群組 ID 列表
   const loadGroupIds = async () => {
@@ -542,36 +529,12 @@ export default function AdminDashboard() {
     fetchForms();
     checkAutoReports();
     loadGroupIds(); // 載入群組 ID 列表
-    loadFacebookTokenStatus(); // 載入 Facebook Token 狀態
-    
-    // 從 localStorage 載入自動刷新設定
-    if (typeof window !== 'undefined') {
-      const autoRefresh = localStorage.getItem('facebook-auto-refresh');
-      if (autoRefresh === 'true') {
-        setAutoRefreshEnabled(true);
-      }
-      const autoDeploy = localStorage.getItem('facebook-auto-deploy');
-      if (autoDeploy === 'true') {
-        setAutoDeployEnabled(true);
-      }
-    }
     
     // 每 5 分鐘檢查一次報表
     const reportInterval = setInterval(checkAutoReports, 5 * 60 * 1000);
     
-    // 每 1 小時檢查一次 Token 狀態（如果啟用自動刷新）
-    let tokenInterval: NodeJS.Timeout | null = null;
-    if (autoRefreshEnabled) {
-      tokenInterval = setInterval(() => {
-        loadFacebookTokenStatus();
-      }, 60 * 60 * 1000);
-    }
-    
     return () => {
       clearInterval(reportInterval);
-      if (tokenInterval) {
-        clearInterval(tokenInterval);
-      }
     };
   }, [authChecked]);
   
@@ -664,75 +627,6 @@ export default function AdminDashboard() {
     };
   }, [authChecked, forms]);
 
-  // 載入 Facebook Token 狀態
-  const loadFacebookTokenStatus = async () => {
-    setLoadingTokenStatus(true);
-    try {
-      const res = await fetch('/api/facebook/token-status');
-      const data = await res.json();
-      setFacebookTokenStatus(data);
-      
-      // 如果啟用自動刷新，且 Token 剩餘天數少於 10 天，自動刷新
-      const shouldAutoRefresh = autoRefreshEnabled && data.valid && data.days_remaining !== null && data.days_remaining < 10;
-      if (shouldAutoRefresh) {
-        // 延遲執行，避免阻塞 UI
-        setTimeout(() => {
-          handleRefreshToken(true, autoDeployEnabled);
-        }, 1000);
-      }
-    } catch (error) {
-      console.error('載入 Facebook Token 狀態錯誤:', error);
-    } finally {
-      setLoadingTokenStatus(false);
-    }
-  };
-
-  // 刷新 Facebook Token
-  const handleRefreshToken = async (autoRefresh = false, autoDeploy = false) => {
-    if (!autoRefresh && !confirm('確定要刷新 Facebook Token 嗎？這會延長 Token 有效期 60 天。')) {
-      return;
-    }
-
-    setRefreshingToken(true);
-    try {
-      // 如果啟用自動部署，使用自動刷新部署 API
-      const apiEndpoint = autoDeploy ? '/api/facebook/auto-refresh-deploy' : '/api/facebook/refresh-token';
-      const res = await fetch(apiEndpoint, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        const message = autoDeploy
-          ? (autoRefresh ? '✅ Token 已自動刷新並部署（剩餘天數少於 10 天）' : '✅ Token 已刷新，環境變數已更新，部署已觸發！')
-          : (autoRefresh ? '✅ Token 已自動刷新（剩餘天數少於 10 天）' : '✅ Token 已成功刷新！');
-        
-        showToast(message);
-        // 重新載入狀態
-        await loadFacebookTokenStatus();
-        
-        // 提醒用戶更新環境變數（如果不是自動部署）
-        if (!autoRefresh && !autoDeploy) {
-          alert(`Token 已成功刷新！\n\n新的 Token：${data.access_token}\n\n⚠️ 重要：請將新的 Token 更新到環境變數 FACEBOOK_ACCESS_TOKEN\n\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
-        } else if (!autoRefresh && autoDeploy) {
-          alert(`Token 已成功刷新並部署！\n\n✅ Vercel 環境變數已自動更新\n✅ 重新部署已觸發\n\n部署 ID：${data.deployment_id || 'N/A'}\n到期時間：${new Date(data.expires_at).toLocaleString('zh-TW')}`);
-        }
-      } else {
-        showToast(`❌ 刷新失敗：${data.error || '未知錯誤'}`);
-        if (!autoRefresh) {
-          alert(`刷新 Token 失敗：${data.error || '未知錯誤'}\n\n提示：${data.hint || ''}`);
-        }
-      }
-    } catch (error: any) {
-      console.error('刷新 Facebook Token 錯誤:', error);
-      showToast('❌ 刷新時發生錯誤');
-      if (!autoRefresh) {
-        alert('刷新時發生錯誤：' + error.message);
-      }
-    } finally {
-      setRefreshingToken(false);
-    }
-  };
 
   const fetchForms = async () => {
     try {
@@ -1251,157 +1145,62 @@ export default function AdminDashboard() {
         </div>
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
-        {/* 即時訂單通知區域與 Facebook Token 狀態 */}
-        {(realtimeNotifications.length > 0 || facebookTokenStatus) && (
-          <div className="mb-4 flex items-start gap-4">
-            {/* 即時訂單通知區域 */}
-            {realtimeNotifications.length > 0 && (
-              <div className="flex-1 p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                    🔔 即時訂單通知
-                  </h3>
-                  <button
-                    onClick={() => setRealtimeNotifications([])}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    清除全部
-                  </button>
-                </div>
-            <div className="space-y-1">
-              {realtimeNotifications.map((notification) => {
-                const sourceIcon = notification.source === 'facebook' ? '📘' : 
-                                  notification.source === 'line' ? '💬' : '🌐';
-                const sourceText = notification.source === 'facebook' ? '臉書' : 
-                                 notification.source === 'line' ? 'LINE' : '網頁';
-                const timeAgo = Math.floor((Date.now() - notification.timestamp.getTime()) / 1000);
-                const timeText = timeAgo < 60 ? `${timeAgo}秒前` : 
-                               timeAgo < 3600 ? `${Math.floor(timeAgo / 60)}分鐘前` : 
-                               `${Math.floor(timeAgo / 3600)}小時前`;
-                
-                return (
-                  <div
-                    key={notification.id}
-                    className="text-xs text-gray-700 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-base">{sourceIcon}</span>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-purple-600">{notification.formName}</span>
-                        <span className="mx-1">·</span>
-                        <span className="font-medium">{notification.customerName}</span>
-                        {notification.productName && (
-                          <>
-                            <span className="mx-1">·</span>
-                            <span className="text-gray-600">{notification.productName}</span>
-                          </>
-                        )}
-                        <span className="mx-1">·</span>
-                        <span className="text-blue-600">數量 {notification.quantity}</span>
-                        <span className="mx-1 text-gray-400">·</span>
-                        <span className="text-gray-500">{sourceText}</span>
-                        <span className="mx-1 text-gray-400">·</span>
-                        <span className="text-gray-400">{timeText}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-            )}
-            {/* Facebook Token 狀態（小型版本，靠右對齊） */}
-            {facebookTokenStatus && (
-            <div className={`p-2 bg-white rounded-lg shadow border-l-4 border-blue-500 min-w-[280px] ${realtimeNotifications.length === 0 ? 'ml-auto' : ''}`}>
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <h3 className="text-xs font-semibold text-gray-800 flex items-center gap-1">
-                  🔑 Token
+        {/* 即時訂單通知區域 */}
+        {realtimeNotifications.length > 0 && (
+          <div className="mb-4">
+            <div className="p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  🔔 入單即時訊息
                 </h3>
                 <button
-                  onClick={loadFacebookTokenStatus}
-                  disabled={loadingTokenStatus}
-                  className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  title="重新載入"
+                  onClick={() => setRealtimeNotifications([])}
+                  className="text-xs text-gray-500 hover:text-gray-700"
                 >
-                  {loadingTokenStatus ? '...' : '🔄'}
+                  清除全部
                 </button>
               </div>
-              {loadingTokenStatus ? (
-                <p className="text-xs text-gray-600">載入中...</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {!facebookTokenStatus.configured ? (
-                    <p className="text-xs text-orange-600">⚠️ 未設定</p>
-                  ) : !facebookTokenStatus.valid ? (
-                    <p className="text-xs text-red-600">❌ 無效或過期</p>
-                  ) : (
-                    <>
-                      <p className="text-xs text-gray-700">
-                        {facebookDaysRemaining != null ? (
-                          <>
-                            {facebookDaysRemaining > 10 ? (
-                              <span className="text-green-600">
-                                ✅ 剩餘 <strong>{facebookDaysRemaining}</strong> 天
-                              </span>
-                            ) : facebookDaysRemaining > 0 ? (
-                              <span className="text-orange-600">
-                                ⚠️ 剩餘 <strong>{facebookDaysRemaining}</strong> 天
-                              </span>
-                            ) : (
-                              <span className="text-red-600">❌ 已過期</span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-gray-600">✅ 有效</span>
-                        )}
-                      </p>
-                      {facebookTokenStatus.expires_at && (
-                        <p className="text-xs text-gray-500">
-                          {new Date(facebookTokenStatus.expires_at).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-              {facebookTokenStatus.configured && facebookTokenStatus.valid && (
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <div className="flex items-center gap-1 mb-1">
-                    <input
-                      type="checkbox"
-                      checked={autoRefreshEnabled}
-                      onChange={(e) => {
-                        setAutoRefreshEnabled(e.target.checked);
-                        if (e.target.checked) {
-                          localStorage.setItem('facebook-auto-refresh', 'true');
-                          if (facebookDaysRemaining != null && facebookDaysRemaining < 10) {
-                            handleRefreshToken(true, autoDeployEnabled);
-                          }
-                        } else {
-                          localStorage.removeItem('facebook-auto-refresh');
-                        }
-                      }}
-                      className="w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-xs text-gray-700">自動刷新</span>
-                  </div>
-                  <button
-                    onClick={() => handleRefreshToken(false, autoDeployEnabled)}
-                    disabled={refreshingToken}
-                    className={`w-full px-2 py-1 rounded text-xs font-medium transition-colors ${
-                      refreshingToken
-                        ? 'bg-gray-400 text-white cursor-not-allowed'
-                        : facebookDaysRemaining != null && facebookDaysRemaining < 10
-                        ? 'bg-orange-600 text-white hover:bg-orange-700'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {refreshingToken ? '刷新中...' : '🔄 刷新'}
-                  </button>
-                </div>
-              )}
+              <div className="space-y-1">
+                {realtimeNotifications.map((notification) => {
+                  const sourceIcon = notification.source === 'facebook' ? '📘' : 
+                                    notification.source === 'line' ? '💬' : '🌐';
+                  const sourceText = notification.source === 'facebook' ? '臉書' : 
+                                   notification.source === 'line' ? 'LINE' : '網頁';
+                  const timeAgo = Math.floor((Date.now() - notification.timestamp.getTime()) / 1000);
+                  const timeText = timeAgo < 60 ? `${timeAgo}秒前` : 
+                                 timeAgo < 3600 ? `${Math.floor(timeAgo / 60)}分鐘前` : 
+                                 `${Math.floor(timeAgo / 3600)}小時前`;
+                  
+                  return (
+                    <div
+                      key={notification.id}
+                      className="text-xs text-gray-700 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-base">{sourceIcon}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-purple-600">{notification.formName}</span>
+                          <span className="mx-1">·</span>
+                          <span className="font-medium">{notification.customerName}</span>
+                          {notification.productName && (
+                            <>
+                              <span className="mx-1">·</span>
+                              <span className="text-gray-600">{notification.productName}</span>
+                            </>
+                          )}
+                          <span className="mx-1">·</span>
+                          <span className="text-blue-600">數量 {notification.quantity}</span>
+                          <span className="mx-1 text-gray-400">·</span>
+                          <span className="text-gray-500">{sourceText}</span>
+                          <span className="mx-1 text-gray-400">·</span>
+                          <span className="text-gray-400">{timeText}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            )}
           </div>
         )}
         <div className="mb-6 sm:mb-8">

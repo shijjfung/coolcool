@@ -12,13 +12,22 @@ import {
   updateFormLastScanAt
 } from '@/lib/db';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
+import { 
+  fetchCommentsWithPuppeteer,
+  replyToCommentWithPuppeteer,
+  type FacebookComment as PuppeteerComment,
+  type PuppeteerConfig
+} from '@/lib/facebook-puppeteer';
 
 /**
  * Facebook 留言掃描 API
  * 掃描所有啟用自動監控的表單的 Facebook 貼文留言
  * 
- * 注意：此 API 需要 Facebook Access Token
- * 實際使用時可能需要使用 Puppeteer 或其他方式來存取私密社團的留言
+ * 注意：
+ * - Facebook 已於 2024 年 4 月 22 日移除 Groups API
+ * - 無法再透過 Graph API 抓取私密社團留言
+ * - 現在使用 Puppeteer（瀏覽器自動化）來抓取留言
+ * - 需要設定 FACEBOOK_COOKIES 環境變數（從 Cookie-Editor 取得）
  */
 
 interface FacebookComment {
@@ -89,201 +98,6 @@ function parseFacebookPostUrl(postUrl: string): { groupId?: string; postId: stri
   throw new Error(`無法從 URL 中提取貼文 ID：${postUrl}`);
 }
 
-/**
- * 使用 Facebook Graph API 取得貼文留言
- * 注意：對於私密社團，需要適當的權限和 Access Token
- */
-async function fetchFacebookComments(
-  postUrl: string,
-  accessToken: string
-): Promise<FacebookComment[]> {
-  try {
-    // 解析 URL 取得社團 ID 和貼文 ID
-    const { groupId, postId } = parseFacebookPostUrl(postUrl);
-    
-    console.log(`[Facebook] 解析 URL：社團 ID=${groupId || '無'}, 貼文 ID=${postId}`);
-    console.log(`[Facebook] 原始 URL：${postUrl}`);
-    
-    // 嘗試多種 API 端點格式
-    const apiEndpoints: Array<{ name: string; url: string }> = [];
-    
-    if (groupId) {
-      // 方法 1: 使用完整格式 {group_id}_{post_id}
-      apiEndpoints.push({
-        name: '完整格式 (group_id_post_id)',
-        url: `https://graph.facebook.com/v18.0/${groupId}_${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
-      });
-      
-      // 方法 2: 使用社團 feed 然後過濾（需要先取得貼文）
-      // 這個方法較複雜，先不實作
-      
-      // 方法 3: 直接使用貼文 ID（不帶群組 ID）
-      apiEndpoints.push({
-        name: '直接貼文 ID',
-        url: `https://graph.facebook.com/v18.0/${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
-      });
-    } else {
-      // 如果沒有群組 ID，直接使用貼文 ID
-      apiEndpoints.push({
-        name: '貼文 ID',
-        url: `https://graph.facebook.com/v18.0/${postId}/comments?access_token=${accessToken}&fields=id,message,from,created_time&limit=100`
-      });
-    }
-    
-    // 嘗試每個端點
-    for (const endpoint of apiEndpoints) {
-      try {
-        console.log(`[Facebook] 嘗試端點：${endpoint.name}`);
-        console.log(`[Facebook] API URL：${endpoint.url.replace(accessToken, 'TOKEN_HIDDEN')}`);
-        
-        let allComments: FacebookComment[] = [];
-        let nextUrl = endpoint.url;
-        let attemptCount = 0;
-        const maxAttempts = 10; // 最多嘗試 10 頁
-        
-        while (nextUrl && attemptCount < maxAttempts) {
-          attemptCount++;
-          const response = await fetch(nextUrl, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            let errorData: any = {};
-            try {
-              errorData = JSON.parse(errorText);
-            } catch {
-              // 如果不是 JSON，直接使用文字
-            }
-            
-            console.error(`[Facebook] API 錯誤 (${endpoint.name}):`, errorText);
-            
-            // 檢查錯誤類型
-            if (errorData.error) {
-              const errorCode = errorData.error.code;
-              const errorSubcode = errorData.error.error_subcode;
-              const errorMessage = errorData.error.message;
-              
-              console.error(`[Facebook] 錯誤代碼：${errorCode}, 子代碼：${errorSubcode}`);
-              console.error(`[Facebook] 錯誤訊息：${errorMessage}`);
-              
-              // 錯誤代碼 100 + 子代碼 33 通常表示權限不足或物件不存在
-              if (errorCode === 100 && errorSubcode === 33) {
-                console.warn(`[Facebook] 物件不存在或權限不足 (${endpoint.name})`);
-                // 繼續嘗試下一個端點
-                break;
-              }
-              
-              // 如果是權限錯誤，嘗試下一個端點
-              if (response.status === 403 || response.status === 401) {
-                console.warn(`[Facebook] 權限不足 (${endpoint.name})`);
-                break;
-              }
-            }
-            
-            // 如果不是第一個端點，嘗試下一個
-            if (endpoint !== apiEndpoints[0]) {
-              break;
-            }
-            
-            // 如果是第一個端點且是權限錯誤，嘗試下一個
-            throw new Error(`Facebook API 錯誤: ${response.status}`);
-          }
-
-          const data = await response.json();
-          
-          // 檢查是否有錯誤
-          if (data.error) {
-            console.error(`[Facebook] API 返回錯誤 (${endpoint.name}):`, data.error);
-            // 嘗試下一個端點
-            break;
-          }
-          
-          if (data.data) {
-            allComments = allComments.concat(data.data);
-            console.log(`[Facebook] 成功取得 ${data.data.length} 筆留言 (${endpoint.name})，累計 ${allComments.length} 筆`);
-          }
-          
-          // 檢查是否有下一頁
-          nextUrl = data.paging?.next || null;
-          
-          // 限制最多取得 500 筆留言（避免過多）
-          if (allComments.length >= 500) {
-            console.log(`[Facebook] 已達到 500 筆留言上限`);
-            break;
-          }
-        }
-        
-        // 如果成功取得留言，返回結果
-        if (allComments.length > 0) {
-          console.log(`[Facebook] ✅ 成功使用 ${endpoint.name} 取得 ${allComments.length} 筆留言`);
-          return allComments;
-        }
-        
-        console.log(`[Facebook] ⚠️ ${endpoint.name} 未取得任何留言，嘗試下一個端點...`);
-      } catch (endpointError: any) {
-        console.error(`[Facebook] 端點 ${endpoint.name} 發生錯誤:`, endpointError.message);
-        // 繼續嘗試下一個端點
-        continue;
-      }
-    }
-    
-    // 所有端點都失敗
-    console.warn(`[Facebook] ⚠️ 所有 API 端點都無法取得留言`);
-    console.warn(`[Facebook] 可能原因：`);
-    console.warn(`  1. Access Token 權限不足（需要 groups_read_content, groups_access_member_info）`);
-    console.warn(`  2. 貼文 ID 不正確或貼文不存在`);
-    console.warn(`  3. 貼文屬於私密社團，且 Token 沒有該社團的存取權限`);
-    console.warn(`[Facebook] 建議檢查：`);
-    console.warn(`  - 在 Graph API Explorer 中測試 Token 權限`);
-    console.warn(`  - 確認貼文 URL 是否正確`);
-    console.warn(`  - 確認 Token 是否為該社團的管理員或成員`);
-    
-    return [];
-  } catch (error: any) {
-    console.error('[Facebook] 取得留言時發生未預期錯誤:', error);
-    return [];
-  }
-}
-
-/**
- * 回覆 Facebook 留言
- */
-async function replyToFacebookComment(
-  commentId: string,
-  message: string,
-  accessToken: string
-): Promise<boolean> {
-  try {
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${commentId}/comments`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          access_token: accessToken,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Facebook 回覆錯誤:', error);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('回覆 Facebook 留言錯誤:', error);
-    return false;
-  }
-}
 
 /**
  * 檢查留言是否符合關鍵字（支援靈活的模式匹配）
@@ -372,12 +186,15 @@ export default async function handler(
       });
     }
 
-    // 檢查是否有 Access Token
-    const fbAccessToken = accessToken || process.env.FACEBOOK_ACCESS_TOKEN;
-    if (!fbAccessToken) {
+    // 檢查是否使用 Puppeteer 模式
+    const usePuppeteer = req.body.usePuppeteer === true || process.env.FACEBOOK_USE_PUPPETEER === 'true';
+    
+    // 如果未啟用 Puppeteer 模式，返回錯誤
+    if (!usePuppeteer) {
       return res.status(400).json({
-        error: '缺少 Facebook Access Token',
-        hint: '請在環境變數中設定 FACEBOOK_ACCESS_TOKEN，或在請求中提供 accessToken',
+        error: 'Graph API 模式已不再支援',
+        hint: 'Facebook 已移除 Groups API，請使用 Puppeteer 模式',
+        solution: '設定 FACEBOOK_USE_PUPPETEER=true 或 usePuppeteer=true',
       });
     }
 
@@ -388,7 +205,7 @@ export default async function handler(
     console.log(`[Facebook] ========== 開始掃描 Facebook 留言 ==========`);
     console.log(`[Facebook] 時間：${new Date().toISOString()}`);
     console.log(`[Facebook] 啟用監控的表單數量：${monitoringForms.length}`);
-    console.log(`[Facebook] Access Token：${fbAccessToken ? '已設定' : '未設定'}`);
+    console.log(`[Facebook] 使用模式：Puppeteer（瀏覽器自動化）`);
 
     // 掃描每個表單的留言
     for (const form of monitoringForms) {
@@ -435,14 +252,46 @@ export default async function handler(
         const urlInfo = parseFacebookPostUrl(form.facebook_post_url!);
         console.log(`表單 ${form.id} (${form.name})：社團 ID=${urlInfo.groupId || '無'}, 貼文 ID=${urlInfo.postId}, 發文者：${form.facebook_post_author || '未設定'}`);
         
-        // 取得留言
+        // 取得留言（使用 Puppeteer 模式）
         console.log(`[Facebook] 開始取得留言，表單：${form.id} (${form.name})，貼文 URL：${form.facebook_post_url}`);
-        const comments = await fetchFacebookComments(form.facebook_post_url!, fbAccessToken);
-        console.log(`[Facebook] 取得 ${comments.length} 筆留言`);
+        console.log(`[Facebook] 使用模式：Puppeteer（瀏覽器自動化）`);
+        
+        let comments: FacebookComment[] = [];
+        
+        try {
+          const puppeteerConfig: PuppeteerConfig = {
+            headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false', // 預設無頭模式
+            cookies: process.env.FACEBOOK_COOKIES,
+            timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
+          };
+          
+          const puppeteerComments = await fetchCommentsWithPuppeteer(
+            form.facebook_post_url!,
+            puppeteerConfig
+          );
+          
+          // 轉換格式以符合現有的 FacebookComment 介面
+          comments = puppeteerComments.map((comment: PuppeteerComment) => ({
+            id: comment.id,
+            message: comment.message,
+            from: comment.from,
+            created_time: comment.created_time,
+          }));
+          
+          console.log(`[Facebook] ✅ Puppeteer 模式：取得 ${comments.length} 筆留言`);
+        } catch (puppeteerError: any) {
+          console.error(`[Facebook] ❌ Puppeteer 模式錯誤:`, puppeteerError.message);
+          results.push({
+            formId: form.id,
+            formName: form.name,
+            error: `Puppeteer 錯誤: ${puppeteerError.message}`,
+          });
+          continue;
+        }
         
         if (comments.length === 0) {
           console.log(`[Facebook] ⚠️ 表單 ${form.id} (${form.name}) 沒有取得任何留言，可能原因：`);
-          console.log(`  - Access Token 無效或過期`);
+          console.log(`  - Cookie 無效或過期`);
           console.log(`  - 貼文 URL 格式錯誤`);
           console.log(`  - 沒有權限存取該貼文`);
           console.log(`  - 貼文確實沒有留言`);
@@ -593,18 +442,40 @@ export default async function handler(
           console.log(`[Facebook] ✅ 訂單建立成功：${orderToken}`);
 
           // 自動回覆留言（使用表單設定的回覆訊息，或預設「已登記」）
+          // 使用 Puppeteer 回覆留言
           const replyMessage = form.facebook_reply_message || '已登記';
-          console.log(`[Facebook] 💬 準備回覆留言 ${comment.id}：${replyMessage}`);
+          console.log(`[Facebook] 💬 準備使用 Puppeteer 回覆留言 ${comment.id}：${replyMessage}`);
           
-          const replySuccess = await replyToFacebookComment(comment.id, replyMessage, fbAccessToken);
+          // 使用 Puppeteer 回覆留言
+          // 傳入貼文 URL 和留言 ID，讓 Puppeteer 自動構建留言 URL
+          const postUrl = form.facebook_post_url!;
           
-          if (replySuccess) {
-            console.log(`[Facebook] ✅ 已回覆留言 ${comment.id}：${replyMessage}`);
-          } else {
-            console.warn(`[Facebook] ⚠️ 回覆留言 ${comment.id} 失敗，可能原因：`);
-            console.warn(`  - Access Token 無效或過期`);
-            console.warn(`  - 沒有回覆留言的權限`);
-            console.warn(`  - 留言 ID 錯誤`);
+          let replySuccess = false;
+          try {
+            const puppeteerConfig: PuppeteerConfig = {
+              headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false',
+              cookies: process.env.FACEBOOK_COOKIES,
+              timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
+            };
+            
+            replySuccess = await replyToCommentWithPuppeteer(
+              postUrl,
+              replyMessage,
+              puppeteerConfig,
+              comment.id
+            );
+            
+            if (replySuccess) {
+              console.log(`[Facebook] ✅ 已使用 Puppeteer 回覆留言 ${comment.id}：${replyMessage}`);
+            } else {
+              console.warn(`[Facebook] ⚠️ 回覆留言 ${comment.id} 失敗，可能原因：`);
+              console.warn(`  - Cookie 無效或過期`);
+              console.warn(`  - 留言 URL 格式錯誤`);
+              console.warn(`  - 無法找到回覆輸入框`);
+            }
+          } catch (replyError: any) {
+            console.error(`[Facebook] ❌ 回覆留言錯誤:`, replyError.message);
+            replySuccess = false;
           }
 
           // 標記為已處理（使用資料庫記錄）

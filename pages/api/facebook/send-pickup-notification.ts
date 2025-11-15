@@ -3,8 +3,13 @@ import {
   ensureDatabaseInitialized,
   getOrdersByIds,
   markFacebookPickupNotified,
+  getFormById,
   type Order,
 } from '@/lib/db';
+import {
+  replyToCommentWithPuppeteer,
+  type PuppeteerConfig
+} from '@/lib/facebook-puppeteer';
 
 interface SuccessResult {
   orderId: number;
@@ -41,10 +46,12 @@ export default async function handler(
       return res.status(400).json({ error: '請輸入通知訊息' });
     }
 
-    const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
-    if (!accessToken) {
+    // 檢查是否設定 Cookie（Puppeteer 需要）
+    const cookies = process.env.FACEBOOK_COOKIES;
+    if (!cookies) {
       return res.status(400).json({
-        error: '缺少 Facebook Access Token，無法發送通知',
+        error: '缺少 Facebook Cookie，無法發送通知',
+        hint: '請在環境變數中設定 FACEBOOK_COOKIES（從 Cookie-Editor 取得）',
       });
     }
 
@@ -73,40 +80,54 @@ export default async function handler(
     for (const order of targets) {
       const commentId = order.facebook_comment_id!;
       try {
-        const response = await fetch(
-          `https://graph.facebook.com/v18.0/${commentId}/comments`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-              message: trimmedMessage,
-              access_token: accessToken,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
+        // 取得表單以取得 Facebook 貼文 URL
+        const form = await getFormById(order.form_id);
+        if (!form || !form.facebook_post_url) {
           failed.push({
             orderId: order.id,
             commentId,
-            error:
-              errorText ||
-              `Facebook API 錯誤 (HTTP ${response.status} ${response.statusText})`,
+            error: '找不到表單或表單未設定 Facebook 貼文 URL',
           });
           continue;
         }
 
-        const notifiedAt = new Date().toISOString();
-        await markFacebookPickupNotified(order.id, notifiedAt);
-        success.push({
-          orderId: order.id,
-          commentId,
-          notifiedAt,
-        });
+        // 使用 Puppeteer 回覆留言
+        // 傳入貼文 URL 和留言 ID，讓 Puppeteer 自動構建留言 URL
+        const postUrl = form.facebook_post_url;
+
+        console.log(`[Puppeteer] 準備回覆留言：貼文 ${postUrl}，留言 ID ${commentId}`);
+
+        const puppeteerConfig: PuppeteerConfig = {
+          headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false',
+          cookies: cookies,
+          timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
+        };
+
+        const replySuccess = await replyToCommentWithPuppeteer(
+          postUrl,
+          trimmedMessage,
+          puppeteerConfig,
+          commentId
+        );
+
+        if (replySuccess) {
+          const notifiedAt = new Date().toISOString();
+          await markFacebookPickupNotified(order.id, notifiedAt);
+          success.push({
+            orderId: order.id,
+            commentId,
+            notifiedAt,
+          });
+          console.log(`[Puppeteer] ✅ 已成功回覆留言 ${commentId}`);
+        } else {
+          failed.push({
+            orderId: order.id,
+            commentId,
+            error: 'Puppeteer 回覆留言失敗',
+          });
+        }
       } catch (error: any) {
+        console.error(`[Puppeteer] 回覆留言錯誤 (訂單 ${order.id}):`, error.message);
         failed.push({
           orderId: order.id,
           commentId,

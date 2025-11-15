@@ -1098,6 +1098,16 @@ export default function CustomerForm() {
                               </div>
                             );
                           })()}
+                          {field.type === 'text' && (
+                            <input
+                              type="text"
+                              value={order.order_data[field.name] || ''}
+                              onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                              className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
+                              placeholder={`請輸入${field.label}`}
+                              required={field.required}
+                            />
+                          )}
                           {field.type === 'number' && (() => {
                             const currentValue = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
                             
