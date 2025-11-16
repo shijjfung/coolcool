@@ -515,7 +515,7 @@ export async function replyToCommentWithPuppeteer(
         
         for (const element of commentElements) {
           // 檢查是否包含留言 ID（在連結或屬性中）
-          const links = element.querySelectorAll('a[href*="/comment/"]');
+          const links = Array.from(element.querySelectorAll('a[href*="/comment/"]'));
           for (const link of links) {
             if (link.getAttribute('href')?.includes(id)) {
               // 找到留言，尋找回覆按鈕
