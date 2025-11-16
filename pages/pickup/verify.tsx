@@ -746,7 +746,6 @@ export default function PickupVerifyPage() {
                 {QrReader ? (
                   <QrReader
                     key={scannerKey}
-                    constraints={{ facingMode: { ideal: 'environment' } }}
                     onResult={(result, error) => {
                       if (result) {
                         const payload =
