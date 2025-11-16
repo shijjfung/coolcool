@@ -6,6 +6,9 @@ declare module 'react-qr-reader' {
     constraints?: MediaTrackConstraints;
     containerStyle?: CSSProperties;
     videoStyle?: CSSProperties;
+    scanDelay?: number | false;
+    onScan?: (result: string | null) => void;
+    onError?: (error: any) => void;
   }
 
   export const QrReader: ComponentType<QrReaderProps>;
