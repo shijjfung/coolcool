@@ -269,8 +269,10 @@ export async function fetchCommentsWithPuppeteer(
 
     // 等待留言區域載入
     console.log('[Puppeteer] 等待留言區域載入...');
-    await page.waitForTimeout?.(3000);
-    if (typeof page.waitForTimeout !== 'function') {
+    const waitForTimeout = (page as any).waitForTimeout?.bind(page);
+    if (typeof waitForTimeout === 'function') {
+      await waitForTimeout(3000);
+    } else {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
@@ -319,8 +321,9 @@ async function autoScroll(page: Page): Promise<void> {
   });
 
   // 等待新內容載入
-  if (typeof page.waitForTimeout === 'function') {
-    await page.waitForTimeout(2000);
+  const waitForTimeout = (page as any).waitForTimeout?.bind(page);
+  if (typeof waitForTimeout === 'function') {
+    await waitForTimeout(2000);
   } else {
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
