@@ -56,10 +56,17 @@ export default async function handler(
           lineCommentUrl,
           facebookPostUrl,
           facebookPostAuthor,
+          facebookTargetUrl,
+          facebookPostTemplate,
+          facebookVendorContent,
+          facebookPostImages,
           facebookKeywords,
           facebookAutoMonitor,
           facebookReplyMessage,
           facebookScanInterval,
+          facebookAutoDeadlineScan,
+          facebookManualStrictDeadline,
+          facebookAllowOverdue,
           linePostAuthor,
           postDeadlineReplyMessage,
           lineCustomIdentifier,
@@ -96,6 +103,17 @@ export default async function handler(
           }
         }
 
+        if (facebookAutoMonitor) {
+          if (!facebookTargetUrl || !facebookTargetUrl.trim()) {
+            setJsonHeaders(res);
+            return res.status(400).json({ error: '請輸入 Facebook 社團或貼文目標連結' });
+          }
+          if (!facebookPostTemplate || !facebookPostTemplate.trim()) {
+            setJsonHeaders(res);
+            return res.status(400).json({ error: '請輸入 Facebook 貼文內容模板' });
+          }
+        }
+
         const formId = await createForm(
           name,
           fields as FormField[],
@@ -107,34 +125,23 @@ export default async function handler(
           lineCommentUrl,
           facebookPostUrl,
           facebookPostAuthor,
+          facebookTargetUrl,
+          facebookPostTemplate,
+          facebookVendorContent,
+          facebookPostImages,
           facebookKeywords,
           facebookAutoMonitor ? 1 : 0,
           facebookReplyMessage,
           facebookScanInterval ? parseInt(String(facebookScanInterval)) : undefined,
+          facebookAutoDeadlineScan ? 1 : 0,
+          facebookManualStrictDeadline ? 1 : 0,
+          facebookAllowOverdue ? 1 : 0,
           linePostAuthor,
           postDeadlineReplyMessage,
           lineCustomIdentifier,
           useCustomLineIdentifier ? 1 : 0
         );
         const form = await getFormById(formId);
-
-        // 如果啟用了 Facebook 自動監控，立即觸發一次掃描
-        if (facebookAutoMonitor && facebookPostUrl) {
-          try {
-            // 非同步觸發掃描，不等待結果（使用內部 API 調用）
-            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-            fetch(`${baseUrl}/api/facebook/scan-comments`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ formId }),
-            }).catch(err => {
-              console.error('觸發 Facebook 掃描失敗:', err);
-            });
-          } catch (error) {
-            console.error('觸發 Facebook 掃描錯誤:', error);
-          }
-        }
 
         setJsonHeaders(res);
         return res.status(200).json({ success: true, formId, formToken: form?.form_token });

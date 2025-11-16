@@ -80,6 +80,7 @@ export default function FormEntry() {
   const [pickupResult, setPickupResult] = useState<PickupSearchResult | null>(null);
   const [pickupQr, setPickupQr] = useState('');
   const [pickupVerifyUrl, setPickupVerifyUrl] = useState('');
+  const [pickupMessage, setPickupMessage] = useState('');
   const [modifyOrderOptions, setModifyOrderOptions] = useState<any[]>([]);
   const [deleteOrderOptions, setDeleteOrderOptions] = useState<any[]>([]);
   const [selectedDeleteOrderTokens, setSelectedDeleteOrderTokens] = useState<string[]>([]);
@@ -635,6 +636,185 @@ export default function FormEntry() {
     }
   };
 
+  const pickupModal = showPickupModal ? (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative transform transition-all scale-100">
+        <button
+          onClick={() => setShowPickupModal(false)}
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="p-6 sm:p-8">
+          <div className="mb-6 text-center">
+            <div className="mx-auto w-16 h-16 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-4">
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">我要取貨</h2>
+            <p className="text-gray-500 mt-2">請輸入訂單時填寫的姓名與電話，查詢未取貨品項</p>
+          </div>
+
+          <form onSubmit={handlePickupSearch} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">姓名</label>
+              <input
+                type="text"
+                value={pickupName}
+                onChange={(e) => setPickupName(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                placeholder="請輸入訂購者姓名"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">電話</label>
+              <input
+                type="tel"
+                value={pickupPhone}
+                onChange={(e) => setPickupPhone(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                placeholder="請輸入訂購者電話"
+                required
+              />
+            </div>
+            {pickupError && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
+                {pickupError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={pickupLoading}
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-semibold shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {pickupLoading ? (
+                <>
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                  </svg>
+                  查詢中...
+                </>
+              ) : (
+                <>
+                  <span>查詢未取貨品項</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {pickupResult && pickupResult.orders.length > 0 && (
+            <div className="mt-8 space-y-6">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">取貨憑證有效期限</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {pickupResult.expiresAt
+                        ? new Date(pickupResult.expiresAt).toLocaleString('zh-TW', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })
+                        : '15 分鐘內'}
+                    </p>
+                  </div>
+                  {pickupQr && (
+                    <div className="text-center">
+                      <img src={`data:image/png;base64,${pickupQr}`} alt="取貨 QR Code" className="w-28 h-28 mx-auto" />
+                      <p className="text-xs text-gray-500 mt-1">取貨時請出示 QR Code 供店家掃描</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {pickupResult.orders.map((order) => (
+                  <div key={order.orderToken} className="border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="bg-gray-50 px-5 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">訂單編號</p>
+                        <p className="text-base font-semibold text-gray-800">{order.orderToken}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500">下單時間</p>
+                        <p className="text-sm font-medium text-gray-700">
+                          {new Date(order.orderCreatedAt).toLocaleString('zh-TW', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                      {order.items.map((item) => (
+                        <div key={item.itemKey} className="flex items-start justify-between">
+                          <div>
+                            <p className="font-semibold text-gray-800">{item.itemLabel}</p>
+                            <p className="text-sm text-gray-500">
+                              剩餘 <span className="text-purple-600 font-semibold">{item.remainingQuantity}</span> 件
+                              {item.unitPrice ? `（單價 ${item.unitPrice} 元）` : ''}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            {item.remainingTotalPrice !== undefined && (
+                              <p className="text-lg font-bold text-purple-600">{item.remainingTotalPrice} 元</p>
+                            )}
+                            <p className="text-sm text-gray-500">
+                              已取 <span className="font-semibold text-gray-700">{item.pickedQuantity}</span> 件
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {pickupResult.token && (
+                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4">
+                  <p className="text-sm text-purple-600">
+                    若需補掃描，可將以下連結提供給店家：
+                  </p>
+                  <div className="mt-2 flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={pickupVerifyUrl}
+                      readOnly
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-purple-200 bg-white text-sm text-gray-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(pickupVerifyUrl);
+                        setPickupMessage('已複製取貨連結！');
+                        setTimeout(() => setPickupMessage(''), 2000);
+                      }}
+                      className="px-4 py-2.5 bg-purple-600 text-white rounded-xl font-medium shadow hover:bg-purple-700 transition"
+                    >
+                      複製連結
+                    </button>
+                  </div>
+                  {pickupMessage && <p className="text-sm text-purple-600 mt-2">{pickupMessage}</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -659,25 +839,47 @@ export default function FormEntry() {
 
   if (isExpired) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center bg-white rounded-lg shadow p-8 max-w-md">
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-10">
+        <div className="text-center bg-white rounded-xl shadow-lg p-8 max-w-lg w-full border border-gray-100">
           <h1 className="text-2xl font-bold text-gray-800 mb-4">
             {form ? `${form.name}的單已收單截止` : '表單已截止'}
           </h1>
-          <p className="text-gray-600 mb-2">
-            此表單的結單及停止下單時間為：{form && new Date(form.deadline).toLocaleString('zh-TW', { 
-              year: 'numeric', 
-              month: '2-digit', 
-              day: '2-digit', 
-              hour: '2-digit', 
+          <p className="text-gray-600 mb-4">
+            結單時間：{new Date(form.deadline).toLocaleString('zh-TW', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
               minute: '2-digit',
-              hour12: false
+              hour12: false,
             })}
           </p>
-          <p className="text-gray-600 mt-4">
-            若有疑問可電 <a href="tel:087663016" className="text-blue-600 hover:text-blue-800 underline">(08)7663016</a> 洽詢 涼涼古早味冰品團購
+          <p className="text-gray-600">
+            若有疑問可電{' '}
+            <a href="tel:087663016" className="text-blue-600 hover:text-blue-800 underline">
+              (08)7663016
+            </a>{' '}
+            洽詢 涼涼古早味冰品團購
           </p>
+          <div className="mt-6">
+            <button
+              onClick={() => {
+                setShowPickupModal(true);
+                setPickupError('');
+              }}
+              className="w-full relative bg-gradient-to-r from-purple-500 via-fuchsia-500 to-purple-700 text-white px-6 py-4 rounded-full border-2 border-purple-300/60 shadow-[0_18px_36px_rgba(168,85,247,0.5),0_10px_20px_rgba(168,85,247,0.35),inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-purple-600 hover:via-fuchsia-600 hover:to-purple-800 hover:shadow-[0_26px_48px_rgba(168,85,247,0.6),0_14px_28px_rgba(168,85,247,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] hover:-translate-y-1 hover:scale-[1.01] active:shadow-[0_6px_20px_rgba(168,85,247,0.4),inset_0_2px_6px_rgba(0,0,0,0.2)] transition-all duration-400 transform text-base font-semibold flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="drop-shadow-md">我要取貨</span>
+            </button>
+            <p className="text-sm text-gray-600 text-center mt-2">
+              查詢未取貨商品並生成 QR Code，取貨時提供給店家掃描
+            </p>
+          </div>
         </div>
+        {pickupModal}
       </div>
     );
   }
@@ -687,7 +889,7 @@ export default function FormEntry() {
       <Head>
         <title>{form.name} - 涼涼古早味創意冰品-團購</title>
       </Head>
-      <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
+      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
         {/* 主卡片 */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           {/* 頂部裝飾條 */}
@@ -751,13 +953,13 @@ export default function FormEntry() {
                         <span className="text-xs text-gray-600 font-medium">天</span>
                       </div>
                     )}
-                    <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                    <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[52px] sm:min-w-[60px]">
                       <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
                         {String(timeRemaining.hours).padStart(2, '0')}
                       </span>
                       <span className="text-xs text-gray-600 font-medium">時</span>
                     </div>
-                    <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                    <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[52px] sm:min-w-[60px]">
                       <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
                         {String(timeRemaining.minutes).padStart(2, '0')}
                       </span>
@@ -792,15 +994,19 @@ export default function FormEntry() {
               {/* 購物下單按鈕（全寬，最突出） */}
               <Link
                 href={`/form/${token}/order`}
-                className="block w-full group relative overflow-hidden"
+                className="block w-full group relative"
               >
-                <div className="relative bg-gradient-to-r from-emerald-400 via-lime-400 to-emerald-600 text-white px-8 py-5 rounded-full border-2 border-emerald-300/60 shadow-[0_18px_35px_rgba(16,185,129,0.55),0_10px_25px_rgba(16,185,129,0.35),inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-emerald-500 hover:via-lime-500 hover:to-emerald-700 hover:shadow-[0_28px_55px_rgba(16,185,129,0.65),0_18px_35px_rgba(16,185,129,0.5),inset_0_1px_0_rgba(255,255,255,0.35)] hover:-translate-y-1.5 hover:scale-[1.01] active:shadow-[0_8px_22px_rgba(16,185,129,0.45),inset_0_2px_4px_rgba(0,0,0,0.25)] transition-all duration-400 transform text-center text-lg sm:text-xl font-bold">
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-full bg-gradient-to-r from-emerald-300 via-lime-200 to-emerald-400 opacity-60 blur-xl transition-all duration-500 group-hover:opacity-80 group-hover:scale-105 pointer-events-none"
+                />
+                <div className="relative bg-gradient-to-r from-emerald-400 via-lime-400 to-emerald-600 text-white px-8 py-5 rounded-full border-2 border-emerald-300/60 shadow-[0_20px_40px_rgba(16,185,129,0.45),0_10px_30px_rgba(16,185,129,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] hover:from-emerald-500 hover:via-lime-500 hover:to-emerald-700 hover:shadow-[0_30px_60px_rgba(16,185,129,0.55),0_18px_35px_rgba(16,185,129,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] hover:-translate-y-1.5 hover:scale-[1.01] active:shadow-[0_12px_26px_rgba(16,185,129,0.35),inset_0_2px_4px_rgba(0,0,0,0.25)] transition-all duration-400 transform text-center text-lg sm:text-xl font-bold">
                   <div className="flex items-center justify-center gap-3 relative z-10">
-                    <svg className="w-6 h-6 group-hover:scale-110 transition-transform drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 group-hover:scale-110 transition-transform drop-shadow-2xl" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    <span className="drop-shadow-md">開始購物下單</span>
-                    <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <span className="drop-shadow-lg">開始購物下單</span>
+                    <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform drop-shadow-2xl" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </div>
@@ -978,144 +1184,7 @@ export default function FormEntry() {
         </div>
       )}
 
-      {/* 我要取貨對話框 */}
-      {showPickupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full relative overflow-hidden">
-            <div className="absolute inset-0 pointer-events-none opacity-10 bg-[radial-gradient(circle_at_top,_rgba(168,85,247,0.4),_transparent_60%)]"></div>
-            <div className="relative p-6 sm:p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">我要取貨</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    請輸入下單時填寫的姓名與電話，即可查詢所有未取貨的商品
-                  </p>
-                </div>
-                <button
-                  onClick={handleClosePickupModal}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    姓名
-                  </label>
-                  <input
-                    value={pickupName}
-                    onChange={(e) => setPickupName(e.target.value)}
-                    placeholder="請輸入下單人姓名"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    電話
-                  </label>
-                  <input
-                    value={pickupPhone}
-                    onChange={(e) => setPickupPhone(e.target.value)}
-                    placeholder="請輸入下單人電話"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
-                  />
-                </div>
-              </div>
-
-              {pickupError && (
-                <p className="text-sm text-red-500 mt-3">{pickupError}</p>
-              )}
-
-              <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:items-center">
-                <button
-                  onClick={handlePickupSearch}
-                  disabled={pickupLoading}
-                  className="flex-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-purple-700 text-white font-semibold py-3 rounded-xl shadow-md hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {pickupLoading ? '查詢中…' : '查詢未取貨商品'}
-                </button>
-                <button
-                  onClick={handleClosePickupModal}
-                  className="px-5 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50"
-                >
-                  取消
-                </button>
-              </div>
-
-              {pickupResult && pickupResult.orders.length > 0 && (
-                <div className="mt-6 space-y-5">
-                  <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl">
-                    <p className="text-sm text-purple-700 font-semibold">
-                      共有 {pickupResult.orders.length} 筆已結單且未取貨的訂單
-                    </p>
-                    <p className="text-xs text-purple-500 mt-1">
-                      QR Code 有效期限：{new Date(pickupResult.expiresAt).toLocaleString('zh-TW', { hour12: false })}
-                    </p>
-                  </div>
-
-                  {pickupResult.orders.map((order) => (
-                    <div key={order.orderId} className="border border-gray-100 rounded-2xl shadow-sm p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-lg font-semibold text-gray-800">{order.formName}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            下單時間：{new Date(order.orderCreatedAt).toLocaleString('zh-TW', { hour12: false })}
-                          </p>
-                        </div>
-                        <span className="text-sm px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full font-semibold">
-                          {order.items.length} 項待取貨
-                        </span>
-                      </div>
-
-                      <div className="mt-4 space-y-2">
-                        {order.items.map((item) => (
-                          <div
-                            key={item.itemKey}
-                            className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 border border-gray-100"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800">{item.itemLabel}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                未取貨：<span className="font-semibold text-indigo-600">{item.remainingQuantity}</span>
-                              </p>
-                            </div>
-                            <span className="text-lg font-bold text-indigo-600">
-                              {item.remainingQuantity}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {pickupQr && (
-                    <div className="mt-6 p-4 bg-white border border-purple-200 rounded-2xl text-center shadow-inner">
-                      <p className="text-sm text-gray-600 mb-3">
-                        請在取貨時出示此 QR Code 給店家掃描
-                      </p>
-                      <img
-                        src={pickupQr}
-                        alt="Pickup QR Code"
-                        className="mx-auto w-48 h-48 border-4 border-white rounded-2xl shadow-lg"
-                      />
-                      {pickupVerifyUrl && (
-                        <p className="text-xs text-gray-500 mt-3 break-all">
-                          連結：<a href={pickupVerifyUrl} className="text-indigo-600 underline">{pickupVerifyUrl}</a>
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-2">
-                        * 此 QR Code 僅供店家於後台掃描使用，顧客自行掃描不會顯示取貨資訊。
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {pickupModal}
 
       {/* 刪除訂單對話框 */}
       {showDeleteDialog && (

@@ -88,6 +88,11 @@ export default function OrderSuccess() {
     return lines.join('，');
   }, [form, order]);
 
+  const hasPriceColumn = useMemo(() => {
+    if (!form) return false;
+    return form.fields.some((field) => field.price && field.price > 0);
+  }, [form]);
+
   const copyToClipboard = async (text: string) => {
     if (!text) return false;
     try {
@@ -410,7 +415,7 @@ export default function OrderSuccess() {
         `}</style>
       </Head>
       <div className="min-h-screen bg-gray-50 py-8">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
           {/* 操作按鈕（不列印） */}
           <div className="no-print mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
@@ -549,94 +554,139 @@ export default function OrderSuccess() {
               <h2 className="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
                 訂單內容
               </h2>
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-4 py-3 text-left border border-gray-300 font-semibold">項目</th>
-                    <th className="px-4 py-3 text-left border border-gray-300 font-semibold">數量/內容</th>
-                    {form.fields.some(f => f.price && f.price > 0) && (
-                      <>
-                        <th className="px-4 py-3 text-right border border-gray-300 font-semibold">單價</th>
-                        <th className="px-4 py-3 text-right border border-gray-300 font-semibold">小計</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.fields.map((field) => {
-                    const value = order.order_data[field.name];
-                    if (value === null || value === undefined || value === '') return null;
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full border-collapse min-w-[640px]">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="px-4 py-3 text-left border border-gray-300 font-semibold">項目</th>
+                      <th className="px-4 py-3 text-left border border-gray-300 font-semibold">數量/內容</th>
+                      {hasPriceColumn && (
+                        <>
+                          <th className="px-4 py-3 text-right border border-gray-300 font-semibold">單價</th>
+                          <th className="px-4 py-3 text-right border border-gray-300 font-semibold">小計</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.fields.map((field) => {
+                      const value = order.order_data[field.name];
+                      if (value === null || value === undefined || value === '') return null;
 
-                    // 處理好事多代購類型（數組格式）
-                    if (field.type === 'costco' && Array.isArray(value)) {
+                      if (field.type === 'costco' && Array.isArray(value)) {
+                        return (
+                          <tr key={field.name} className="border-b border-gray-200">
+                            <td className="px-4 py-3 border border-gray-300">{field.label}</td>
+                            <td className="px-4 py-3 border border-gray-300">
+                              <div className="space-y-1">
+                                {value.map((item: any, idx: number) => (
+                                  <div key={idx} className="text-sm">
+                                    {item.name} {item.quantity ? `× ${item.quantity}` : ''}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            {hasPriceColumn && (
+                              <>
+                                <td className="px-4 py-3 text-right border border-gray-300">-</td>
+                                <td className="px-4 py-3 text-right border border-gray-300">-</td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      }
+
+                      const quantity = field.type === 'number' ? (parseFloat(String(value)) || 0) : 0;
+                      const itemTotal = calculateItemTotal(field);
+
                       return (
                         <tr key={field.name} className="border-b border-gray-200">
                           <td className="px-4 py-3 border border-gray-300">
                             {field.label}
+                            {field.price && field.price > 0 && (
+                              <span className="text-blue-600 font-semibold ml-1">({field.price}元)</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 border border-gray-300">
-                            <div className="space-y-1">
-                              {value.map((item: any, idx: number) => (
-                                <div key={idx} className="text-sm">
-                                  {item.name} {item.quantity ? `× ${item.quantity}` : ''}
-                                </div>
-                              ))}
-                            </div>
+                            {String(value)}
+                            {field.type === 'number' && quantity > 0 && <span className="text-gray-500 ml-1">單位</span>}
                           </td>
-                          {form.fields.some(f => f.price && f.price > 0) && (
+                          {hasPriceColumn && (
                             <>
-                              <td className="px-4 py-3 text-right border border-gray-300">-</td>
-                              <td className="px-4 py-3 text-right border border-gray-300">-</td>
+                              <td className="px-4 py-3 text-right border border-gray-300">
+                                {field.price && field.price > 0 ? `${field.price} 元` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-right border border-gray-300 font-semibold text-green-600">
+                                {itemTotal > 0 ? `${itemTotal.toFixed(0)} 元` : '-'}
+                              </td>
                             </>
                           )}
                         </tr>
                       );
-                    }
-
-                    const quantity = field.type === 'number' ? (parseFloat(String(value)) || 0) : 0;
-                    const itemTotal = calculateItemTotal(field);
-
-                    return (
-                      <tr key={field.name} className="border-b border-gray-200">
-                        <td className="px-4 py-3 border border-gray-300">
-                          {field.label}
-                          {field.price && field.price > 0 && (
-                            <span className="text-blue-600 font-semibold ml-1">
-                              ({field.price}元)
-                            </span>
-                          )}
+                    })}
+                    {hasPriceColumn && calculateTotal() > 0 && (
+                      <tr className="bg-green-50 border-t-2 border-green-300">
+                        <td className="px-4 py-4 text-right font-bold text-lg border border-gray-300" colSpan={3}>
+                          總計價格：
                         </td>
-                        <td className="px-4 py-3 border border-gray-300">
-                          {String(value)}
-                          {field.type === 'number' && quantity > 0 && (
-                            <span className="text-gray-500 ml-1">單位</span>
-                          )}
+                        <td className="px-4 py-4 text-right font-bold text-xl text-green-600 border border-gray-300">
+                          {calculateTotal().toFixed(0)} 元
                         </td>
-                        {form.fields.some(f => f.price && f.price > 0) && (
-                          <>
-                            <td className="px-4 py-3 text-right border border-gray-300">
-                              {field.price && field.price > 0 ? `${field.price} 元` : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-right border border-gray-300 font-semibold text-green-600">
-                              {itemTotal > 0 ? `${itemTotal.toFixed(0)} 元` : '-'}
-                            </td>
-                          </>
-                        )}
                       </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="md:hidden space-y-4">
+                {form.fields.map((field) => {
+                  const value = order.order_data[field.name];
+                  if (value === null || value === undefined || value === '') return null;
+
+                  if (field.type === 'costco' && Array.isArray(value)) {
+                    return (
+                      <div key={field.name} className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                        <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                          <span className="font-semibold text-gray-800">{field.label}</span>
+                          {field.price && field.price > 0 && <span className="text-blue-600 font-semibold">{field.price} 元</span>}
+                        </div>
+                        <div className="space-y-2">
+                          {value.map((item: any, idx: number) => (
+                            <div key={idx} className="text-base font-medium text-gray-900">
+                              {item.name} {item.quantity ? `× ${item.quantity}` : ''}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     );
-                  })}
-                  {form.fields.some(f => f.price && f.price > 0) && calculateTotal() > 0 && (
-                    <tr className="bg-green-50 border-t-2 border-green-300">
-                      <td className="px-4 py-4 text-right font-bold text-lg border border-gray-300" colSpan={3}>
-                        總計價格：
-                      </td>
-                      <td className="px-4 py-4 text-right font-bold text-xl text-green-600 border border-gray-300">
-                        {calculateTotal().toFixed(0)} 元
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  }
+
+                  const quantity = field.type === 'number' ? (parseFloat(String(value)) || 0) : 0;
+                  const itemTotal = calculateItemTotal(field);
+
+                  return (
+                    <div key={field.name} className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                      <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                        <span className="font-semibold text-gray-800">{field.label}</span>
+                        {field.price && field.price > 0 && <span className="text-blue-600 font-semibold">{field.price} 元</span>}
+                      </div>
+                      <div className="text-lg font-semibold text-gray-900">{String(value)}</div>
+                      {field.type === 'number' && quantity > 0 && <p className="text-xs text-gray-500 mt-1">數量單位</p>}
+                      {field.price && field.price > 0 && (
+                        <p className="text-sm text-gray-600 mt-2">
+                          小計：<span className="font-bold text-green-600">{itemTotal.toFixed(0)} 元</span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {hasPriceColumn && calculateTotal() > 0 && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-center">
+                    <p className="text-sm text-emerald-700 font-semibold">總計價格</p>
+                    <p className="text-2xl font-bold text-emerald-700 mt-1">NT$ {calculateTotal().toFixed(0)}</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 備註 */}

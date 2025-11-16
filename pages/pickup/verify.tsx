@@ -41,6 +41,9 @@ interface PickupOrderSummary {
   formName: string;
   formToken: string;
   orderCreatedAt: string;
+  orderSource?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   items: PickupOrderItem[];
 }
 
@@ -77,12 +80,83 @@ export default function PickupVerifyPage() {
   const scanProcessingRef = useRef(false);
   const [pickedTotalAmount, setPickedTotalAmount] = useState(0);
   const [summaryContext, setSummaryContext] = useState<{ token?: string; name?: string; phone?: string } | null>(null);
+  const [selectedItems, setSelectedItems] = useState<
+    Record<string, { orderId: number; item: PickupOrderItem }>
+  >({});
+  const [batchLoading, setBatchLoading] = useState(false);
   const qrConstraints = useMemo<MediaTrackConstraints>(
     () => ({
       facingMode: { ideal: 'environment' },
     }),
     []
   );
+
+  const getSelectionKey = (orderId: number, itemKey: string) => `${orderId}:${itemKey}`;
+
+  const calculateRemainingAmount = (item: PickupOrderItem) => {
+    const remainingQty = Math.max(item.remainingQuantity ?? 0, 0);
+    if (item.remainingTotalPrice !== undefined && !Number.isNaN(item.remainingTotalPrice)) {
+      return Math.max(item.remainingTotalPrice, 0);
+    }
+    if (item.unitPrice !== undefined && !Number.isNaN(item.unitPrice)) {
+      return Math.max(item.unitPrice * remainingQty, 0);
+    }
+    return 0;
+  };
+
+  const selectedItemsList = useMemo(
+    () => Object.values(selectedItems),
+    [selectedItems]
+  );
+
+  const selectedTotalAmount = useMemo(
+    () =>
+      selectedItemsList.reduce((sum, entry) => {
+        return sum + calculateRemainingAmount(entry.item);
+      }, 0),
+    [selectedItemsList]
+  );
+
+  const selectedCount = selectedItemsList.length;
+
+  useEffect(() => {
+    if (statusFilter !== 'pending' || !payload?.orders) {
+      setSelectedItems({});
+      return;
+    }
+    setSelectedItems((prev) => {
+      const next: Record<string, { orderId: number; item: PickupOrderItem }> = {};
+      payload.orders.forEach((order) => {
+        order.items.forEach((item) => {
+          if (item.status !== 'picked' && (item.remainingQuantity ?? 0) > 0) {
+            const key = getSelectionKey(order.orderId, item.itemKey);
+            if (prev[key]) {
+              next[key] = prev[key];
+            }
+          }
+        });
+      });
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
+  }, [payload, statusFilter]);
+
+  const toggleItemSelection = (orderId: number, item: PickupOrderItem) => {
+    if (statusFilter !== 'pending') return;
+    if (item.status === 'picked' || (item.remainingQuantity ?? 0) <= 0) return;
+    const key = getSelectionKey(orderId, item.itemKey);
+    setSelectedItems((prev) => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = { orderId, item };
+      }
+      return next;
+    });
+  };
 
   const openScanner = useCallback(() => {
     if (!isAdmin) {
@@ -351,6 +425,64 @@ export default function PickupVerifyPage() {
     await fetchByManual(manualName, manualPhone, statusFilter);
   };
 
+  const handleBatchPickup = async () => {
+    if (statusFilter !== 'pending') return;
+    if (!isAdmin) {
+      alert('請先登入後台才能標記取貨');
+      return;
+    }
+    if (selectedCount === 0) {
+      alert('請先勾選要取貨的商品');
+      return;
+    }
+    const effectiveToken = resolveToken();
+    if (!effectiveToken) {
+      alert('目前沒有可用的取貨憑證，請重新掃描或查詢。');
+      return;
+    }
+
+    setBatchLoading(true);
+    try {
+      let latestOrders = payload?.orders || [];
+      for (const entry of selectedItemsList) {
+        const res = await fetch('/api/pickup/mark', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: effectiveToken,
+            orderId: entry.orderId,
+            itemKey: entry.item.itemKey,
+            status: statusFilter,
+            performedBy: 'admin',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || '更新取貨狀態失敗');
+        }
+        latestOrders = data.orders;
+      }
+
+      setSelectedItems({});
+      setPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              orders: latestOrders,
+            }
+          : prev
+      );
+      if (summaryContext) {
+        refreshPickedTotal(summaryContext);
+      }
+    } catch (err: any) {
+      console.error('batch pickup error', err);
+      alert(err?.message || '批次取貨時發生錯誤，請稍後再試');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const resolveToken = () => {
     if (activeToken) return activeToken;
     if (typeof token === 'string' && token.trim()) return token;
@@ -603,6 +735,21 @@ export default function PickupVerifyPage() {
                       <p className="text-xs text-gray-500 mt-1">
                         訂單建立：{new Date(order.orderCreatedAt).toLocaleString('zh-TW', { hour12: false })}
                       </p>
+                      <p className="text-xs text-indigo-600 mt-1 flex items-center gap-1">
+                        <span className="font-semibold">來源：</span>
+                        {order.sourceUrl ? (
+                          <a
+                            href={order.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-dotted hover:text-indigo-800"
+                          >
+                            {order.sourceLabel || '下單頁面'}
+                          </a>
+                        ) : (
+                          <span>{order.sourceLabel || '下單頁面'}</span>
+                        )}
+                      </p>
                     </div>
                     <div className="text-right">
                       <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-sm font-semibold inline-block">
@@ -613,71 +760,125 @@ export default function PickupVerifyPage() {
                   </div>
 
                   <div className="mt-4 overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-sm">
+                    <table className="w-full text-sm">
                       <thead>
                         <tr className="text-xs uppercase text-gray-500">
-                          <th className="py-2 text-left font-semibold">商品</th>
-                          <th className="py-2 text-center font-semibold">訂購</th>
-                          <th className="py-2 text-center font-semibold">已取貨</th>
-                          <th className="py-2 text-center font-semibold">未取貨</th>
+                          {statusFilter === 'pending' && <th className="py-2 text-center font-semibold w-12">選取</th>}
+                          <th className="py-2 text-left font-semibold w-1/2">商品</th>
+                          {statusFilter === 'pending' && (
+                            <th className="py-2 text-left font-semibold w-28">來源</th>
+                          )}
+                          <th className="py-2 text-center font-semibold">數量</th>
                           <th className="py-2 text-center font-semibold">單價</th>
                           <th className="py-2 text-center font-semibold">金額</th>
-                          <th className="py-2 text-center font-semibold">狀態</th>
-                          <th className="py-2 text-center font-semibold">操作</th>
+                          {statusFilter !== 'pending' && (
+                            <th className="py-2 text-center font-semibold">操作</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {order.items.map((item) => {
+                        {order.items.map((item, index) => {
                           const isPicked = item.status === 'picked';
-                          const remainingQty = Math.max(item.remainingQuantity, 0);
+                          const remainingQty = Math.max(item.remainingQuantity ?? 0, 0);
                           const unitPriceDisplay =
                             item.unitPrice !== undefined ? `${item.unitPrice.toLocaleString('zh-TW')} 元` : '-';
-                          const amountDisplay =
+                          const remainingAmount = calculateRemainingAmount(item);
+                          const pickedAmount =
+                            item.pickedTotalPrice !== undefined
+                              ? Math.max(item.pickedTotalPrice, 0)
+                              : item.unitPrice && item.pickedQuantity
+                              ? item.unitPrice * item.pickedQuantity
+                              : 0;
+                          const orderedAmount =
                             item.orderedTotalPrice !== undefined
-                              ? `${item.orderedTotalPrice.toLocaleString('zh-TW')} 元`
+                              ? Math.max(item.orderedTotalPrice, 0)
+                              : item.unitPrice
+                              ? item.unitPrice * (item.orderedQuantity ?? 0)
+                              : 0;
+                          const amountValue =
+                            statusFilter === 'pending'
+                              ? remainingAmount
+                              : isPicked
+                              ? pickedAmount
+                              : orderedAmount;
+                          const amountDisplay =
+                            amountValue !== undefined && !Number.isNaN(amountValue)
+                              ? `${amountValue.toLocaleString('zh-TW')} 元`
                               : '-';
-                          const loadingKey = isPicked
-                            ? `undo:${order.orderId}:${item.itemKey}`
-                            : `mark:${order.orderId}:${item.itemKey}`;
-                          const isLoading = actionLoading === loadingKey;
+                          const selectionKey = getSelectionKey(order.orderId, item.itemKey);
+                          const isSelected = !!selectedItems[selectionKey];
+                          const loadingKey =
+                            statusFilter !== 'pending'
+                              ? isPicked
+                                ? `undo:${order.orderId}:${item.itemKey}`
+                                : `mark:${order.orderId}:${item.itemKey}`
+                              : '';
+                          const isLoading = statusFilter !== 'pending' && actionLoading === loadingKey;
                           return (
                             <tr key={item.itemKey} className="align-middle">
-                              <td className="py-3 pr-3">
-                                <p className="font-semibold text-gray-800">{item.itemLabel}</p>
+                              {statusFilter === 'pending' && (
+                                <td className="py-3 text-center align-top">
+                                  <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                    checked={isSelected}
+                                    onChange={() => toggleItemSelection(order.orderId, item)}
+                                    disabled={!isAdmin || remainingQty <= 0 || isPicked}
+                                  />
+                                </td>
+                              )}
+                              <td className="py-3 pr-2">
+                                <p className="font-semibold text-gray-800 break-words leading-snug">
+                                  {item.itemLabel}
+                                </p>
+                                {statusFilter !== 'pending' && (
+                                  <p
+                                    className={`text-xs mt-1 font-medium ${
+                                      isPicked ? 'text-emerald-600' : 'text-yellow-600'
+                                    }`}
+                                  >
+                                    {isPicked ? '已取貨' : '待取貨'}
+                                  </p>
+                                )}
                               </td>
-                              <td className="py-3 text-center text-gray-600">{item.orderedQuantity}</td>
-                              <td className="py-3 text-center text-gray-600">{item.pickedQuantity}</td>
-                              <td className="py-3 text-center">
-                                <span className="font-semibold text-indigo-600">{remainingQty}</span>
-                              </td>
-                              <td className="py-3 text-center text-gray-600">{unitPriceDisplay}</td>
+                              {statusFilter === 'pending' && index === 0 && (
+                                <td className="py-3 text-sm text-indigo-600 align-top" rowSpan={order.items.length}>
+                                  {order.sourceUrl ? (
+                                    <a
+                                      href={order.sourceUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="underline decoration-dotted hover:text-indigo-800"
+                                    >
+                                      {order.sourceLabel || '下單頁面'}
+                                    </a>
+                                  ) : (
+                                    <span>{order.sourceLabel || '下單頁面'}</span>
+                                  )}
+                                </td>
+                              )}
+                              <td className="py-3 text-center text-gray-700">{item.orderedQuantity}</td>
+                              <td className="py-3 text-center text-gray-700">{unitPriceDisplay}</td>
                               <td className="py-3 text-center text-gray-800 font-semibold">{amountDisplay}</td>
-                              <td className="py-3 text-center">
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                    isPicked ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'
-                                  }`}
-                                >
-                                  {isPicked ? '已取貨' : '待取貨'}
-                                </span>
-                              </td>
-                              <td className="py-3 text-center">
-                                <button
-                                  disabled={!isAdmin || isLoading}
-                                  onClick={() =>
-                                    isPicked
-                                      ? handleUndoPickup(order.orderId, item)
-                                      : handleMarkPicked(order.orderId, item)
-                                  }
-                                  className={`px-4 py-2 rounded-full text-xs font-semibold text-white transition-all ${
-                                    isPicked
-                                      ? 'bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300'
-                                      : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300'
-                                  } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                  {isLoading ? '更新中…' : isPicked ? '取消' : '取貨'}
-                                </button>
-                              </td>
+                              {statusFilter !== 'pending' && (
+                                <td className="py-3 text-center">
+                                  <button
+                                    disabled={!isAdmin || isLoading}
+                                    onClick={() =>
+                                      isPicked
+                                        ? handleUndoPickup(order.orderId, item)
+                                        : handleMarkPicked(order.orderId, item)
+                                    }
+                                    className={`px-4 py-2 rounded-full text-xs font-semibold text-white transition-all ${
+                                      isPicked
+                                        ? 'bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300'
+                                        : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300'
+                                    } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  >
+                                    {isLoading ? '更新中…' : isPicked ? '取消' : '取貨'}
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -687,6 +888,25 @@ export default function PickupVerifyPage() {
                 </div>
               ))}
             </div>
+            {statusFilter === 'pending' && hasItems && (
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-emerald-100 bg-emerald-50/80 px-5 py-4">
+                <div className="text-sm text-gray-600">
+                  已勾選{' '}
+                  <span className="font-semibold text-emerald-700">{selectedCount}</span>{' '}
+                  項商品
+                </div>
+                <div className="text-xl font-bold text-emerald-700">
+                  NT$ {selectedTotalAmount.toLocaleString('zh-TW')}
+                </div>
+                <button
+                  onClick={handleBatchPickup}
+                  disabled={batchLoading || selectedCount === 0}
+                  className="px-5 py-2.5 rounded-full bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {batchLoading ? '處理中…' : '客戶取貨'}
+                </button>
+              </div>
+            )}
             <div className="mt-6 flex justify-end">
               <div className="px-6 py-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-right">
                 <p className="text-xs font-semibold text-emerald-600 tracking-wide">目前取貨金額總計</p>

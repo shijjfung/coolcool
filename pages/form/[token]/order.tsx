@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, ReactNode } from 'react';
+import { describeDeviceFromUserAgent } from '@/lib/device-info';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -28,6 +29,151 @@ interface Order {
   order_token?: string;
   order_data: Record<string, any>;
 }
+
+const IPHONE_MODEL_MAP: Record<string, string> = {
+  'iphone18,1': 'iPhone 17',
+  'iphone18,2': 'iPhone 17 Plus',
+  'iphone18,3': 'iPhone 17 Pro',
+  'iphone18,4': 'iPhone 17 Pro Max',
+  'iphone17,1': 'iPhone 16 Pro',
+  'iphone17,2': 'iPhone 16 Pro Max',
+  'iphone17,3': 'iPhone 16',
+  'iphone17,4': 'iPhone 16 Plus',
+  'iphone16,1': 'iPhone 15 Pro',
+  'iphone16,2': 'iPhone 15 Pro Max',
+  'iphone15,4': 'iPhone 15',
+  'iphone15,5': 'iPhone 15 Plus',
+  'iphone15,2': 'iPhone 14 Pro',
+  'iphone15,3': 'iPhone 14 Pro Max',
+  'iphone14,7': 'iPhone 14',
+  'iphone14,8': 'iPhone 14 Plus',
+  'iphone14,2': 'iPhone 13 Pro',
+  'iphone14,3': 'iPhone 13 Pro Max',
+  'iphone13,2': 'iPhone 12 Pro',
+  'iphone13,3': 'iPhone 12 Pro Max',
+  'iphone12,8': 'iPhone SE (第2代)',
+  'iphone11,8': 'iPhone XR',
+  'iphone11,2': 'iPhone XS',
+  'iphone11,6': 'iPhone XS Max',
+  'iphone10,3': 'iPhone X',
+  'iphone10,6': 'iPhone X',
+  'iphone9,1': 'iPhone 7',
+  'iphone9,2': 'iPhone 7 Plus',
+  'iphone9,3': 'iPhone 7',
+  'iphone9,4': 'iPhone 7 Plus',
+  'iphone8,1': 'iPhone 6s',
+  'iphone8,2': 'iPhone 6s Plus',
+  'iphone8,4': 'iPhone SE',
+  'iphone7,1': 'iPhone 6 Plus',
+  'iphone7,2': 'iPhone 6',
+};
+
+const describeIphoneModel = (userAgent: string): string | null => {
+  const normalized = userAgent.toLowerCase();
+  const codeMatch = normalized.match(/iphone\d+,\d+/);
+  if (!codeMatch) return null;
+  const code = codeMatch[0];
+  if (IPHONE_MODEL_MAP[code]) {
+    return IPHONE_MODEL_MAP[code];
+  }
+  const seriesMatch = code.match(/iphone(\d+),/);
+  if (seriesMatch) {
+    const series = parseInt(seriesMatch[1], 10);
+    if (!Number.isNaN(series)) {
+      return `iPhone ${series}`;
+    }
+  }
+  return `iPhone (${code.replace('iphone', 'iPhone ').toUpperCase()})`;
+};
+
+const describeAndroidModel = (userAgent: string): string | null => {
+  const normalized = userAgent.toLowerCase();
+  const samsungMatch = normalized.match(/sm-[a-z0-9]+/);
+  if (samsungMatch) {
+    const code = samsungMatch[0].toUpperCase();
+    if (code.startsWith('SM-S91')) return 'Samsung Galaxy S23';
+    if (code.startsWith('SM-S92')) return 'Samsung Galaxy S24';
+    if (code.startsWith('SM-S93')) return 'Samsung Galaxy S25';
+    if (code.startsWith('SM-N')) return `Samsung Galaxy Note (${code})`;
+    if (code.startsWith('SM-A')) return `Samsung Galaxy A 系列 (${code})`;
+    return `Samsung (${code})`;
+  }
+  const pixelMatch = userAgent.match(/Pixel\s?[0-9a-zA-Z ]+/);
+  if (pixelMatch) {
+    return pixelMatch[0].trim();
+  }
+  const genericMatch = userAgent.match(/;\s*([^;()]+?)\s*(?:Build|\))/);
+  if (genericMatch) {
+    const candidate = genericMatch[1].trim();
+    if (candidate && !candidate.toLowerCase().includes('android')) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const describeDeviceFromUserAgent = (userAgent: string): string => {
+  if (!userAgent) return '未知裝置';
+  if (/ipad/i.test(userAgent)) {
+    const osMatch = userAgent.match(/cpu os (\d+)_(\d+)/i);
+    if (osMatch) {
+      return `iPad (iPadOS ${osMatch[1]}.${osMatch[2]})`;
+    }
+    return 'iPad';
+  }
+  if (/iphone/i.test(userAgent)) {
+    const model = describeIphoneModel(userAgent);
+    if (model) return model;
+    const iosMatch = userAgent.match(/os (\d+)_(\d+)/i);
+    if (iosMatch) {
+      return `iPhone (iOS ${iosMatch[1]}.${iosMatch[2]})`;
+    }
+    return 'iPhone';
+  }
+  if (/android/i.test(userAgent) && !/tablet/i.test(userAgent)) {
+    const androidModel = describeAndroidModel(userAgent);
+    if (androidModel) return androidModel;
+    return 'Android 手機';
+  }
+  if (/android/i.test(userAgent)) {
+    return 'Android 平板';
+  }
+  if (/macintosh|mac os x/i.test(userAgent)) {
+    const macMatch = userAgent.match(/mac os x (\d+)[._](\d+)/i);
+    if (macMatch) {
+      const major = parseInt(macMatch[1], 10);
+      const minor = parseInt(macMatch[2], 10);
+      if (major >= 15) return `macOS (版本 ${major}.${minor})`;
+      const versionNames: Record<number, string> = {
+        14: 'macOS Sonoma',
+        13: 'macOS Ventura',
+        12: 'macOS Monterey',
+        11: 'macOS Big Sur',
+      };
+      if (versionNames[major]) return versionNames[major];
+    }
+    return 'Mac 電腦';
+  }
+  if (/windows/i.test(userAgent)) {
+    if (/windows nt 10.0/i.test(userAgent)) {
+      return 'Windows 10/11';
+    }
+    if (/windows nt 6.3/i.test(userAgent)) {
+      return 'Windows 8.1';
+    }
+    if (/windows nt 6.2/i.test(userAgent)) {
+      return 'Windows 8';
+    }
+    if (/windows nt 6.1/i.test(userAgent)) {
+      return 'Windows 7';
+    }
+    return 'Windows';
+  }
+  if (/linux/i.test(userAgent)) {
+    return 'Linux';
+  }
+  return '未知裝置';
+};
 
 export default function CustomerForm() {
   const router = useRouter();
@@ -249,231 +395,8 @@ export default function CustomerForm() {
   };
 
   const detectDeviceType = () => {
-    const userAgent = navigator.userAgent;
-    const ua = userAgent.toLowerCase();
-    
-    // 檢測 iPad
-    if (/ipad/i.test(userAgent)) {
-      // 嘗試檢測 iPad 型號
-      if (/cpu os (\d+)_(\d+)/i.test(userAgent)) {
-        const match = userAgent.match(/cpu os (\d+)_(\d+)/i);
-        if (match) {
-          const major = match[1];
-          const minor = match[2];
-          setDeviceType(`iPad (iPadOS ${major}.${minor})`);
-    } else {
-          setDeviceType('iPad');
-        }
-      } else {
-        setDeviceType('iPad');
-      }
-      return;
-    }
-    
-    // 檢測 iPhone
-    if (/iphone/i.test(userAgent)) {
-      // 嘗試檢測 iPhone 型號
-      const iphoneModels: { [key: string]: string } = {
-        'iphone15,2': 'iPhone 14 Pro',
-        'iphone15,3': 'iPhone 14 Pro Max',
-        'iphone14,2': 'iPhone 13 Pro',
-        'iphone14,3': 'iPhone 13 Pro Max',
-        'iphone13,2': 'iPhone 12 Pro',
-        'iphone13,3': 'iPhone 12 Pro Max',
-        'iphone12,8': 'iPhone SE (第2代)',
-        'iphone11,8': 'iPhone XR',
-        'iphone11,2': 'iPhone XS',
-        'iphone11,6': 'iPhone XS Max',
-        'iphone10,3': 'iPhone X',
-        'iphone10,6': 'iPhone X',
-        'iphone9,1': 'iPhone 7',
-        'iphone9,2': 'iPhone 7 Plus',
-        'iphone9,3': 'iPhone 7',
-        'iphone9,4': 'iPhone 7 Plus',
-        'iphone8,1': 'iPhone 6s',
-        'iphone8,2': 'iPhone 6s Plus',
-        'iphone8,4': 'iPhone SE',
-        'iphone7,1': 'iPhone 6 Plus',
-        'iphone7,2': 'iPhone 6',
-      };
-      
-      // 嘗試從 user agent 中提取型號
-      let model = 'iPhone';
-      for (const [key, value] of Object.entries(iphoneModels)) {
-        if (ua.includes(key)) {
-          model = value;
-          break;
-        }
-      }
-      
-      // 如果沒有找到具體型號，嘗試從 iOS 版本推斷
-      if (model === 'iPhone') {
-        const iosMatch = userAgent.match(/os (\d+)_(\d+)/i);
-        if (iosMatch) {
-          const major = parseInt(iosMatch[1]);
-          if (major >= 16) {
-            model = 'iPhone (較新機型)';
-          } else if (major >= 14) {
-            model = 'iPhone (較新機型)';
-          } else {
-            model = 'iPhone';
-          }
-        }
-      }
-      
-      setDeviceType(model);
-      return;
-    }
-    
-    // 檢測 Android 手機
-    if (/android/i.test(userAgent) && !/tablet/i.test(userAgent)) {
-      // 檢測三星手機
-      if (/samsung/i.test(userAgent)) {
-        const samsungModels: { [key: string]: string } = {
-          'sm-s': 'Samsung Galaxy S',
-          'sm-n': 'Samsung Galaxy Note',
-          'sm-a': 'Samsung Galaxy A',
-          'sm-g': 'Samsung Galaxy',
-          'sm-f': 'Samsung Galaxy Fold',
-        };
-        
-        let model = 'Samsung';
-        for (const [key, value] of Object.entries(samsungModels)) {
-          if (ua.includes(key)) {
-            // 嘗試提取完整型號
-            const modelMatch = userAgent.match(new RegExp(`${key}(\\d+)`, 'i'));
-            if (modelMatch) {
-              model = `${value} ${modelMatch[1]}`;
-            } else {
-              model = value;
-            }
-            break;
-          }
-        }
-        
-        // 如果沒有找到具體型號，檢查是否有其他標識
-        if (model === 'Samsung') {
-          if (ua.includes('galaxy')) {
-            model = 'Samsung Galaxy';
-          } else {
-            model = 'Samsung 手機';
-          }
-        }
-        
-        setDeviceType(model);
-        return;
-      }
-      
-      // 檢測其他 Android 手機品牌
-      if (/xiaomi|redmi|mi /i.test(userAgent)) {
-        setDeviceType('小米手機');
-        return;
-      }
-      if (/huawei|honor/i.test(userAgent)) {
-        setDeviceType('華為手機');
-        return;
-      }
-      if (/oppo/i.test(userAgent)) {
-        setDeviceType('OPPO 手機');
-        return;
-      }
-      if (/vivo/i.test(userAgent)) {
-        setDeviceType('vivo 手機');
-        return;
-      }
-      if (/oneplus/i.test(userAgent)) {
-        setDeviceType('OnePlus 手機');
-        return;
-      }
-      if (/sony/i.test(userAgent)) {
-        setDeviceType('Sony 手機');
-        return;
-      }
-      if (/lg/i.test(userAgent)) {
-        setDeviceType('LG 手機');
-        return;
-      }
-      if (/htc/i.test(userAgent)) {
-        setDeviceType('HTC 手機');
-        return;
-      }
-      
-      // 其他 Android 手機
-      setDeviceType('Android 手機');
-      return;
-    }
-    
-    // 檢測 Windows
-    if (/windows/i.test(userAgent)) {
-      if (/windows nt 10.0/i.test(userAgent)) {
-        // Windows 10 或 11（User Agent 無法準確區分，統一顯示為 Windows 10/11）
-        // 可以通過檢查其他特徵來判斷，但 User Agent 本身無法區分
-        // 這裡統一顯示為 Windows 10/11
-        setDeviceType('Windows 10/11');
-      } else if (/windows nt 6.3/i.test(userAgent)) {
-        setDeviceType('Windows 8.1');
-      } else if (/windows nt 6.2/i.test(userAgent)) {
-        setDeviceType('Windows 8');
-      } else if (/windows nt 6.1/i.test(userAgent)) {
-        setDeviceType('Windows 7');
-      } else if (/windows nt 6.0/i.test(userAgent)) {
-        setDeviceType('Windows Vista');
-      } else if (/windows nt 5.1/i.test(userAgent)) {
-        setDeviceType('Windows XP');
-      } else {
-        setDeviceType('Windows');
-      }
-      return;
-    }
-    
-    // 檢測 macOS
-    if (/macintosh|mac os x/i.test(userAgent)) {
-      const macMatch = userAgent.match(/mac os x (\d+)[._](\d+)/i);
-      if (macMatch) {
-        const major = parseInt(macMatch[1]);
-        const minor = parseInt(macMatch[2]);
-        
-        const macVersions: { [key: number]: string } = {
-          14: 'macOS Sonoma',
-          13: 'macOS Ventura',
-          12: 'macOS Monterey',
-          11: 'macOS Big Sur',
-        };
-        
-        let macVersionName: string;
-        if (major === 10) {
-          if (minor >= 15) {
-            macVersionName = 'macOS Catalina';
-          } else if (minor >= 14) {
-            macVersionName = 'macOS Mojave';
-          } else if (minor >= 13) {
-            macVersionName = 'macOS High Sierra';
-          } else {
-            macVersionName = 'macOS';
-          }
-        } else if (macVersions[major]) {
-          macVersionName = macVersions[major];
-        } else if (major >= 15) {
-          macVersionName = `macOS (版本 ${major}.${minor})`;
-        } else {
-          macVersionName = 'macOS';
-        }
-        
-        setDeviceType(macVersionName);
-      } else {
-        setDeviceType('Mac 電腦');
-    }
-      return;
-    }
-    
-    // 檢測 Linux
-    if (/linux/i.test(userAgent)) {
-      setDeviceType('Linux');
-      return;
-    }
-    
-    // 預設為電腦
-    setDeviceType('電腦');
+    const userAgent = navigator.userAgent || '';
+    setDeviceType(describeDeviceFromUserAgent(userAgent));
   };
 
   const handleFieldChange = (fieldName: string, value: any) => {
@@ -888,6 +811,39 @@ export default function CustomerForm() {
     }
   };
 
+  const renderFormRow = (
+    key: string,
+    {
+      label,
+      icon,
+      accent = 'from-blue-50 to-indigo-50',
+      required,
+      subtitle,
+      children,
+    }: {
+      label: string;
+      icon: ReactNode;
+      accent?: string;
+      required?: boolean;
+      subtitle?: ReactNode;
+      children: ReactNode;
+    }
+  ) => (
+    <div key={key} className="flex flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)] gap-0">
+      <div className={`px-4 sm:px-6 py-4 bg-gradient-to-r ${accent}`}>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 text-blue-600">{icon}</div>
+          <div className="flex flex-col gap-1">
+            <span className="text-base sm:text-lg font-bold text-gray-800">{label}</span>
+            {subtitle}
+            {required && <span className="text-xs text-red-500 font-semibold">(必填)</span>}
+          </div>
+        </div>
+      </div>
+      <div className="px-4 sm:px-6 py-4 bg-white">{children}</div>
+    </div>
+  );
+
   const handleConfirmSubmit = async () => {
     if (!validateName(customerName)) {
       scrollToField('customerName');
@@ -1107,7 +1063,7 @@ export default function CustomerForm() {
           </div>
         </div>
       )}
-      <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
+      <div className="w-full max-w-5xl mx-auto px-4 sm:px-6">
         {/* 主卡片 */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           {/* 頂部裝飾條 */}
@@ -1275,22 +1231,20 @@ export default function CustomerForm() {
 
           <form onSubmit={handleSubmit}>
             {/* 試算表風格的表單 */}
-            <div className="mb-6 overflow-x-auto -mx-2 sm:mx-0">
+            <div className="mb-6">
               <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden shadow-lg">
-                <table className="w-full min-w-full">
-                  <tbody className="divide-y divide-gray-200">
-                    {/* 姓名欄位 */}
-                    <tr className="hover:bg-blue-50 transition-colors">
-                      <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          <span>姓名</span>
-                          <span className="text-red-500 text-sm font-semibold">(必填)</span>
-                        </div>
-                      </td>
-                      <td className="px-4 sm:px-6 py-5">
+                <div className="divide-y divide-gray-100">
+                  {renderFormRow('customerName', {
+                    label: '姓名',
+                    icon: (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    ),
+                    accent: 'from-blue-50 to-indigo-50',
+                    required: true,
+                    children: (
+                      <div>
                         <input
                           type="text"
                           value={customerName}
@@ -1319,104 +1273,110 @@ export default function CustomerForm() {
                             {nameError}
                           </p>
                         )}
-                      </td>
-                    </tr>
-                    
-                    {/* 電話欄位 */}
-                    <tr className="hover:bg-blue-50 transition-colors">
-                      <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          <span>電話</span>
-                          <span className="text-red-500 text-sm font-semibold">(必填)</span>
-                        </div>
-                      </td>
-                      <td className="px-4 sm:px-6 py-5">
-                        <div>
-                          <input
-                            type="tel"
-                            value={customerPhone}
-                            onChange={(e) => {
-                              setCustomerPhone(e.target.value);
-                              // 清除錯誤訊息當用戶開始輸入時
-                              if (phoneError) {
-                                setPhoneError('');
-                              }
-                            }}
-                            onBlur={() => {
-                              // 當失去焦點時驗證
-                              if (customerPhone.trim()) {
-                                validatePhone(customerPhone);
-                              }
-                            }}
-                            onFocus={handlePhoneFocus}
-                            className={`w-full px-4 py-3.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all text-base sm:text-lg shadow-sm ${
-                              phoneError 
-                                ? 'border-red-500 focus:border-red-500' 
-                                : 'border-gray-300 focus:border-blue-500'
-                            }`}
-                            placeholder={phonePlaceholder}
-                            required
+                      </div>
+                    ),
+                  })}
+
+                  {renderFormRow('customerPhone', {
+                    label: '電話',
+                    icon: (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    ),
+                    accent: 'from-blue-50 to-indigo-50',
+                    required: true,
+                    children: (
+                      <div>
+                        <input
+                          type="tel"
+                          value={customerPhone}
+                          onChange={(e) => {
+                            setCustomerPhone(e.target.value);
+                            if (phoneError) {
+                              setPhoneError('');
+                            }
+                          }}
+                          onBlur={() => {
+                            if (customerPhone.trim()) {
+                              validatePhone(customerPhone);
+                            }
+                          }}
+                          onFocus={handlePhoneFocus}
+                          className={`w-full px-4 py-3.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all text-base sm:text-lg shadow-sm ${
+                            phoneError ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+                          }`}
+                          placeholder={phonePlaceholder}
+                          required
                           ref={(el) => setFieldRef('customerPhone', el)}
-                          />
-                          {phoneError && (
-                            <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              {phoneError}
+                        />
+                        {phoneError && (
+                          <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {phoneError}
+                          </p>
+                        )}
+                      </div>
+                    ),
+                  })}
+
+                  {form.fields.map((field) =>
+                    renderFormRow(field.name, {
+                      label: field.label,
+                      icon:
+                        field.type === 'number' ? (
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m-4 6h12M9 9v2m-4 6h12m-6-2v2" />
+                          </svg>
+                        ) : field.type === 'costco' ? (
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5m1.6 8L6 21h12l-1-8M7 13h10" />
+                          </svg>
+                        ) : (
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20l9-5-9-5-9 5 9 5zm0-10l9-5-9-5-9 5 9 5z" />
+                          </svg>
+                        ),
+                      accent:
+                        field.type === 'number'
+                          ? 'from-indigo-50 to-purple-50'
+                          : field.type === 'costco'
+                          ? 'from-purple-50 to-pink-50'
+                          : 'from-blue-50 to-sky-50',
+                      required: field.required,
+                      subtitle:
+                        field.price && field.price > 0 ? (
+                          <span className="text-xs text-blue-600 font-semibold">單價：{field.price.toLocaleString('zh-TW')} 元</span>
+                        ) : null,
+                      children: (
+                        <div className="space-y-3">
+                          {renderFieldInput(field)}
+                          {field.type === 'number' && field.price && field.price > 0 && (
+                            <p className="text-sm text-gray-500">
+                              小計：{((order.order_data[field.name] || 0) * field.price).toFixed(0)} 元
                             </p>
                           )}
                         </div>
-                      </td>
-                    </tr>
+                      ),
+                    })
+                  )}
 
-                    {/* 動態欄位 */}
-                    {form.fields.map((field) => (
-                      <tr key={field.name} className="hover:bg-indigo-50 transition-colors">
-                        <td className="px-4 sm:px-6 py-5 text-lg sm:text-xl font-bold text-gray-800 bg-gradient-to-r from-indigo-50 to-purple-50">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            <span>{field.label}</span>
-                          {field.price !== undefined && field.price !== null && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
-                              {field.price}
-                            </span>
-                          )}
-                          {field.required && (
-                            <span className="text-red-500 text-sm font-semibold">(必填)</span>
-                          )}
-                          </div>
-                        </td>
-                        <td className="px-4 sm:px-6 py-5">
-                          {renderFieldInput(field)}
-                        </td>
-                      </tr>
-                    ))}
-                    {/* 總計價格行 */}
-                    {form.fields.some(f => f.price !== undefined && f.price !== null && f.price > 0) && (
-                      <tr className="bg-gradient-to-r from-green-50 to-emerald-50 border-t-4 border-green-400">
-                        <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-extrabold text-gray-800 bg-gradient-to-r from-green-50 to-emerald-50" colSpan={2}>
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="text-lg sm:text-xl">總計價格：</span>
-                            </div>
-                            <span className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                              {calculateTotal().toFixed(0)} 元
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                  {form.fields.some((f) => f.price !== undefined && f.price !== null && f.price > 0) && (
+                    <div className="flex flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)] bg-gradient-to-r from-green-50 to-emerald-50">
+                      <div className="px-4 sm:px-6 py-4 flex items-center gap-2 text-gray-800 font-bold">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-lg sm:text-xl">總計價格</span>
+                      </div>
+                      <div className="px-4 sm:px-6 py-4 flex items-center justify-end">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-green-600">{calculateTotal().toFixed(0)} 元</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -208,6 +208,18 @@ END $$;
                         WHERE table_name = 'forms' AND column_name = 'facebook_last_scan_at') THEN
            ALTER TABLE forms ADD COLUMN facebook_last_scan_at TIMESTAMPTZ;
          END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'forms' AND column_name = 'facebook_auto_deadline_scan') THEN
+          ALTER TABLE forms ADD COLUMN facebook_auto_deadline_scan INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'forms' AND column_name = 'facebook_manual_strict_deadline') THEN
+          ALTER TABLE forms ADD COLUMN facebook_manual_strict_deadline INTEGER DEFAULT 1;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'forms' AND column_name = 'facebook_allow_overdue') THEN
+          ALTER TABLE forms ADD COLUMN facebook_allow_overdue INTEGER DEFAULT 0;
+        END IF;
        END $$;
 
        -- 添加 LINE 自動監控相關欄位到 forms 表（如果不存在）

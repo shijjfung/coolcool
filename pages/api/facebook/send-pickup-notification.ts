@@ -3,13 +3,10 @@ import {
   ensureDatabaseInitialized,
   getOrdersByIds,
   markFacebookPickupNotified,
-  getFormById,
+  getFormByIdLite,
   type Order,
 } from '@/lib/db';
-import {
-  replyToCommentWithPuppeteer,
-  type PuppeteerConfig
-} from '@/lib/facebook-puppeteer';
+import { callAutomationPickupNotifications } from '@/lib/facebook-automation';
 
 interface SuccessResult {
   orderId: number;
@@ -46,15 +43,6 @@ export default async function handler(
       return res.status(400).json({ error: '請輸入通知訊息' });
     }
 
-    // 檢查是否設定 Cookie（Puppeteer 需要）
-    const cookies = process.env.FACEBOOK_COOKIES;
-    if (!cookies) {
-      return res.status(400).json({
-        error: '缺少 Facebook Cookie，無法發送通知',
-        hint: '請在環境變數中設定 FACEBOOK_COOKIES（從 Cookie-Editor 取得）',
-      });
-    }
-
     await ensureDatabaseInitialized();
 
     const orders = await getOrdersByIds(orderIds);
@@ -77,63 +65,78 @@ export default async function handler(
     const success: SuccessResult[] = [];
     const failed: FailedResult[] = [];
 
+    const formCache = new Map<number, { facebook_post_url?: string } | null>();
+    const automationOrders: Array<{ orderId: number; commentId: string; postUrl: string }> = [];
+
     for (const order of targets) {
       const commentId = order.facebook_comment_id!;
-      try {
-        // 取得表單以取得 Facebook 貼文 URL
-        const form = await getFormById(order.form_id);
-        if (!form || !form.facebook_post_url) {
-          failed.push({
-            orderId: order.id,
-            commentId,
-            error: '找不到表單或表單未設定 Facebook 貼文 URL',
-          });
-          continue;
-        }
-
-        // 使用 Puppeteer 回覆留言
-        // 傳入貼文 URL 和留言 ID，讓 Puppeteer 自動構建留言 URL
-        const postUrl = form.facebook_post_url;
-
-        console.log(`[Puppeteer] 準備回覆留言：貼文 ${postUrl}，留言 ID ${commentId}`);
-
-        const puppeteerConfig: PuppeteerConfig = {
-          headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false',
-          cookies: cookies,
-          timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
-        };
-
-        const replySuccess = await replyToCommentWithPuppeteer(
-          postUrl,
-          trimmedMessage,
-          puppeteerConfig,
-          commentId
-        );
-
-        if (replySuccess) {
-          const notifiedAt = new Date().toISOString();
-          await markFacebookPickupNotified(order.id, notifiedAt);
-          success.push({
-            orderId: order.id,
-            commentId,
-            notifiedAt,
-          });
-          console.log(`[Puppeteer] ✅ 已成功回覆留言 ${commentId}`);
-        } else {
-          failed.push({
-            orderId: order.id,
-            commentId,
-            error: 'Puppeteer 回覆留言失敗',
-          });
-        }
-      } catch (error: any) {
-        console.error(`[Puppeteer] 回覆留言錯誤 (訂單 ${order.id}):`, error.message);
+      let form = formCache.get(order.form_id);
+      if (form === undefined) {
+        form = await getFormByIdLite(order.form_id);
+        formCache.set(order.form_id, form);
+      }
+      if (!form || !form.facebook_post_url) {
         failed.push({
           orderId: order.id,
           commentId,
-          error: error?.message || '未知錯誤',
+          error: '找不到表單或尚未設定 Facebook 貼文 URL',
         });
+        continue;
       }
+      automationOrders.push({
+        orderId: order.id,
+        commentId,
+        postUrl: form.facebook_post_url,
+      });
+    }
+
+    if (automationOrders.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '沒有符合條件的訂單可通知',
+        results: { success, failed },
+      });
+    }
+
+    let automationResponse: {
+      results?: {
+        success?: Array<{ orderId: number; commentId?: string }>;
+        failed?: Array<{ orderId: number; commentId?: string; error?: string }>;
+      };
+    } | null = null;
+
+    try {
+      automationResponse = await callAutomationPickupNotifications({
+        message: trimmedMessage,
+        orders: automationOrders,
+      });
+    } catch (automationError: any) {
+      console.error('Facebook 取貨通知自動化錯誤:', automationError);
+      return res.status(500).json({
+        success: false,
+        error: automationError?.message || '取貨通知服務錯誤',
+      });
+    }
+
+    const automationSuccess = automationResponse?.results?.success || [];
+    const automationFailed = automationResponse?.results?.failed || [];
+
+    for (const entry of automationSuccess) {
+      const notifiedAt = new Date().toISOString();
+      await markFacebookPickupNotified(entry.orderId, notifiedAt);
+      success.push({
+        orderId: entry.orderId,
+        commentId: entry.commentId || automationOrders.find((o) => o.orderId === entry.orderId)?.commentId || '',
+        notifiedAt,
+      });
+    }
+
+    for (const entry of automationFailed) {
+      failed.push({
+        orderId: entry.orderId,
+        commentId: entry.commentId,
+        error: entry.error || '通知失敗',
+      });
     }
 
     const successCount = success.length;

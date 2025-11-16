@@ -27,11 +27,18 @@ type Form = {
   line_comment_url?: string;
   facebook_post_url?: string;
   facebook_post_author?: string;
+  facebook_target_url?: string;
+  facebook_post_template?: string;
+  facebook_vendor_content?: string;
+  facebook_post_images?: string;
   facebook_keywords?: string;
   facebook_auto_monitor?: number;
   facebook_reply_message?: string;
   facebook_scan_interval?: number; // 掃描間隔（分鐘）
   facebook_last_scan_at?: string | null; // 最後掃描時間
+  facebook_auto_deadline_scan?: number;
+  facebook_manual_strict_deadline?: number;
+  facebook_allow_overdue?: number;
   line_post_author?: string;
   post_deadline_reply_message?: string;
   line_custom_identifier?: string;
@@ -77,6 +84,9 @@ export interface PickupOrderSummary {
   formName: string;
   formToken: string;
   orderCreatedAt: string;
+  orderSource?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   items: PickupOrderItem[];
 }
 
@@ -92,6 +102,9 @@ type OrderRowWithForm = {
   formName: string;
   formToken: string;
   fields: FormField[];
+  formFacebookCommentUrl?: string;
+  formLineCommentUrl?: string;
+  formFacebookPostUrl?: string;
 };
 
 interface PickupEventStats {
@@ -205,7 +218,15 @@ async function buildPickupOrders(
   statusFilter: PickupStatusFilter = 'pending'
 ): Promise<PickupOrderSummary[]> {
   const results: PickupOrderSummary[] = [];
-  for (const { order, formName, formToken, fields } of rows) {
+  for (const {
+    order,
+    formName,
+    formToken,
+    fields,
+    formFacebookCommentUrl,
+    formLineCommentUrl,
+    formFacebookPostUrl,
+  } of rows) {
     const orderData = typeof order.order_data === 'string' ? JSON.parse(order.order_data) : order.order_data;
     const items = buildOrderItemsForPickup({ fields }, orderData);
     if (items.length === 0) continue;
@@ -245,6 +266,21 @@ async function buildPickupOrders(
       });
     }
     if (filteredItems.length === 0) continue;
+    const orderSource = (order.order_source || '').toLowerCase();
+    let sourceLabel = '下單頁面';
+    let sourceUrl: string | undefined;
+
+    if (order.facebook_comment_id) {
+      sourceLabel = '臉書留言';
+      sourceUrl = formFacebookPostUrl || formFacebookCommentUrl || undefined;
+    } else if (orderSource === 'facebook') {
+      sourceLabel = '臉書URL';
+      sourceUrl = formFacebookCommentUrl || formFacebookPostUrl || undefined;
+    } else if (orderSource === 'line') {
+      sourceLabel = 'LineURL';
+      sourceUrl = formLineCommentUrl || undefined;
+    }
+
     results.push({
       orderId: order.id,
       orderToken: order.order_token,
@@ -252,6 +288,9 @@ async function buildPickupOrders(
       formId: order.form_id,
       formName,
       formToken,
+      orderSource,
+      sourceLabel,
+      sourceUrl,
       items: filteredItems,
     });
   }
@@ -334,7 +373,10 @@ export async function getOutstandingPickupsByCustomer(
           name,
           form_token,
           deadline,
-          fields
+          fields,
+          facebook_comment_url,
+          line_comment_url,
+          facebook_post_url
         )
       `
     )
@@ -359,6 +401,9 @@ export async function getOutstandingPickupsByCustomer(
       formName: formRaw.name || '未命名表單',
       formToken: formRaw.form_token || '',
       fields,
+      formFacebookCommentUrl: formRaw.facebook_comment_url,
+      formLineCommentUrl: formRaw.line_comment_url,
+      formFacebookPostUrl: formRaw.facebook_post_url,
     });
   }
 
@@ -509,7 +554,17 @@ export async function markPickupItem(
 
   const fields = parseFormFields(form.fields);
   const outstandingForOrder = await buildPickupOrders(
-    [{ order, formName: form.name || '未命名表單', formToken: form.form_token || '', fields }],
+    [
+      {
+        order,
+        formName: form.name || '未命名表單',
+        formToken: form.form_token || '',
+        fields,
+        formFacebookCommentUrl: form.facebook_comment_url,
+        formLineCommentUrl: form.line_comment_url,
+        formFacebookPostUrl: form.facebook_post_url,
+      },
+    ],
     'pending'
   );
   const orderSummary = outstandingForOrder[0];
@@ -596,10 +651,17 @@ export async function createForm(
   lineCommentUrl?: string,
   facebookPostUrl?: string,
   facebookPostAuthor?: string,
+  facebookTargetUrl?: string,
+  facebookPostTemplate?: string,
+  facebookVendorContent?: string,
+  facebookPostImages?: string,
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
   facebookScanInterval?: number,
+  facebookAutoDeadlineScan?: number,
+  facebookManualStrictDeadline?: number,
+  facebookAllowOverdue?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -608,6 +670,12 @@ export async function createForm(
   const formToken = generateToken();
   const trimmedCustomIdentifier = (lineCustomIdentifier || '').trim();
   const useCustomIdentifier = !!lineUseCustomIdentifier && trimmedCustomIdentifier.length > 0;
+  const autoDeadlineValue = facebookAutoDeadlineScan ? 1 : 0;
+  const manualStrictValue =
+    facebookManualStrictDeadline === null || facebookManualStrictDeadline === undefined
+      ? 1
+      : facebookManualStrictDeadline;
+  const allowOverdueValue = facebookAllowOverdue ? 1 : 0;
   const { data, error } = await getSupabase()
     .from('forms')
     .insert({
@@ -621,10 +689,20 @@ export async function createForm(
       line_comment_url: lineCommentUrl || null,
       facebook_post_url: facebookPostUrl || null,
       facebook_post_author: facebookPostAuthor || null,
+      facebook_target_url: facebookTargetUrl || null,
+      facebook_post_template: facebookPostTemplate || null,
+      facebook_vendor_content: facebookVendorContent || null,
+      facebook_post_images: facebookPostImages || null,
       facebook_keywords: facebookKeywords || null,
       facebook_auto_monitor: facebookAutoMonitor || 0,
       facebook_reply_message: facebookReplyMessage || null,
-      facebook_scan_interval: facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
+      facebook_scan_interval:
+        facebookScanInterval !== null && facebookScanInterval !== undefined
+          ? facebookScanInterval
+          : 3,
+      facebook_auto_deadline_scan: autoDeadlineValue,
+      facebook_manual_strict_deadline: manualStrictValue,
+      facebook_allow_overdue: allowOverdueValue,
       line_post_author: linePostAuthor || null,
       post_deadline_reply_message: postDeadlineReplyMessage?.trim() || null,
       line_custom_identifier: useCustomIdentifier ? trimmedCustomIdentifier : null,
@@ -729,10 +807,17 @@ export async function updateForm(
   lineCommentUrl?: string,
   facebookPostUrl?: string,
   facebookPostAuthor?: string,
+  facebookTargetUrl?: string,
+  facebookPostTemplate?: string,
+  facebookVendorContent?: string,
+  facebookPostImages?: string,
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
   facebookScanInterval?: number,
+  facebookAutoDeadlineScan?: number,
+  facebookManualStrictDeadline?: number,
+  facebookAllowOverdue?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -740,6 +825,12 @@ export async function updateForm(
 ): Promise<boolean> {
   const trimmedCustomIdentifier = (lineCustomIdentifier || '').trim();
   const useCustomIdentifier = !!lineUseCustomIdentifier && trimmedCustomIdentifier.length > 0;
+  const autoDeadlineValue = facebookAutoDeadlineScan ? 1 : 0;
+  const manualStrictValue =
+    facebookManualStrictDeadline === null || facebookManualStrictDeadline === undefined
+      ? 1
+      : facebookManualStrictDeadline;
+  const allowOverdueValue = facebookAllowOverdue ? 1 : 0;
   const { error } = await getSupabase()
     .from('forms')
     .update({
@@ -753,10 +844,20 @@ export async function updateForm(
       line_comment_url: lineCommentUrl || null,
       facebook_post_url: facebookPostUrl || null,
       facebook_post_author: facebookPostAuthor || null,
+      facebook_target_url: facebookTargetUrl || null,
+      facebook_post_template: facebookPostTemplate || null,
+      facebook_vendor_content: facebookVendorContent || null,
+      facebook_post_images: facebookPostImages || null,
       facebook_keywords: facebookKeywords || null,
       facebook_auto_monitor: facebookAutoMonitor || 0,
       facebook_reply_message: facebookReplyMessage || null,
-      facebook_scan_interval: facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
+      facebook_scan_interval:
+        facebookScanInterval !== null && facebookScanInterval !== undefined
+          ? facebookScanInterval
+          : 3,
+      facebook_auto_deadline_scan: autoDeadlineValue,
+      facebook_manual_strict_deadline: manualStrictValue,
+      facebook_allow_overdue: allowOverdueValue,
       line_post_author: linePostAuthor || null,
       post_deadline_reply_message: postDeadlineReplyMessage?.trim() || null,
       line_custom_identifier: useCustomIdentifier ? trimmedCustomIdentifier : null,
@@ -789,6 +890,17 @@ export async function markReportGenerated(formId: number): Promise<boolean> {
 
   if (error) throw new Error(`標記報表生成失敗：${error.message}`);
   return true;
+}
+
+export async function setFacebookPostUrl(formId: number, postUrl?: string | null): Promise<void> {
+  const { error } = await getSupabase()
+    .from('forms')
+    .update({
+      facebook_post_url: postUrl || null,
+    })
+    .eq('id', formId);
+
+  if (error) throw new Error(`更新貼文連結失敗：${error.message}`);
 }
 
 export async function getFormsReadyForReport(): Promise<Form[]> {
@@ -1062,11 +1174,30 @@ function mapFormFromDb(row: any): Form {
     line_comment_url: row.line_comment_url || undefined,
     facebook_post_url: row.facebook_post_url || undefined,
     facebook_post_author: row.facebook_post_author || undefined,
+    facebook_target_url: row.facebook_target_url || undefined,
+    facebook_post_template: row.facebook_post_template || undefined,
+    facebook_vendor_content: row.facebook_vendor_content || undefined,
+    facebook_post_images: row.facebook_post_images || undefined,
     facebook_keywords: row.facebook_keywords || undefined,
     facebook_auto_monitor: row.facebook_auto_monitor || 0,
     facebook_reply_message: row.facebook_reply_message || undefined,
-    facebook_scan_interval: row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined ? row.facebook_scan_interval : 3,
+    facebook_scan_interval:
+      row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined
+        ? row.facebook_scan_interval
+        : 3,
     facebook_last_scan_at: row.facebook_last_scan_at || undefined,
+    facebook_auto_deadline_scan:
+      row.facebook_auto_deadline_scan === null || row.facebook_auto_deadline_scan === undefined
+        ? 0
+        : row.facebook_auto_deadline_scan,
+    facebook_manual_strict_deadline:
+      row.facebook_manual_strict_deadline === null || row.facebook_manual_strict_deadline === undefined
+        ? 1
+        : row.facebook_manual_strict_deadline,
+    facebook_allow_overdue:
+      row.facebook_allow_overdue === null || row.facebook_allow_overdue === undefined
+        ? 0
+        : row.facebook_allow_overdue,
     line_post_author: row.line_post_author || undefined,
     post_deadline_reply_message: row.post_deadline_reply_message || undefined,
     line_custom_identifier: row.line_custom_identifier || undefined,

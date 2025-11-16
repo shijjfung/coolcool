@@ -12,12 +12,7 @@ import {
   updateFormLastScanAt
 } from '@/lib/db';
 import { parseOrderMessage, mergeOrderItems, extractProductsFromForm } from '@/lib/message-parser';
-import { 
-  fetchCommentsWithPuppeteer,
-  replyToCommentWithPuppeteer,
-  type FacebookComment as PuppeteerComment,
-  type PuppeteerConfig
-} from '@/lib/facebook-puppeteer';
+import { callAutomationScanComments } from '@/lib/facebook-automation';
 
 /**
  * Facebook 留言掃描 API
@@ -172,10 +167,10 @@ export default async function handler(
 
     // 過濾出啟用自動監控的表單
     const monitoringForms = forms.filter(
-      form => form.facebook_auto_monitor === 1 &&
-              form.facebook_post_url &&
-              form.facebook_post_author &&
-              form.facebook_keywords
+      form =>
+        form.facebook_auto_monitor === 1 &&
+        form.facebook_post_url &&
+        form.facebook_keywords
     );
 
     if (monitoringForms.length === 0) {
@@ -183,18 +178,6 @@ export default async function handler(
         message: '沒有啟用自動監控的表單',
         scanned: 0,
         processed: 0,
-      });
-    }
-
-    // 檢查是否使用 Puppeteer 模式
-    const usePuppeteer = req.body.usePuppeteer === true || process.env.FACEBOOK_USE_PUPPETEER === 'true';
-    
-    // 如果未啟用 Puppeteer 模式，返回錯誤
-    if (!usePuppeteer) {
-      return res.status(400).json({
-        error: 'Graph API 模式已不再支援',
-        hint: 'Facebook 已移除 Groups API，請使用 Puppeteer 模式',
-        solution: '設定 FACEBOOK_USE_PUPPETEER=true 或 usePuppeteer=true',
       });
     }
 
@@ -211,12 +194,16 @@ export default async function handler(
     for (const form of monitoringForms) {
       try {
         // 檢查結單時間（使用 order_deadline 或 deadline）
-        const deadline = form.order_deadline 
-          ? new Date(form.order_deadline) 
+        const deadline = form.order_deadline
+          ? new Date(form.order_deadline)
           : new Date(form.deadline);
         const now = new Date();
-        if (now > deadline) {
-          console.log(`表單 ${form.id} (${form.name}) 已超過結單時間，跳過處理`);
+        const allowOverdue = form.facebook_allow_overdue === 1;
+        const autoDeadlineScanEnabled = form.facebook_auto_deadline_scan === 1;
+        const isManualRequest = Boolean(formId);
+        const isAfterDeadline = now > deadline;
+        if (isAfterDeadline && !allowOverdue && !autoDeadlineScanEnabled && !isManualRequest) {
+          console.log(`表單 ${form.id} (${form.name}) 已超過結單時間，且未啟用延長/自動結單掃描，跳過處理`);
           continue;
         }
 
@@ -252,39 +239,61 @@ export default async function handler(
         const urlInfo = parseFacebookPostUrl(form.facebook_post_url!);
         console.log(`表單 ${form.id} (${form.name})：社團 ID=${urlInfo.groupId || '無'}, 貼文 ID=${urlInfo.postId}, 發文者：${form.facebook_post_author || '未設定'}`);
         
-        // 取得留言（使用 Puppeteer 模式）
         console.log(`[Facebook] 開始取得留言，表單：${form.id} (${form.name})，貼文 URL：${form.facebook_post_url}`);
-        console.log(`[Facebook] 使用模式：Puppeteer（瀏覽器自動化）`);
-        
         let comments: FacebookComment[] = [];
-        
+        let autoReplySet = new Set<string>();
         try {
-          const puppeteerConfig: PuppeteerConfig = {
-            headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false', // 預設無頭模式
-            cookies: process.env.FACEBOOK_COOKIES,
-            timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
+          const automationPayload = {
+            form: {
+              id: form.id,
+              name: form.name,
+              formToken: form.form_token,
+              postUrl: form.facebook_post_url,
+              targetUrl: form.facebook_target_url,
+              replyMessage: form.facebook_reply_message || '已登記',
+              deadline: form.order_deadline || form.deadline,
+              lastScanAt: form.facebook_last_scan_at,
+              keywords,
+            },
+            options: {
+              mode: formId ? 'manual' : 'auto',
+              autoDeadlineScan: form.facebook_auto_deadline_scan === 1,
+              strictDeadline:
+                form.facebook_manual_strict_deadline === undefined
+                  ? true
+                  : form.facebook_manual_strict_deadline === 1,
+              allowOverdue: form.facebook_allow_overdue === 1,
+            },
           };
-          
-          const puppeteerComments = await fetchCommentsWithPuppeteer(
-            form.facebook_post_url!,
-            puppeteerConfig
-          );
-          
-          // 轉換格式以符合現有的 FacebookComment 介面
-          comments = puppeteerComments.map((comment: PuppeteerComment) => ({
+
+          const automationResponse = await callAutomationScanComments<{ comments?: FacebookComment[]; autoReplies?: string[] }>(automationPayload);
+          const automationComments = Array.isArray(automationResponse?.comments)
+            ? automationResponse.comments
+            : [];
+
+          comments = automationComments.map((comment) => ({
             id: comment.id,
-            message: comment.message,
+            message: comment.message || '',
             from: comment.from,
             created_time: comment.created_time,
           }));
-          
-          console.log(`[Facebook] ✅ Puppeteer 模式：取得 ${comments.length} 筆留言`);
-        } catch (puppeteerError: any) {
-          console.error(`[Facebook] ❌ Puppeteer 模式錯誤:`, puppeteerError.message);
+
+          if (Array.isArray(automationResponse?.autoReplies)) {
+            autoReplySet = new Set(
+              automationResponse.autoReplies.map((id) => String(id))
+            );
+          }
+
+          console.log(`[Facebook] ✅ 自動化服務：取得 ${comments.length} 筆留言`);
+        } catch (automationError: any) {
+          console.error(
+            `[Facebook] ❌ 自動化服務錯誤:`,
+            automationError?.message || automationError
+          );
           results.push({
             formId: form.id,
             formName: form.name,
-            error: `Puppeteer 錯誤: ${puppeteerError.message}`,
+            error: automationError?.message || '自動化服務錯誤',
           });
           continue;
         }
@@ -436,47 +445,11 @@ export default async function handler(
             undefined,
             undefined,
             'facebook',
-            form
+          form,
+          comment.id
           );
           
           console.log(`[Facebook] ✅ 訂單建立成功：${orderToken}`);
-
-          // 自動回覆留言（使用表單設定的回覆訊息，或預設「已登記」）
-          // 使用 Puppeteer 回覆留言
-          const replyMessage = form.facebook_reply_message || '已登記';
-          console.log(`[Facebook] 💬 準備使用 Puppeteer 回覆留言 ${comment.id}：${replyMessage}`);
-          
-          // 使用 Puppeteer 回覆留言
-          // 傳入貼文 URL 和留言 ID，讓 Puppeteer 自動構建留言 URL
-          const postUrl = form.facebook_post_url!;
-          
-          let replySuccess = false;
-          try {
-            const puppeteerConfig: PuppeteerConfig = {
-              headless: process.env.FACEBOOK_PUPPETEER_HEADLESS !== 'false',
-              cookies: process.env.FACEBOOK_COOKIES,
-              timeout: parseInt(process.env.FACEBOOK_PUPPETEER_TIMEOUT || '60000', 10),
-            };
-            
-            replySuccess = await replyToCommentWithPuppeteer(
-              postUrl,
-              replyMessage,
-              puppeteerConfig,
-              comment.id
-            );
-            
-            if (replySuccess) {
-              console.log(`[Facebook] ✅ 已使用 Puppeteer 回覆留言 ${comment.id}：${replyMessage}`);
-            } else {
-              console.warn(`[Facebook] ⚠️ 回覆留言 ${comment.id} 失敗，可能原因：`);
-              console.warn(`  - Cookie 無效或過期`);
-              console.warn(`  - 留言 URL 格式錯誤`);
-              console.warn(`  - 無法找到回覆輸入框`);
-            }
-          } catch (replyError: any) {
-            console.error(`[Facebook] ❌ 回覆留言錯誤:`, replyError.message);
-            replySuccess = false;
-          }
 
           // 標記為已處理（使用資料庫記錄）
           await markFacebookCommentAsProcessed(form.id, comment.id);
@@ -490,7 +463,7 @@ export default async function handler(
             customerName,
             message: comment.message,
             orderToken,
-            replySuccess,
+            replySuccess: autoReplySet.has(comment.id),
           });
         }
 

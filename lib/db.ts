@@ -132,6 +132,20 @@ async function initDatabaseSQLite() {
     // ??????????????????
   }
   try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_target_url TEXT`);
+  } catch (e: any) {
+    // column may already exist
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_template TEXT`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_vendor_content TEXT`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_post_images TEXT`);
+  } catch (e: any) {}
+  try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_keywords TEXT`);
   } catch (e: any) {
     // ??????????????????
@@ -148,6 +162,21 @@ async function initDatabaseSQLite() {
   }
   try {
     await dbRun(`ALTER TABLE forms ADD COLUMN facebook_last_scan_at TEXT`);
+  } catch (e: any) {
+    // 欄位可能已存在
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_auto_deadline_scan INTEGER DEFAULT 0`);
+  } catch (e: any) {
+    // 欄位可能已存在
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_manual_strict_deadline INTEGER DEFAULT 1`);
+  } catch (e: any) {
+    // 欄位可能已存在
+  }
+  try {
+    await dbRun(`ALTER TABLE forms ADD COLUMN facebook_allow_overdue INTEGER DEFAULT 0`);
   } catch (e: any) {
     // 欄位可能已存在
   }
@@ -381,11 +410,18 @@ export interface Form {
   line_comment_url?: string;
   facebook_post_url?: string;
   facebook_post_author?: string;
+  facebook_target_url?: string;
+  facebook_post_template?: string;
+  facebook_vendor_content?: string;
+  facebook_post_images?: string;
   facebook_keywords?: string;
   facebook_auto_monitor?: number;
   facebook_reply_message?: string;
   facebook_scan_interval?: number; // 掃描間隔（分鐘）
   facebook_last_scan_at?: string | null; // 最後掃描時間
+  facebook_auto_deadline_scan?: number;
+  facebook_manual_strict_deadline?: number;
+  facebook_allow_overdue?: number;
   line_post_author?: string;
   post_deadline_reply_message?: string;
   line_custom_identifier?: string;
@@ -419,6 +455,9 @@ export interface PickupOrderSummary {
   formId: number;
   formName: string;
   formToken: string;
+  orderSource?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   items: PickupOrderItem[];
 }
 
@@ -449,11 +488,30 @@ function mapFormRow(row: any): Form {
     line_comment_url: row.line_comment_url || undefined,
     facebook_post_url: row.facebook_post_url || undefined,
     facebook_post_author: row.facebook_post_author || undefined,
+    facebook_target_url: row.facebook_target_url || undefined,
+    facebook_post_template: row.facebook_post_template || undefined,
+    facebook_vendor_content: row.facebook_vendor_content || undefined,
+    facebook_post_images: row.facebook_post_images || undefined,
     facebook_keywords: row.facebook_keywords || undefined,
     facebook_auto_monitor: row.facebook_auto_monitor || 0,
     facebook_reply_message: row.facebook_reply_message || undefined,
-    facebook_scan_interval: row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined ? row.facebook_scan_interval : 3,
+    facebook_scan_interval:
+      row.facebook_scan_interval !== null && row.facebook_scan_interval !== undefined
+        ? row.facebook_scan_interval
+        : 3,
     facebook_last_scan_at: row.facebook_last_scan_at || undefined,
+    facebook_auto_deadline_scan:
+      row.facebook_auto_deadline_scan === null || row.facebook_auto_deadline_scan === undefined
+        ? 0
+        : row.facebook_auto_deadline_scan,
+    facebook_manual_strict_deadline:
+      row.facebook_manual_strict_deadline === null || row.facebook_manual_strict_deadline === undefined
+        ? 1
+        : row.facebook_manual_strict_deadline,
+    facebook_allow_overdue:
+      row.facebook_allow_overdue === null || row.facebook_allow_overdue === undefined
+        ? 0
+        : row.facebook_allow_overdue,
     line_post_author: row.line_post_author || undefined,
     post_deadline_reply_message: row.post_deadline_reply_message || undefined,
     line_custom_identifier: row.line_custom_identifier || undefined,
@@ -495,10 +553,17 @@ async function createFormSQLite(
   lineCommentUrl?: string,
   facebookPostUrl?: string,
   facebookPostAuthor?: string,
+  facebookTargetUrl?: string,
+  facebookPostTemplate?: string,
+  facebookVendorContent?: string,
+  facebookPostImages?: string,
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
   facebookScanInterval?: number,
+  facebookAutoDeadlineScan?: number,
+  facebookManualStrictDeadline?: number,
+  facebookAllowOverdue?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -515,8 +580,14 @@ async function createFormSQLite(
     postDeadlineReplyMessage && postDeadlineReplyMessage.trim()
       ? postDeadlineReplyMessage.trim()
       : null;
+  const autoDeadlineValue = facebookAutoDeadlineScan ? 1 : 0;
+  const manualStrictValue =
+    facebookManualStrictDeadline === null || facebookManualStrictDeadline === undefined
+      ? 1
+      : facebookManualStrictDeadline;
+  const allowOverdueValue = facebookAllowOverdue ? 1 : 0;
   await dbRun(
-    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_keywords, facebook_auto_monitor, facebook_reply_message, facebook_scan_interval, line_post_author, post_deadline_reply_message, line_custom_identifier, line_use_custom_identifier, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO forms (name, fields, deadline, order_deadline, order_limit, pickup_time, facebook_comment_url, line_comment_url, facebook_post_url, facebook_post_author, facebook_target_url, facebook_post_template, facebook_vendor_content, facebook_post_images, facebook_keywords, facebook_auto_monitor, facebook_reply_message, facebook_scan_interval, facebook_auto_deadline_scan, facebook_manual_strict_deadline, facebook_allow_overdue, line_post_author, post_deadline_reply_message, line_custom_identifier, line_use_custom_identifier, form_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       name,
       JSON.stringify(fields),
@@ -528,10 +599,17 @@ async function createFormSQLite(
       lineCommentUrl || null,
       facebookPostUrl || null,
       facebookPostAuthor || null,
+      facebookTargetUrl || null,
+      facebookPostTemplate || null,
+      facebookVendorContent || null,
+      facebookPostImages || null,
       facebookKeywords || null,
       facebookAutoMonitor || 0,
       facebookReplyMessage || null,
       facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
+      autoDeadlineValue,
+      manualStrictValue,
+      allowOverdueValue,
       linePostAuthor || null,
       storedPostDeadlineReply,
       storedCustomIdentifier,
@@ -588,10 +666,17 @@ async function updateFormSQLite(
   lineCommentUrl?: string,
   facebookPostUrl?: string,
   facebookPostAuthor?: string,
+  facebookTargetUrl?: string,
+  facebookPostTemplate?: string,
+  facebookVendorContent?: string,
+  facebookPostImages?: string,
   facebookKeywords?: string,
   facebookAutoMonitor?: number,
   facebookReplyMessage?: string,
   facebookScanInterval?: number,
+  facebookAutoDeadlineScan?: number,
+  facebookManualStrictDeadline?: number,
+  facebookAllowOverdue?: number,
   linePostAuthor?: string,
   postDeadlineReplyMessage?: string,
   lineCustomIdentifier?: string,
@@ -607,8 +692,14 @@ async function updateFormSQLite(
     postDeadlineReplyMessage && postDeadlineReplyMessage.trim()
       ? postDeadlineReplyMessage.trim()
       : null;
+  const autoDeadlineValue = facebookAutoDeadlineScan ? 1 : 0;
+  const manualStrictValue =
+    facebookManualStrictDeadline === null || facebookManualStrictDeadline === undefined
+      ? 1
+      : facebookManualStrictDeadline;
+  const allowOverdueValue = facebookAllowOverdue ? 1 : 0;
   await dbRun(
-    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, facebook_scan_interval = ?, line_post_author = ?, post_deadline_reply_message = ?, line_custom_identifier = ?, line_use_custom_identifier = ? WHERE id = ?',
+    'UPDATE forms SET name = ?, fields = ?, deadline = ?, order_deadline = ?, order_limit = ?, pickup_time = ?, facebook_comment_url = ?, line_comment_url = ?, facebook_post_url = ?, facebook_post_author = ?, facebook_target_url = ?, facebook_post_template = ?, facebook_vendor_content = ?, facebook_post_images = ?, facebook_keywords = ?, facebook_auto_monitor = ?, facebook_reply_message = ?, facebook_scan_interval = ?, facebook_auto_deadline_scan = ?, facebook_manual_strict_deadline = ?, facebook_allow_overdue = ?, line_post_author = ?, post_deadline_reply_message = ?, line_custom_identifier = ?, line_use_custom_identifier = ? WHERE id = ?',
     [
       name,
       JSON.stringify(fields),
@@ -620,10 +711,17 @@ async function updateFormSQLite(
       lineCommentUrl || null,
       facebookPostUrl || null,
       facebookPostAuthor || null,
+      facebookTargetUrl || null,
+      facebookPostTemplate || null,
+      facebookVendorContent || null,
+      facebookPostImages || null,
       facebookKeywords || null,
       facebookAutoMonitor || 0,
       facebookReplyMessage || null,
       facebookScanInterval !== null && facebookScanInterval !== undefined ? facebookScanInterval : 3,
+      autoDeadlineValue,
+      manualStrictValue,
+      allowOverdueValue,
       linePostAuthor || null,
       storedPostDeadlineReply,
       storedCustomIdentifier,
@@ -650,6 +748,11 @@ async function markReportGeneratedSQLite(formId: number): Promise<boolean> {
     [formId]
   );
   return (result as any).changes > 0;
+}
+
+async function setFacebookPostUrlSQLite(formId: number, postUrl?: string | null): Promise<void> {
+  await ensureDatabaseInitialized();
+  await dbRun('UPDATE forms SET facebook_post_url = ? WHERE id = ?', [postUrl || null, formId]);
 }
 
 /**
@@ -1176,6 +1279,9 @@ interface OrderRowWithForm {
   formName: string;
   formToken: string;
   fields: FormField[];
+  formFacebookCommentUrl?: string;
+  formLineCommentUrl?: string;
+  formFacebookPostUrl?: string;
 }
 
 async function buildPickupOrders(
@@ -1183,7 +1289,15 @@ async function buildPickupOrders(
   statusFilter: PickupStatusFilter = 'pending'
 ): Promise<PickupOrderSummary[]> {
   const results: PickupOrderSummary[] = [];
-  for (const { order, formName, formToken, fields } of rows) {
+  for (const {
+    order,
+    formName,
+    formToken,
+    fields,
+    formFacebookCommentUrl,
+    formLineCommentUrl,
+    formFacebookPostUrl,
+  } of rows) {
     const orderData = typeof order.order_data === 'string' ? JSON.parse(order.order_data) : order.order_data;
     const items = buildOrderItemsForPickup({ fields }, orderData);
     if (items.length === 0) continue;
@@ -1223,6 +1337,21 @@ async function buildPickupOrders(
       });
     }
     if (filteredItems.length === 0) continue;
+    const orderSource = (order.order_source || '').toLowerCase();
+    let sourceLabel = '下單頁面';
+    let sourceUrl: string | undefined;
+
+    if (order.facebook_comment_id) {
+      sourceLabel = '臉書留言';
+      sourceUrl = formFacebookPostUrl || formFacebookCommentUrl || undefined;
+    } else if (orderSource === 'facebook') {
+      sourceLabel = '臉書URL';
+      sourceUrl = formFacebookCommentUrl || formFacebookPostUrl || undefined;
+    } else if (orderSource === 'line') {
+      sourceLabel = 'LineURL';
+      sourceUrl = formLineCommentUrl || undefined;
+    }
+
     results.push({
       orderId: order.id,
       orderToken: order.order_token,
@@ -1230,6 +1359,9 @@ async function buildPickupOrders(
       formId: order.form_id,
       formName,
       formToken,
+      orderSource,
+      sourceLabel,
+      sourceUrl,
       items: filteredItems,
     });
   }
@@ -1252,7 +1384,10 @@ async function getOutstandingPickupsByCustomerSQLite(
         f.name AS form_name, 
         f.form_token AS form_token,
         f.deadline AS form_deadline,
-        f.fields AS form_fields
+        f.fields AS form_fields,
+        f.facebook_comment_url AS form_facebook_comment_url,
+        f.line_comment_url AS form_line_comment_url,
+        f.facebook_post_url AS form_facebook_post_url
       FROM orders o
       INNER JOIN forms f ON o.form_id = f.id
       WHERE o.customer_name = ? AND o.customer_phone = ?
@@ -1278,6 +1413,9 @@ async function getOutstandingPickupsByCustomerSQLite(
       formName: row.form_name,
       formToken: row.form_token,
       fields,
+      formFacebookCommentUrl: row.form_facebook_comment_url,
+      formLineCommentUrl: row.form_line_comment_url,
+      formFacebookPostUrl: row.form_facebook_post_url,
     });
   }
 
@@ -1386,7 +1524,10 @@ async function markPickupItemSQLite(
 
   const orderRow = (await dbGet(
     `
-      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline
+      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline,
+        f.facebook_comment_url AS form_facebook_comment_url,
+        f.line_comment_url AS form_line_comment_url,
+        f.facebook_post_url AS form_facebook_post_url
       FROM orders o
       INNER JOIN forms f ON o.form_id = f.id
       WHERE o.id = ?
@@ -1409,7 +1550,17 @@ async function markPickupItemSQLite(
     typeof orderRow.form_fields === 'string' ? JSON.parse(orderRow.form_fields) : orderRow.form_fields || [];
 
   const outstandingForOrder = await buildPickupOrders(
-    [{ order: orderRow, formName: orderRow.form_name, formToken: orderRow.form_token, fields }],
+    [
+      {
+        order: orderRow,
+        formName: orderRow.form_name,
+        formToken: orderRow.form_token,
+        fields,
+        formFacebookCommentUrl: orderRow.form_facebook_comment_url,
+        formLineCommentUrl: orderRow.form_line_comment_url,
+        formFacebookPostUrl: orderRow.form_facebook_post_url,
+      },
+    ],
     'pending'
   );
   const orderSummary = outstandingForOrder[0];
@@ -1451,7 +1602,10 @@ async function undoPickupItemSQLite(
 
   const orderRow = (await dbGet(
     `
-      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline
+      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline,
+        f.facebook_comment_url AS form_facebook_comment_url,
+        f.line_comment_url AS form_line_comment_url,
+        f.facebook_post_url AS form_facebook_post_url
       FROM orders o
       INNER JOIN forms f ON o.form_id = f.id
       WHERE o.id = ?
@@ -1804,6 +1958,10 @@ export const updateFormLastScanAt = DATABASE_TYPE === 'supabase'
 export const markReportGenerated = DATABASE_TYPE === 'supabase'
   ? dbModule.markReportGenerated
   : markReportGeneratedSQLite;
+
+export const setFacebookPostUrl = DATABASE_TYPE === 'supabase'
+  ? dbModule.setFacebookPostUrl
+  : setFacebookPostUrlSQLite;
 
 export const getFormsReadyForReport = DATABASE_TYPE === 'supabase'
   ? dbModule.getFormsReadyForReport

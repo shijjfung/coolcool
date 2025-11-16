@@ -30,10 +30,17 @@ export default async function handler(
       lineCommentUrl,
       facebookPostUrl,
       facebookPostAuthor,
+      facebookTargetUrl,
+      facebookPostTemplate,
+      facebookVendorContent,
+      facebookPostImages,
       facebookKeywords,
       facebookAutoMonitor,
       facebookReplyMessage,
       facebookScanInterval,
+      facebookAutoDeadlineScan,
+      facebookManualStrictDeadline,
+      facebookAllowOverdue,
       linePostAuthor,
       postDeadlineReplyMessage,
       lineCustomIdentifier,
@@ -71,6 +78,15 @@ export default async function handler(
       }
     }
 
+    if (facebookAutoMonitor) {
+      if (!facebookTargetUrl || !facebookTargetUrl.trim()) {
+        return res.status(400).json({ error: '請輸入 Facebook 社團或貼文目標連結' });
+      }
+      if (!facebookPostTemplate || !facebookPostTemplate.trim()) {
+        return res.status(400).json({ error: '請輸入 Facebook 貼文內容模板' });
+      }
+    }
+
     // 更新表單
     await updateForm(
       formId,
@@ -84,10 +100,17 @@ export default async function handler(
       lineCommentUrl,
       facebookPostUrl,
       facebookPostAuthor,
+      facebookTargetUrl,
+      facebookPostTemplate,
+      facebookVendorContent,
+      facebookPostImages,
       facebookKeywords,
       facebookAutoMonitor ? 1 : 0,
       facebookReplyMessage,
       facebookScanInterval ? parseInt(String(facebookScanInterval)) : undefined,
+      facebookAutoDeadlineScan ? 1 : 0,
+      facebookManualStrictDeadline ? 1 : 0,
+      facebookAllowOverdue ? 1 : 0,
       linePostAuthor,
       postDeadlineReplyMessage,
       lineCustomIdentifier,

@@ -43,10 +43,17 @@ export default function CreateForm() {
   // Facebook 自動監控設定
   const [facebookPostUrl, setFacebookPostUrl] = useState('');
   const [facebookPostAuthor, setFacebookPostAuthor] = useState('');
+  const [facebookTargetUrl, setFacebookTargetUrl] = useState('');
+  const [facebookPostTemplate, setFacebookPostTemplate] = useState('');
+  const [facebookVendorContent, setFacebookVendorContent] = useState('');
+  const [facebookPostImagesInput, setFacebookPostImagesInput] = useState('');
   const [facebookKeywords, setFacebookKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
   const [facebookAutoMonitor, setFacebookAutoMonitor] = useState(false);
   const [facebookReplyMessage, setFacebookReplyMessage] = useState('已登記');
   const [facebookScanInterval, setFacebookScanInterval] = useState<number>(3); // 掃描間隔（分鐘）
+  const [facebookAutoDeadlineScan, setFacebookAutoDeadlineScan] = useState(false);
+  const [facebookManualStrictDeadline, setFacebookManualStrictDeadline] = useState(true);
+  const [facebookAllowOverdue, setFacebookAllowOverdue] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
   // LINE 自動監控設定
   const [lineAutoMonitor, setLineAutoMonitor] = useState(false);
@@ -118,10 +125,21 @@ export default function CreateForm() {
         // Facebook 自動監控設定
         setFacebookPostUrl(form.facebook_post_url || '');
         setFacebookPostAuthor(form.facebook_post_author || '');
+        setFacebookTargetUrl(form.facebook_target_url || '');
+        setFacebookPostTemplate(form.facebook_post_template || '');
+        setFacebookVendorContent(form.facebook_vendor_content || '');
+        setFacebookPostImagesInput(form.facebook_post_images || '');
         setFacebookKeywords(form.facebook_keywords ? JSON.parse(form.facebook_keywords) : ['+1', '+2', '+3', '加一', '加1']);
         setFacebookAutoMonitor(form.facebook_auto_monitor === 1);
         setFacebookReplyMessage(form.facebook_reply_message || '已登記');
         setFacebookScanInterval(form.facebook_scan_interval || 3);
+        setFacebookAutoDeadlineScan(form.facebook_auto_deadline_scan === 1);
+        setFacebookManualStrictDeadline(
+          form.facebook_manual_strict_deadline === undefined
+            ? true
+            : form.facebook_manual_strict_deadline === 1
+        );
+        setFacebookAllowOverdue(form.facebook_allow_overdue === 1);
         // LINE 自動監控設定
         // 如果有設定 LINE 發文者姓名，則認為已啟用 LINE 自動監控
         setLineAutoMonitor(!!form.line_post_author);
@@ -246,20 +264,17 @@ export default function CreateForm() {
     return results;
   };
 
-  /**
-   * 批量創建欄位
-   */
-  const createFieldsFromBulkInput = () => {
-    if (!bulkInputText.trim()) {
-      alert('請先輸入商品列表');
-      return;
+  const addFieldsFromText = (sourceText: string, sourceLabel: string): number => {
+    if (!sourceText.trim()) {
+      alert(`請先輸入${sourceLabel}`);
+      return 0;
     }
 
-    const parsedItems = parseBulkInput(bulkInputText);
-    
+    const parsedItems = parseBulkInput(sourceText);
+
     if (parsedItems.length === 0) {
       alert('無法解析商品列表，請檢查格式是否正確');
-      return;
+      return 0;
     }
 
     const cleanedItems = parsedItems
@@ -271,30 +286,54 @@ export default function CreateForm() {
 
     if (cleanedItems.length === 0) {
       alert('無法解析有效的商品名稱，請檢查輸入內容');
-      return;
+      return 0;
     }
 
     const uniqueItems = cleanedItems.filter(
       (item, index, array) => array.findIndex((other) => other.name === item.name) === index
     );
 
-    // 為每個商品創建欄位
+    if (uniqueItems.length === 0) {
+      alert('未找到可新增的商品欄位');
+      return 0;
+    }
+
     const newFields: FormField[] = uniqueItems.map((item, index) => ({
       name: `field_${fields.length + index + 1}`,
       label: item.name,
-      type: 'number' as const, // 使用數字類型（因為有價格）
+      type: 'number' as const,
       required: false,
-      price: item.price, // 設定價格
+      price: item.price,
     }));
 
-    // 添加到現有欄位
     setFields([...fields, ...newFields]);
+    return newFields.length;
+  };
 
-    // 清空輸入框
+  /**
+   * 批量創建欄位
+   */
+  const createFieldsFromBulkInput = () => {
+    const count = addFieldsFromText(bulkInputText, '商品列表');
+    if (!count) return;
     setBulkInputText('');
     setUseBulkInput(false);
+    alert(`已成功創建 ${count} 個欄位！`);
+  };
 
-    alert(`已成功創建 ${newFields.length} 個欄位！`);
+  const handleGenerateFieldsFromVendorContent = () => {
+    const count = addFieldsFromText(facebookVendorContent, '貼文內容');
+    if (count) {
+      alert(`已成功從貼文內容建立 ${count} 個商品欄位`);
+    }
+  };
+
+  const handleInsertTemplateToken = (token: string) => {
+    setFacebookPostTemplate((prev) => {
+      if (!prev) return token;
+      const needsSpace = !/\s$/.test(prev);
+      return `${prev}${needsSpace ? ' ' : ''}${token}`;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -354,20 +393,15 @@ export default function CreateForm() {
           }
         }
 
-        // 驗證 Facebook 自動監控設定
+        // 驗證 Facebook 發文/監控設定
         if (facebookAutoMonitor) {
-          if (!facebookPostUrl.trim()) {
-            alert('請輸入 Facebook 貼文連結');
+          if (!facebookTargetUrl.trim()) {
+            alert('請輸入 Facebook 社團或粉專貼文目標連結');
             setSaving(false);
             return;
           }
-          if (!facebookPostAuthor.trim()) {
-            alert('請輸入 Facebook 發文者姓名');
-            setSaving(false);
-            return;
-          }
-          if (facebookKeywords.length === 0) {
-            alert('請至少新增一個關鍵字');
+          if (!facebookPostTemplate.trim()) {
+            alert('請輸入 Facebook 貼文內容');
             setSaving(false);
             return;
           }
@@ -435,10 +469,17 @@ export default function CreateForm() {
             lineCommentUrl: lineCommentUrl.trim() || undefined,
             facebookPostUrl: facebookAutoMonitor ? (facebookPostUrl.trim() || undefined) : undefined,
             facebookPostAuthor: facebookAutoMonitor ? (facebookPostAuthor.trim() || undefined) : undefined,
+            facebookTargetUrl: facebookAutoMonitor ? (facebookTargetUrl.trim() || undefined) : undefined,
+            facebookPostTemplate: facebookAutoMonitor ? facebookPostTemplate.trim() : undefined,
+            facebookVendorContent: facebookAutoMonitor ? facebookVendorContent.trim() : undefined,
+            facebookPostImages: facebookAutoMonitor ? (facebookPostImagesInput.trim() || undefined) : undefined,
             facebookKeywords: facebookAutoMonitor ? JSON.stringify(facebookKeywords) : undefined,
             facebookAutoMonitor: facebookAutoMonitor ? 1 : 0,
             facebookReplyMessage: facebookAutoMonitor ? (facebookReplyMessage.trim() || undefined) : undefined,
             facebookScanInterval: facebookAutoMonitor ? (facebookScanInterval || 3) : undefined,
+            facebookAutoDeadlineScan: facebookAutoDeadlineScan,
+            facebookManualStrictDeadline: facebookManualStrictDeadline,
+            facebookAllowOverdue: facebookAllowOverdue,
             linePostAuthor: lineAutoMonitor ? (linePostAuthor.trim() || undefined) : undefined,
             lineCustomIdentifier: lineAutoMonitor && useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
             useCustomLineIdentifier: lineAutoMonitor && useCustomLineIdentifier,
@@ -486,9 +527,16 @@ export default function CreateForm() {
             lineCommentUrl: lineCommentUrl.trim() || undefined,
             facebookPostUrl: facebookAutoMonitor ? (facebookPostUrl.trim() || undefined) : undefined,
             facebookPostAuthor: facebookAutoMonitor ? (facebookPostAuthor.trim() || undefined) : undefined,
+            facebookTargetUrl: facebookAutoMonitor ? (facebookTargetUrl.trim() || undefined) : undefined,
+            facebookPostTemplate: facebookAutoMonitor ? facebookPostTemplate.trim() : undefined,
+            facebookVendorContent: facebookAutoMonitor ? facebookVendorContent.trim() : undefined,
+            facebookPostImages: facebookAutoMonitor ? (facebookPostImagesInput.trim() || undefined) : undefined,
             facebookKeywords: facebookAutoMonitor ? JSON.stringify(facebookKeywords) : undefined,
             facebookAutoMonitor: facebookAutoMonitor ? 1 : 0,
             facebookReplyMessage: facebookAutoMonitor ? (facebookReplyMessage.trim() || undefined) : undefined,
+            facebookAutoDeadlineScan: facebookAutoDeadlineScan,
+            facebookManualStrictDeadline: facebookManualStrictDeadline,
+            facebookAllowOverdue: facebookAllowOverdue,
             linePostAuthor: lineAutoMonitor ? (linePostAuthor.trim() || undefined) : undefined,
             lineCustomIdentifier: lineAutoMonitor && useCustomLineIdentifier ? lineCustomIdentifier.trim() : undefined,
             useCustomLineIdentifier: lineAutoMonitor && useCustomLineIdentifier,
@@ -863,56 +911,140 @@ export default function CreateForm() {
               </label>
             </div>
             {facebookAutoMonitor && (
-              <div className="space-y-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Facebook 貼文連結 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={facebookPostUrl}
-                    onChange={(e) => setFacebookPostUrl(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://www.facebook.com/groups/xxx/posts/xxx"
-                    autoComplete="off"
-                    required={facebookAutoMonitor}
-                  />
-                  <div className="text-xs text-gray-600 mt-2 space-y-1">
-                    <p className="font-medium">📋 如何取得貼文連結：</p>
-                    <ol className="list-decimal list-inside ml-2 space-y-1">
-                      <li>前往 Facebook 社團（公開或私密社團都可以）</li>
-                      <li>找到您要監控的貼文</li>
-                      <li>點擊貼文右上角的「⋯」或「時間」</li>
-                      <li>選擇「複製連結」或「複製貼文連結」</li>
-                      <li>貼上到上方欄位</li>
-                    </ol>
-                    <p className="text-purple-600 mt-2">
-                      ✅ 系統使用 Puppeteer（瀏覽器自動化）自動抓取留言：<br/>
-                      • 支援公開和私密社團<br/>
-                      • 自動滾動載入所有留言<br/>
-                      • 自動回覆符合關鍵字的留言
+              <div className="space-y-6 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      社團/粉專目標連結 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={facebookTargetUrl}
+                      onChange={(e) => setFacebookTargetUrl(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://www.facebook.com/groups/xxx"
+                      autoComplete="off"
+                      required={facebookAutoMonitor}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      ✅ 發布與抓文都會前往這個連結（建議填社團網址或預計貼文位置）。
                     </p>
-                    <p className="text-orange-600 mt-1">
-                      ⚠️ 重要：請先設定 Facebook Cookie（使用 Cookie-Editor 擴充功能取得）<br/>
-                      • 環境變數：FACEBOOK_COOKIES<br/>
-                      • 詳細說明請參考：Puppeteer快速開始.md
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      已發布貼文連結
+                    </label>
+                    <input
+                      type="url"
+                      value={facebookPostUrl}
+                      onChange={(e) => setFacebookPostUrl(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-200 rounded bg-gray-50 focus:ring-2 focus:ring-purple-500"
+                      placeholder="按「發布貼文」後會自動回填，也可手動貼上"
+                      readOnly
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      💡 如果你已經手動貼文，也可以把實際貼文連結貼回來，之後直接抓留言。
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    發文者姓名 <span className="text-red-500">*</span>
+                    廠商原始文章 / 價格清單
                   </label>
-                  <input
-                    type="text"
-                    value={facebookPostAuthor}
-                    onChange={(e) => setFacebookPostAuthor(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                    placeholder="例如：愛買"
-                    autoComplete="off"
+                  <textarea
+                    value={facebookVendorContent}
+                    onChange={(e) => setFacebookVendorContent(e.target.value)}
+                    className="w-full px-3 py-3 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    rows={6}
+                    placeholder="貼上廠商提供的完整文章、價格、規格..."
+                  />
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateFieldsFromVendorContent}
+                      className="px-4 py-2 text-sm font-semibold rounded bg-purple-600 text-white hover:bg-purple-700"
+                    >
+                      解析貼文並建立商品欄位
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBulkInputText(facebookVendorContent);
+                        setUseBulkInput(true);
+                      }}
+                      className="px-4 py-2 text-sm font-semibold rounded border border-purple-300 text-purple-700 hover:bg-purple-50"
+                    >
+                      複製到批量輸入區
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    ✨ 系統會嘗試從這段文字分析商品與價格，並自動建立欄位與貼文內容。
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Facebook 貼文內容模板 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={facebookPostTemplate}
+                    onChange={(e) => setFacebookPostTemplate(e.target.value)}
+                    className="w-full px-3 py-3 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    rows={6}
+                    placeholder="例如：\n大家好，這次開團內容如下...\n訂購連結：{{formUrl}}\n截止時間：{{deadline}}"
                     required={facebookAutoMonitor}
                   />
+                  <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                    {[
+                      { token: '{{formUrl}}', label: '表單連結' },
+                      { token: '{{deadline}}', label: '截止時間' },
+                      { token: '{{pickupTime}}', label: '取貨時間' },
+                    ].map(({ token, label }) => (
+                      <button
+                        type="button"
+                        key={token}
+                        onClick={() => handleInsertTemplateToken(token)}
+                        className="px-3 py-1 border border-purple-300 rounded-full text-purple-700 hover:bg-purple-50"
+                      >
+                        插入 {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 系統會在發文時自動替換占位符（例如把 {{'{{formUrl}}'}} 改成實際表單網址）。
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    貼文圖片（每行一個 URL，可選）
+                  </label>
+                  <textarea
+                    value={facebookPostImagesInput}
+                    onChange={(e) => setFacebookPostImagesInput(e.target.value)}
+                    className="w-full px-3 py-2 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    rows={3}
+                    placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    📎 目前支援貼上圖片連結，之後會加入直接上傳圖片的功能。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      發文備註（可選）
+                    </label>
+                    <input
+                      type="text"
+                      value={facebookPostAuthor}
+                      onChange={(e) => setFacebookPostAuthor(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                      placeholder="例如：愛買小編、代理商、廠商"
+                      autoComplete="off"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -934,10 +1066,11 @@ export default function CreateForm() {
                       required={facebookAutoMonitor}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 建議：3-10 分鐘
+                      💡 建議 3-10 分鐘，可視留言量調整。
                     </p>
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     關鍵字列表 <span className="text-red-500">*</span>
@@ -1023,6 +1156,63 @@ export default function CreateForm() {
                     </p>
                   </div>
                 </div>
+              <div className="p-4 bg-white/80 rounded-lg border border-purple-100 space-y-3">
+                <p className="text-sm font-semibold text-purple-700">截止與抓留言策略</p>
+                <label className="flex items-start gap-3 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    checked={facebookAutoDeadlineScan}
+                    onChange={(e) => setFacebookAutoDeadlineScan(e.target.checked)}
+                  />
+                  <span>
+                    截止時間一到自動抓留言並留言「本單已截止，符合時間的已登記」
+                    <span className="block text-xs text-gray-500">
+                      deadline 到時自動跑一次，無須手動守在電腦前。
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    checked={facebookManualStrictDeadline}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFacebookManualStrictDeadline(checked);
+                      if (checked) {
+                        setFacebookAllowOverdue(false);
+                      }
+                    }}
+                  />
+                  <span>
+                    手動抓留言時只登記截止前的留言，並留言「已登記到 XX 為止」
+                    <span className="block text-xs text-gray-500">
+                      12:00 後的留言會標記為「逾期」不入單，避免客戶誤會。
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    checked={facebookAllowOverdue}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFacebookAllowOverdue(checked);
+                      if (checked) {
+                        setFacebookManualStrictDeadline(false);
+                      }
+                    }}
+                  />
+                  <span>
+                    不管是否超過截止時間都登記（延長 / 加開模式）
+                    <span className="block text-xs text-gray-500">
+                      適合還有庫存的情況；若勾選此項，將忽略「只登記截止前留言」設定。
+                    </span>
+                  </span>
+                </label>
+              </div>
               </div>
             )}
           </div>
@@ -1354,6 +1544,16 @@ A原味無蝦米$150B原味有蝦米$150🦐C薑黃無蝦米180`}
                           placeholder="例如：90（留空表示無價格）"
                           min="0"
                           step="1"
+                          inputMode="numeric"
+                          onWheel={(e) => {
+                            // 避免滾輪誤觸改變數值
+                            e.currentTarget.blur();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                              e.preventDefault();
+                            }
+                          }}
                           autoComplete="off"
                         />
                         <p className="text-xs text-gray-500 mt-1">

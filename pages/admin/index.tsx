@@ -17,6 +17,10 @@ interface Form {
   line_comment_url?: string;
    facebook_post_url?: string;
    facebook_post_author?: string;
+   facebook_target_url?: string;
+   facebook_post_template?: string;
+   facebook_vendor_content?: string;
+   facebook_post_images?: string;
    facebook_keywords?: string;
    facebook_auto_monitor?: number;
    facebook_reply_message?: string;
@@ -105,6 +109,8 @@ export default function AdminDashboard() {
   } | null>(null);
   const [facebookNotificationMessage, setFacebookNotificationMessage] = useState('');
   const [sendingFacebookNotification, setSendingFacebookNotification] = useState(false);
+  const [publishingFormId, setPublishingFormId] = useState<number | null>(null);
+  const [scanningFormId, setScanningFormId] = useState<number | null>(null);
   const formatDateTime = (iso?: string | null) => {
     if (!iso) return '';
     try {
@@ -717,6 +723,62 @@ export default function AdminDashboard() {
       }
     } catch (error: any) {
       alert(`✗ 操作失敗：無法連接到伺服器\n\n請確認：\n1. 伺服器正在運行\n2. 網路連接正常\n3. 重新啟動伺服器`);
+    }
+  };
+
+  const handlePublishFacebookPost = async (form: Form) => {
+    if (!form.facebook_target_url) {
+      alert('請先在「啟用 Facebook 監控」中設定社團或粉專目標連結。');
+      return;
+    }
+    if (!form.facebook_post_template) {
+      alert('請先設定 Facebook 貼文內容。');
+      return;
+    }
+    setPublishingFormId(form.id);
+    try {
+      const res = await fetch('/api/facebook/manual-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formId: form.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || '發布貼文失敗');
+      }
+      showToast('已送出發布指令，稍後請確認貼文連結。');
+      await fetchForms();
+    } catch (error: any) {
+      console.error('發布貼文錯誤:', error);
+      alert(error?.message || '發布貼文失敗，請稍後再試。');
+    } finally {
+      setPublishingFormId(null);
+    }
+  };
+
+  const handleScanFacebookPost = async (form: Form) => {
+    if (!form.facebook_post_url) {
+      alert('請先設定或發布 Facebook 貼文連結，再進行抓文。');
+      return;
+    }
+    setScanningFormId(form.id);
+    try {
+      const res = await fetch('/api/facebook/scan-comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formId: form.id, usePuppeteer: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '抓取留言失敗');
+      }
+      const processed = data.processed ?? data.inserted ?? data.newOrders ?? 0;
+      showToast(`已完成掃描，處理 ${processed} 筆留言`);
+    } catch (error: any) {
+      console.error('掃描留言錯誤:', error);
+      alert(error?.message || '掃描留言失敗，請稍後再試。');
+    } finally {
+      setScanningFormId(null);
     }
   };
 
@@ -1594,6 +1656,60 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
+                {form.facebook_auto_monitor === 1 && (
+                  <div className="mt-3 bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs space-y-2">
+                    <div className="flex items-center justify-between text-purple-800 font-semibold text-sm">
+                      <span>臉書自動貼文 / 抓單</span>
+                      <span>
+                        {form.facebook_post_url ? '已發布' : '尚未發布'}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-purple-700 break-words">
+                      {form.facebook_target_url && (
+                        <div>
+                          🎯 目標：
+                          <span className="break-all">{form.facebook_target_url}</span>
+                        </div>
+                      )}
+                      {form.facebook_post_url && (
+                        <div>
+                          📌 貼文：
+                          <a
+                            href={form.facebook_post_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline text-purple-800"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            開啟連結
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 text-sm">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePublishFacebookPost(form);
+                        }}
+                        disabled={publishingFormId === form.id}
+                        className="flex-1 bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {publishingFormId === form.id ? '發布中...' : form.facebook_post_url ? '重新發布貼文' : '發布貼文'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleScanFacebookPost(form);
+                        }}
+                        disabled={scanningFormId === form.id}
+                        className="flex-1 bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {scanningFormId === form.id ? '抓取中...' : '抓取留言'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
                   <button
                     onClick={(e) => {
