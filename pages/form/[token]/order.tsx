@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, ReactNode } from 'react';
-import { describeDeviceFromUserAgent } from '@/lib/device-info';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
