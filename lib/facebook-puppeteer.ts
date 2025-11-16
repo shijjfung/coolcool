@@ -271,9 +271,7 @@ export async function fetchCommentsWithPuppeteer(
     console.log('[Puppeteer] 等待留言區域載入...');
     await page.waitForTimeout?.(3000);
     if (typeof page.waitForTimeout !== 'function') {
-      await page.waitForFunction(
-        () => new Promise((resolve) => setTimeout(resolve, 3000))
-      );
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
     // 滾動頁面以載入更多留言
@@ -324,9 +322,7 @@ async function autoScroll(page: Page): Promise<void> {
   if (typeof page.waitForTimeout === 'function') {
     await page.waitForTimeout(2000);
   } else {
-    await page.waitForFunction(
-      () => new Promise((resolve) => setTimeout(resolve, 2000))
-    );
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
 
