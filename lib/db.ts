@@ -1865,32 +1865,28 @@ export const markLineSaleFirstWarningSent = DATABASE_TYPE === 'supabase'
   ? dbModule.markLineSaleFirstWarningSent
   : markLineSaleFirstWarningSentSQLite;
 
-const pickupFeatureNotAvailable = async () => {
-  throw new Error('目前的後端設定尚未支援取貨相關功能');
-};
-
 export const getOutstandingPickupsByCustomer = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.getOutstandingPickupsByCustomer
   : getOutstandingPickupsByCustomerSQLite;
 
 export const createPickupToken = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.createPickupToken
   : createPickupTokenSQLite;
 
 export const getOrCreatePickupToken = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.getOrCreatePickupToken
   : getOrCreatePickupTokenSQLite;
 
 export const getOutstandingPickupsByToken = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.getOutstandingPickupsByToken
   : getOutstandingPickupsByTokenSQLite;
 
 export const markPickupItem = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.markPickupItem
   : markPickupItemSQLite;
 
 export const undoPickupItem = DATABASE_TYPE === 'supabase'
-  ? pickupFeatureNotAvailable
+  ? dbModule.undoPickupItem
   : undoPickupItemSQLite;
 
 export const getSetting = DATABASE_TYPE === 'supabase'

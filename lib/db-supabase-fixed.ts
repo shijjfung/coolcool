@@ -258,6 +258,51 @@ async function buildPickupOrders(
   return results;
 }
 
+function parseFormFields(raw: any): FormField[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as FormField[];
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  return raw as FormField[];
+}
+
+async function fetchOrderWithForm(orderId: number) {
+  const { data, error } = await getSupabase()
+    .from('orders')
+    .select(
+      `
+        *,
+        form:forms (
+          id,
+          name,
+          form_token,
+          fields,
+          deadline
+        )
+      `
+    )
+    .eq('id', orderId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('找不到對應的訂單');
+    }
+    throw new Error(`取得訂單資料失敗：${error.message}`);
+  }
+
+  const formRaw: any = Array.isArray(data.form) ? data.form[0] : data.form;
+  return {
+    order: data,
+    form: formRaw,
+  };
+}
+
 // 初始化資料庫表（在 Supabase Dashboard 的 SQL Editor 中執行 supabase-schema.sql）
 export async function initDatabase() {
   // Supabase 表結構已在 SQL Editor 中建立，這裡不需要做任何事
@@ -268,6 +313,275 @@ export async function initDatabase() {
 async function cleanupExpiredPickupTokensSupabase() {
   const nowIso = new Date().toISOString();
   await getSupabase().from('pickup_tokens').delete().lt('expires_at', nowIso);
+}
+
+export async function getOutstandingPickupsByCustomer(
+  name: string,
+  phone: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<PickupOrderSummary[]> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  if (!trimmedName || !trimmedPhone) return [];
+
+  const { data, error } = await getSupabase()
+    .from('orders')
+    .select(
+      `
+        *,
+        form:forms (
+          id,
+          name,
+          form_token,
+          deadline,
+          fields
+        )
+      `
+    )
+    .eq('customer_name', trimmedName)
+    .eq('customer_phone', trimmedPhone)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`查詢取貨資料失敗：${error.message}`);
+  }
+
+  const now = new Date();
+  const rows: OrderRowWithForm[] = [];
+  for (const row of data || []) {
+    const formRaw: any = Array.isArray(row.form) ? row.form[0] : row.form;
+    if (!formRaw || !formRaw.deadline) continue;
+    const deadlineDate = new Date(formRaw.deadline);
+    if (Number.isNaN(deadlineDate.getTime()) || deadlineDate > now) continue;
+    const fields = parseFormFields(formRaw.fields);
+    rows.push({
+      order: row,
+      formName: formRaw.name || '未命名表單',
+      formToken: formRaw.form_token || '',
+      fields,
+    });
+  }
+
+  if (rows.length === 0) return [];
+  return buildPickupOrders(rows, statusFilter);
+}
+
+export async function createPickupToken(
+  name: string,
+  phone: string,
+  expiresInHours = 6
+): Promise<{ token: string; expiresAt: string }> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  if (!trimmedName || !trimmedPhone) {
+    throw new Error('請輸入姓名與電話');
+  }
+  await cleanupExpiredPickupTokensSupabase();
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
+  const { error } = await getSupabase()
+    .from('pickup_tokens')
+    .insert({
+      token,
+      name: trimmedName,
+      phone: trimmedPhone,
+      expires_at: expiresAt,
+    });
+  if (error) {
+    throw new Error(`建立取貨憑證失敗：${error.message}`);
+  }
+  return { token, expiresAt };
+}
+
+export async function getOrCreatePickupToken(
+  name: string,
+  phone: string,
+  expiresInHours = 6
+): Promise<{ token: string; expiresAt: string }> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  if (!trimmedName || !trimmedPhone) {
+    throw new Error('請輸入姓名與電話');
+  }
+  await cleanupExpiredPickupTokensSupabase();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await getSupabase()
+    .from('pickup_tokens')
+    .select('token, expires_at')
+    .eq('name', trimmedName)
+    .eq('phone', trimmedPhone)
+    .gt('expires_at', nowIso)
+    .order('expires_at', { ascending: false })
+    .limit(1);
+  if (error) {
+    throw new Error(`取得取貨憑證失敗：${error.message}`);
+  }
+  if (data && data.length > 0) {
+    return {
+      token: data[0].token,
+      expiresAt: data[0].expires_at,
+    };
+  }
+  return createPickupToken(trimmedName, trimmedPhone, expiresInHours);
+}
+
+async function getPickupTokenRecord(token: string): Promise<PickupTokenRecord | null> {
+  if (!token) return null;
+  await cleanupExpiredPickupTokensSupabase();
+  const { data, error } = await getSupabase()
+    .from('pickup_tokens')
+    .select('*')
+    .eq('token', token)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw new Error(`取得取貨憑證失敗：${error.message}`);
+  }
+  return {
+    token: data.token,
+    name: data.name,
+    phone: data.phone,
+    expiresAt: data.expires_at,
+  };
+}
+
+export async function getOutstandingPickupsByToken(
+  token: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<{ token: string; name: string; phone: string; expiresAt: string; orders: PickupOrderSummary[] } | null> {
+  const tokenRecord = await getPickupTokenRecord(token);
+  if (!tokenRecord) return null;
+  const orders = await getOutstandingPickupsByCustomer(tokenRecord.name, tokenRecord.phone, statusFilter);
+  return {
+    ...tokenRecord,
+    orders,
+  };
+}
+
+async function recordPickupEventSupabase(
+  orderId: number,
+  itemKey: string,
+  itemLabel: string,
+  quantity: number,
+  unitPrice?: number,
+  performedBy?: string
+): Promise<void> {
+  const totalPrice =
+    unitPrice !== undefined && !Number.isNaN(unitPrice) ? Number(unitPrice) * Number(quantity) : null;
+  const { error } = await getSupabase()
+    .from('order_pickup_events')
+    .insert({
+      order_id: orderId,
+      item_key: itemKey,
+      item_label: itemLabel,
+      quantity,
+      unit_price: unitPrice ?? null,
+      total_price: totalPrice,
+      performed_by: performedBy || 'staff',
+    });
+  if (error) {
+    throw new Error(`記錄取貨紀錄失敗：${error.message}`);
+  }
+}
+
+export async function markPickupItem(
+  token: string,
+  orderId: number,
+  itemKey: string,
+  statusFilter: PickupStatusFilter = 'pending',
+  performedBy?: string
+): Promise<{ orders: PickupOrderSummary[] }> {
+  const tokenRecord = await getPickupTokenRecord(token);
+  if (!tokenRecord) {
+    throw new Error('找不到或已過期的取貨憑證');
+  }
+
+  const { order, form } = await fetchOrderWithForm(orderId);
+  if (!order || !form) {
+    throw new Error('找不到對應的訂單');
+  }
+  if (
+    (order.customer_name || '').trim() !== tokenRecord.name ||
+    (order.customer_phone || '').trim() !== tokenRecord.phone
+  ) {
+    throw new Error('此取貨憑證與訂單資料不符');
+  }
+
+  const fields = parseFormFields(form.fields);
+  const outstandingForOrder = await buildPickupOrders(
+    [{ order, formName: form.name || '未命名表單', formToken: form.form_token || '', fields }],
+    'pending'
+  );
+  const orderSummary = outstandingForOrder[0];
+  if (!orderSummary) {
+    throw new Error('此訂單已沒有待取貨的商品');
+  }
+  const targetItem = orderSummary.items.find((item) => item.itemKey === itemKey);
+  if (!targetItem) {
+    throw new Error('指定的商品已完成取貨或不存在');
+  }
+
+  if (targetItem.remainingQuantity <= 0) {
+    throw new Error('此商品目前沒有待取貨數量');
+  }
+
+  await recordPickupEventSupabase(
+    orderId,
+    itemKey,
+    targetItem.itemLabel,
+    targetItem.remainingQuantity,
+    targetItem.unitPrice,
+    performedBy
+  );
+
+  const updatedOrders = await getOutstandingPickupsByCustomer(tokenRecord.name, tokenRecord.phone, statusFilter);
+  return { orders: updatedOrders };
+}
+
+export async function undoPickupItem(
+  token: string,
+  orderId: number,
+  itemKey: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<{ orders: PickupOrderSummary[] }> {
+  const tokenRecord = await getPickupTokenRecord(token);
+  if (!tokenRecord) {
+    throw new Error('找不到或已過期的取貨憑證');
+  }
+
+  const { order } = await fetchOrderWithForm(orderId);
+  if (
+    (order.customer_name || '').trim() !== tokenRecord.name ||
+    (order.customer_phone || '').trim() !== tokenRecord.phone
+  ) {
+    throw new Error('此取貨憑證與訂單資料不符');
+  }
+
+  const { data: lastEvents, error: lastError } = await getSupabase()
+    .from('order_pickup_events')
+    .select('id')
+    .eq('order_id', orderId)
+    .eq('item_key', itemKey)
+    .order('id', { ascending: false })
+    .limit(1);
+  if (lastError) {
+    throw new Error(`查詢取貨紀錄失敗：${lastError.message}`);
+  }
+  const lastEvent = lastEvents && lastEvents[0];
+  if (!lastEvent) {
+    throw new Error('目前沒有可取消的取貨紀錄');
+  }
+
+  const { error: deleteError } = await getSupabase()
+    .from('order_pickup_events')
+    .delete()
+    .eq('id', lastEvent.id);
+  if (deleteError) {
+    throw new Error(`取消取貨紀錄失敗：${deleteError.message}`);
+  }
+
+  const updatedOrders = await getOutstandingPickupsByCustomer(tokenRecord.name, tokenRecord.phone, statusFilter);
+  return { orders: updatedOrders };
 }
 
 // 表單相關操作
