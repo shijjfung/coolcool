@@ -177,7 +177,8 @@ export default function CreateForm() {
    * - 香蒜粉$100 → 名稱：香蒜粉，價格：100
    */
   const parseBulkInput = (text: string): Array<{ name: string; price: number | undefined }> => {
-    const emojiRegex = /[\u{1F300}-\u{1FAFF}]/gu;
+    // 使用代理對範圍移除常見 emoji，避免依賴 ES6 /u flag
+    const emojiRegex = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
     const sanitizedText = text.replace(emojiRegex, '');
     const normalizedText = sanitizedText
       .replace(/(\$[0-9]{2,})(?=\s*\S)/g, '$1\n')
@@ -187,7 +188,7 @@ export default function CreateForm() {
 
     for (const line of lines) {
       // 移除 emoji 和特殊符號（保留中文、英文、數字、括號、空格、X、*）
-      let cleanedLine = line.replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
+      let cleanedLine = line.replace(emojiRegex, '').trim();
       
       let productName = cleanedLine;
       let price: number | undefined = undefined;
