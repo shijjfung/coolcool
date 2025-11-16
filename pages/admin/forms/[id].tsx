@@ -58,10 +58,169 @@ export default function FormReport() {
   const getDeviceType = (userAgent?: string): string => {
     if (!userAgent || userAgent === 'unknown') return '-';
     const ua = userAgent.toLowerCase();
-    if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
-      return '📱 手機';
+    
+    // 檢測 iPad
+    if (/ipad/i.test(userAgent)) {
+      if (/cpu os (\d+)_(\d+)/i.test(userAgent)) {
+        const match = userAgent.match(/cpu os (\d+)_(\d+)/i);
+        if (match) {
+          const major = match[1];
+          const minor = match[2];
+          return `iPad (iPadOS ${major}.${minor})`;
+        }
+      }
+      return 'iPad';
     }
-    return '💻 電腦';
+    
+    // 檢測 iPhone
+    if (/iphone/i.test(userAgent)) {
+      const iphoneModels: { [key: string]: string } = {
+        'iphone15,2': 'iPhone 14 Pro',
+        'iphone15,3': 'iPhone 14 Pro Max',
+        'iphone14,2': 'iPhone 13 Pro',
+        'iphone14,3': 'iPhone 13 Pro Max',
+        'iphone13,2': 'iPhone 12 Pro',
+        'iphone13,3': 'iPhone 12 Pro Max',
+        'iphone12,8': 'iPhone SE (第2代)',
+        'iphone11,8': 'iPhone XR',
+        'iphone11,2': 'iPhone XS',
+        'iphone11,6': 'iPhone XS Max',
+        'iphone10,3': 'iPhone X',
+        'iphone10,6': 'iPhone X',
+        'iphone9,1': 'iPhone 7',
+        'iphone9,2': 'iPhone 7 Plus',
+        'iphone9,3': 'iPhone 7',
+        'iphone9,4': 'iPhone 7 Plus',
+        'iphone8,1': 'iPhone 6s',
+        'iphone8,2': 'iPhone 6s Plus',
+        'iphone8,4': 'iPhone SE',
+        'iphone7,1': 'iPhone 6 Plus',
+        'iphone7,2': 'iPhone 6',
+      };
+      
+      let model = 'iPhone';
+      for (const [key, value] of Object.entries(iphoneModels)) {
+        if (ua.includes(key)) {
+          model = value;
+          break;
+        }
+      }
+      
+      if (model === 'iPhone') {
+        const iosMatch = userAgent.match(/os (\d+)_(\d+)/i);
+        if (iosMatch) {
+          const major = parseInt(iosMatch[1]);
+          if (major >= 16) {
+            model = 'iPhone (較新機型)';
+          } else if (major >= 14) {
+            model = 'iPhone (較新機型)';
+          }
+        }
+      }
+      
+      return model;
+    }
+    
+    // 檢測 Android 手機
+    if (/android/i.test(userAgent) && !/tablet/i.test(userAgent)) {
+      if (/samsung/i.test(userAgent)) {
+        const samsungModels: { [key: string]: string } = {
+          'sm-s': 'Samsung Galaxy S',
+          'sm-n': 'Samsung Galaxy Note',
+          'sm-a': 'Samsung Galaxy A',
+          'sm-g': 'Samsung Galaxy',
+          'sm-f': 'Samsung Galaxy Fold',
+        };
+        
+        let model = 'Samsung';
+        for (const [key, value] of Object.entries(samsungModels)) {
+          if (ua.includes(key)) {
+            const modelMatch = userAgent.match(new RegExp(`${key}(\\d+)`, 'i'));
+            if (modelMatch) {
+              model = `${value} ${modelMatch[1]}`;
+            } else {
+              model = value;
+            }
+            break;
+          }
+        }
+        
+        if (model === 'Samsung') {
+          if (ua.includes('galaxy')) {
+            model = 'Samsung Galaxy';
+          } else {
+            model = 'Samsung 手機';
+          }
+        }
+        
+        return model;
+      }
+      
+      if (/xiaomi|redmi|mi /i.test(userAgent)) return '小米手機';
+      if (/huawei|honor/i.test(userAgent)) return '華為手機';
+      if (/oppo/i.test(userAgent)) return 'OPPO 手機';
+      if (/vivo/i.test(userAgent)) return 'vivo 手機';
+      if (/oneplus/i.test(userAgent)) return 'OnePlus 手機';
+      if (/sony/i.test(userAgent)) return 'Sony 手機';
+      if (/lg/i.test(userAgent)) return 'LG 手機';
+      if (/htc/i.test(userAgent)) return 'HTC 手機';
+      
+      return 'Android 手機';
+    }
+    
+    // 檢測 Windows
+    if (/windows/i.test(userAgent)) {
+      if (/windows nt 10.0/i.test(userAgent)) {
+        // Windows 10 或 11（User Agent 無法準確區分）
+        return 'Windows 10/11';
+      } else if (/windows nt 6.3/i.test(userAgent)) {
+        return 'Windows 8.1';
+      } else if (/windows nt 6.2/i.test(userAgent)) {
+        return 'Windows 8';
+      } else if (/windows nt 6.1/i.test(userAgent)) {
+        return 'Windows 7';
+      } else if (/windows nt 6.0/i.test(userAgent)) {
+        return 'Windows Vista';
+      } else if (/windows nt 5.1/i.test(userAgent)) {
+        return 'Windows XP';
+      }
+      return 'Windows';
+    }
+    
+    // 檢測 macOS
+    if (/macintosh|mac os x/i.test(userAgent)) {
+      const macMatch = userAgent.match(/mac os x (\d+)[._](\d+)/i);
+      if (macMatch) {
+        const major = parseInt(macMatch[1]);
+        const minor = parseInt(macMatch[2]);
+        
+        const macVersions: { [key: number]: string } = {
+          14: 'macOS Sonoma',
+          13: 'macOS Ventura',
+          12: 'macOS Monterey',
+          11: 'macOS Big Sur',
+          10: major === 10 && minor >= 15 ? 'macOS Catalina' : 
+              major === 10 && minor >= 14 ? 'macOS Mojave' :
+              major === 10 && minor >= 13 ? 'macOS High Sierra' :
+              'macOS',
+        };
+        
+        if (macVersions[major]) {
+          return macVersions[major];
+        } else if (major >= 15) {
+          return `macOS (版本 ${major}.${minor})`;
+        }
+      }
+      return 'Mac 電腦';
+    }
+    
+    // 檢測 Linux
+    if (/linux/i.test(userAgent)) {
+      return 'Linux';
+    }
+    
+    // 預設為電腦
+    return '電腦';
   };
 
   if (loading) {

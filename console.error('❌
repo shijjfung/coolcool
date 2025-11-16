@@ -1,1 +1,0 @@
-.catch(error = 請求失敗:', error));

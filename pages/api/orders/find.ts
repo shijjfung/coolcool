@@ -36,22 +36,29 @@ export default async function handler(
     // 取得該表單的所有訂單
     const orders = await getOrdersByFormId(form.id);
 
-    // 根據姓名和電話查找訂單
-    const matchedOrder = orders.find((order: any) => {
-      const nameMatch = order.customer_name && 
-        order.customer_name.toLowerCase().trim() === customerName.toLowerCase().trim();
-      const phoneMatch = order.customer_phone && 
-        order.customer_phone.trim() === customerPhone.trim();
+    const normalizedName = customerName.toLowerCase().trim();
+    const normalizedPhone = customerPhone.trim();
+
+    // 根據姓名和電話查找訂單（可能多筆）
+    const matchedOrders = orders.filter((order: any) => {
+      const nameMatch =
+        order.customer_name &&
+        order.customer_name.toLowerCase().trim() === normalizedName;
+      const phoneMatch =
+        order.customer_phone &&
+        order.customer_phone.trim() === normalizedPhone;
       return nameMatch && phoneMatch;
     });
 
-    if (!matchedOrder) {
+    if (matchedOrders.length === 0) {
       return res.status(404).json({ error: '找不到符合的訂單，請確認姓名和電話是否正確' });
     }
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      order: matchedOrder 
+      count: matchedOrders.length,
+      orders: matchedOrders,
+      order: matchedOrders[0], // 保留單筆使用者的相容字段
     });
   } catch (error: any) {
     console.error('查找訂單錯誤:', error);

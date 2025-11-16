@@ -12,7 +12,7 @@ export default async function handler(
 
     // 直接返回 manifest 內容，避免檔案系統問題
     const manifest = {
-      name: "涼涼冰品團購管理系統",
+      name: "涼涼古早味創意冰品-團購管理系統",
       short_name: "涼涼團購",
       description: "輕鬆建立表單，收集客戶訂單，自動生成報表",
       start_url: "/",

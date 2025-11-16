@@ -213,22 +213,6 @@ export function parseOrderMessage(
   };
 }
 
-/**
- * 解析代購訊息（專門用於代購場景）
- * 支援格式：
- * - 「我要買牛奶」→ { productName: '牛奶', quantity: 1 }
- * - 「牛奶一罐」→ { productName: '牛奶', quantity: 1 }
- * - 「牛奶一瓶」→ { productName: '牛奶', quantity: 1 }
- * - 「牛奶」→ { productName: '牛奶', quantity: 1 }
- * - 「牛奶2罐」→ { productName: '牛奶', quantity: 2 }
- * - 「我要買牛奶和麵包」→ { productName: '牛奶', quantity: 1 }, { productName: '麵包', quantity: 1 }
- */
-export function parseProxyOrderMessage(
-  message: string,
-  availableProducts: string[] = []
-): ParsedOrder | null {
-  return parseOrderMessage(message, availableProducts, undefined, 'proxy');
-}
 
 /**
  * 合併多個訂單項目（相同商品合併數量）

@@ -20,6 +20,7 @@ let path: any;
 let fs: any;
 let db: any;
 let dbPath: string = '';
+const crypto = require('crypto');
 let dbRun: (sql: string, params?: any[]) => Promise<any> = async () => {
   throw new Error('dbRun 未初始化');
 };
@@ -289,6 +290,57 @@ async function initDatabaseSQLite() {
   try {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_reserved_orders_reserved_at ON reserved_orders(reserved_at)`);
   } catch (e: any) {}
+
+  try {
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS order_pickup_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        item_key TEXT NOT NULL,
+        item_label TEXT,
+        quantity REAL NOT NULL,
+        unit_price REAL,
+        total_price REAL,
+        performed_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_pickup_events_order_id ON order_pickup_events(order_id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_pickup_events_item_key ON order_pickup_events(item_key)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_pickup_events_order_item ON order_pickup_events(order_id, item_key, id)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`ALTER TABLE order_pickup_events ADD COLUMN unit_price REAL`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`ALTER TABLE order_pickup_events ADD COLUMN total_price REAL`);
+  } catch (e: any) {}
+
+  try {
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS pickup_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_pickup_tokens_expires_at ON pickup_tokens(expires_at)`);
+  } catch (e: any) {}
+  try {
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_pickup_tokens_customer ON pickup_tokens(name, phone)`);
+  } catch (e: any) {}
 }
 
 // ===== 資料結構定義 =====
@@ -338,6 +390,43 @@ export interface Form {
   post_deadline_reply_message?: string;
   line_custom_identifier?: string;
   line_use_custom_identifier?: boolean;
+}
+
+export type PickupItemStatus = 'pending' | 'picked';
+export type PickupStatusFilter = 'pending' | 'picked' | 'all';
+
+export interface PickupOrderItem {
+  itemKey: string;
+  fieldName: string;
+  fieldLabel: string;
+  itemLabel: string;
+  orderedQuantity: number;
+  pickedQuantity: number;
+  remainingQuantity: number;
+  status: PickupItemStatus;
+  unitPrice?: number;
+  orderedTotalPrice?: number;
+  pickedTotalPrice?: number;
+  remainingTotalPrice?: number;
+  lastEventId?: number;
+  lastEventQuantity?: number;
+}
+
+export interface PickupOrderSummary {
+  orderId: number;
+  orderToken: string;
+  orderCreatedAt: string;
+  formId: number;
+  formName: string;
+  formToken: string;
+  items: PickupOrderItem[];
+}
+
+interface PickupTokenRecord {
+  token: string;
+  name: string;
+  phone: string;
+  expiresAt: string;
 }
 
 function mapFormRow(row: any): Form {
@@ -983,6 +1072,423 @@ export function generateSessionId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
+function normalizeCostcoName(value: string): string {
+  return value ? value.trim().toLowerCase() : '';
+}
+
+function buildOrderItemKey(prefix: string, fieldName: string, suffix?: string): string {
+  return `${prefix}:${fieldName}${suffix ? `:${suffix}` : ''}`;
+}
+
+function buildOrderItemsForPickup(
+  formLike: { fields: FormField[] },
+  orderData: Record<string, any>
+): Array<{
+  itemKey: string;
+  fieldName: string;
+  fieldLabel: string;
+  itemLabel: string;
+  quantity: number;
+  unitPrice?: number;
+}> {
+  const items: Array<{
+    itemKey: string;
+    fieldName: string;
+    fieldLabel: string;
+    itemLabel: string;
+    quantity: number;
+    unitPrice?: number;
+  }> = [];
+
+  for (const field of formLike.fields) {
+    const value = orderData?.[field.name];
+    if (field.type === 'number') {
+      const quantity = parseFloat(String(value ?? 0)) || 0;
+      if (quantity > 0) {
+        const unitPrice =
+          typeof field.price === 'number' && !Number.isNaN(field.price) ? Number(field.price) : undefined;
+        items.push({
+          itemKey: buildOrderItemKey('field', field.name),
+          fieldName: field.name,
+          fieldLabel: field.label,
+          itemLabel: field.label,
+          quantity,
+          unitPrice,
+        });
+      }
+    } else if (field.type === 'costco') {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (!entry || !entry.name) continue;
+          const entryName = String(entry.name).trim();
+          if (!entryName) continue;
+          const quantity = parseFloat(String(entry.quantity ?? 0)) || 0;
+          if (quantity <= 0) continue;
+          const unitPrice =
+            typeof field.price === 'number' && !Number.isNaN(field.price) ? Number(field.price) : undefined;
+          items.push({
+            itemKey: buildOrderItemKey('costco', field.name, normalizeCostcoName(entryName)),
+            fieldName: field.name,
+            fieldLabel: field.label,
+            itemLabel: `${field.label} - ${entryName}`,
+            quantity,
+            unitPrice,
+          });
+        }
+      }
+    }
+  }
+
+  return items;
+}
+
+interface PickupEventStats {
+  totals: Record<string, number>;
+  latestEvents: Record<string, { id: number; quantity: number }>;
+}
+
+async function getPickupEventStats(orderId: number): Promise<PickupEventStats> {
+  const totalRows = (await dbAll(
+    'SELECT item_key, SUM(quantity) as total FROM order_pickup_events WHERE order_id = ? GROUP BY item_key',
+    [orderId]
+  )) as Array<{ item_key: string; total: number }>;
+  const totals: Record<string, number> = {};
+  for (const row of totalRows) {
+    totals[row.item_key] = row.total || 0;
+  }
+
+  const latestRows = (await dbAll(
+    'SELECT id, item_key, quantity FROM order_pickup_events WHERE order_id = ? ORDER BY id DESC',
+    [orderId]
+  )) as Array<{ id: number; item_key: string; quantity: number }>;
+  const latestEvents: Record<string, { id: number; quantity: number }> = {};
+  for (const row of latestRows) {
+    if (!latestEvents[row.item_key]) {
+      latestEvents[row.item_key] = { id: row.id, quantity: Number(row.quantity) || 0 };
+    }
+  }
+
+  return { totals, latestEvents };
+}
+
+interface OrderRowWithForm {
+  order: any;
+  formName: string;
+  formToken: string;
+  fields: FormField[];
+}
+
+async function buildPickupOrders(
+  rows: OrderRowWithForm[],
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<PickupOrderSummary[]> {
+  const results: PickupOrderSummary[] = [];
+  for (const { order, formName, formToken, fields } of rows) {
+    const orderData = typeof order.order_data === 'string' ? JSON.parse(order.order_data) : order.order_data;
+    const items = buildOrderItemsForPickup({ fields }, orderData);
+    if (items.length === 0) continue;
+    const { totals, latestEvents } = await getPickupEventStats(order.id);
+    const filteredItems: PickupOrderItem[] = [];
+    for (const item of items) {
+      const picked = totals[item.itemKey] || 0;
+      const remaining = Math.max(item.quantity - picked, 0);
+      const hasPicked = picked > 0.0001;
+      const status: PickupItemStatus = remaining > 0.0001 ? 'pending' : hasPicked ? 'picked' : 'pending';
+
+      if (statusFilter === 'pending' && status !== 'pending') continue;
+      if (statusFilter === 'picked' && status !== 'picked') continue;
+
+      const unitPrice = item.unitPrice;
+      const orderedTotalPrice = unitPrice ? unitPrice * item.quantity : undefined;
+      const effectivePicked = Math.min(picked, item.quantity);
+      const pickedTotalPrice = unitPrice ? unitPrice * effectivePicked : undefined;
+      const remainingTotalPrice = unitPrice ? unitPrice * remaining : undefined;
+      const latestEvent = latestEvents[item.itemKey];
+
+      filteredItems.push({
+        itemKey: item.itemKey,
+        fieldName: item.fieldName,
+        fieldLabel: item.fieldLabel,
+        itemLabel: item.itemLabel,
+        orderedQuantity: item.quantity,
+        pickedQuantity: picked,
+        remainingQuantity: remaining,
+        status,
+        unitPrice,
+        orderedTotalPrice,
+        pickedTotalPrice,
+        remainingTotalPrice,
+        lastEventId: latestEvent?.id,
+        lastEventQuantity: latestEvent?.quantity,
+      });
+    }
+    if (filteredItems.length === 0) continue;
+    results.push({
+      orderId: order.id,
+      orderToken: order.order_token,
+      orderCreatedAt: order.created_at,
+      formId: order.form_id,
+      formName,
+      formToken,
+      items: filteredItems,
+    });
+  }
+  return results;
+}
+
+async function getOutstandingPickupsByCustomerSQLite(
+  name: string,
+  phone: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<PickupOrderSummary[]> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  if (!trimmedName || !trimmedPhone) return [];
+
+  const rows = (await dbAll(
+    `
+      SELECT 
+        o.*, 
+        f.name AS form_name, 
+        f.form_token AS form_token,
+        f.deadline AS form_deadline,
+        f.fields AS form_fields
+      FROM orders o
+      INNER JOIN forms f ON o.form_id = f.id
+      WHERE o.customer_name = ? AND o.customer_phone = ?
+      ORDER BY o.created_at DESC
+    `,
+    [trimmedName, trimmedPhone]
+  )) as any[];
+
+  if (!rows || rows.length === 0) return [];
+
+  const now = new Date();
+  const ordersWithForms: OrderRowWithForm[] = [];
+  for (const row of rows) {
+    if (!row.form_deadline) continue;
+    const deadlineDate = new Date(row.form_deadline);
+    if (isNaN(deadlineDate.getTime()) || deadlineDate > now) {
+      continue;
+    }
+    const fields: FormField[] =
+      typeof row.form_fields === 'string' ? JSON.parse(row.form_fields) : row.form_fields || [];
+    ordersWithForms.push({
+      order: row,
+      formName: row.form_name,
+      formToken: row.form_token,
+      fields,
+    });
+  }
+
+  return buildPickupOrders(ordersWithForms, statusFilter);
+}
+
+async function createPickupTokenSQLite(
+  name: string,
+  phone: string,
+  expiresInHours = 6
+): Promise<{ token: string; expiresAt: string }> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  await ensureDatabaseInitialized();
+  const nowIso = new Date().toISOString();
+  await dbRun('DELETE FROM pickup_tokens WHERE expires_at < ?', [nowIso]);
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
+  await dbRun(
+    'INSERT INTO pickup_tokens (token, name, phone, expires_at) VALUES (?, ?, ?, ?)',
+    [token, trimmedName, trimmedPhone, expiresAt]
+  );
+
+  return { token, expiresAt };
+}
+
+async function getOrCreatePickupTokenSQLite(
+  name: string,
+  phone: string,
+  expiresInHours = 6
+): Promise<{ token: string; expiresAt: string }> {
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  await ensureDatabaseInitialized();
+  const nowIso = new Date().toISOString();
+  await dbRun('DELETE FROM pickup_tokens WHERE expires_at < ?', [nowIso]);
+  const existing = (await dbGet(
+    'SELECT token, expires_at FROM pickup_tokens WHERE name = ? AND phone = ? AND expires_at > ? ORDER BY expires_at DESC LIMIT 1',
+    [trimmedName, trimmedPhone, nowIso]
+  )) as any;
+  if (existing) {
+    return {
+      token: existing.token,
+      expiresAt: existing.expires_at,
+    };
+  }
+  return createPickupTokenSQLite(trimmedName, trimmedPhone, expiresInHours);
+}
+
+async function getPickupTokenSQLite(token: string): Promise<PickupTokenRecord | null> {
+  await ensureDatabaseInitialized();
+  const nowIso = new Date().toISOString();
+  await dbRun('DELETE FROM pickup_tokens WHERE expires_at < ?', [nowIso]);
+  const row = (await dbGet('SELECT * FROM pickup_tokens WHERE token = ?', [token])) as any;
+  if (!row) return null;
+  return {
+    token: row.token,
+    name: row.name,
+    phone: row.phone,
+    expiresAt: row.expires_at,
+  };
+}
+
+async function getOutstandingPickupsByTokenSQLite(
+  token: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<{ token: string; name: string; phone: string; expiresAt: string; orders: PickupOrderSummary[] } | null> {
+  const tokenRecord = await getPickupTokenSQLite(token);
+  if (!tokenRecord) return null;
+  const orders = await getOutstandingPickupsByCustomerSQLite(tokenRecord.name, tokenRecord.phone, statusFilter);
+  return {
+    ...tokenRecord,
+    orders,
+  };
+}
+
+async function recordPickupEventSQLite(
+  orderId: number,
+  itemKey: string,
+  itemLabel: string,
+  quantity: number,
+  unitPrice?: number,
+  performedBy?: string
+): Promise<void> {
+  await ensureDatabaseInitialized();
+  const totalPrice =
+    unitPrice !== undefined && !Number.isNaN(unitPrice) ? Number(unitPrice) * Number(quantity) : null;
+  await dbRun(
+    'INSERT INTO order_pickup_events (order_id, item_key, item_label, quantity, unit_price, total_price, performed_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [orderId, itemKey, itemLabel, quantity, unitPrice ?? null, totalPrice ?? null, performedBy || 'staff']
+  );
+}
+
+async function markPickupItemSQLite(
+  token: string,
+  orderId: number,
+  itemKey: string,
+  statusFilter: PickupStatusFilter = 'pending',
+  performedBy?: string
+): Promise<{ orders: PickupOrderSummary[] }> {
+  const tokenRecord = await getPickupTokenSQLite(token);
+  if (!tokenRecord) {
+    throw new Error('找不到或已過期的取貨憑證');
+  }
+
+  const orderRow = (await dbGet(
+    `
+      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline
+      FROM orders o
+      INNER JOIN forms f ON o.form_id = f.id
+      WHERE o.id = ?
+    `,
+    [orderId]
+  )) as any;
+
+  if (!orderRow) {
+    throw new Error('找不到對應的訂單');
+  }
+
+  if (
+    (orderRow.customer_name || '').trim() !== tokenRecord.name ||
+    (orderRow.customer_phone || '').trim() !== tokenRecord.phone
+  ) {
+    throw new Error('此取貨憑證與訂單資料不符');
+  }
+
+  const fields: FormField[] =
+    typeof orderRow.form_fields === 'string' ? JSON.parse(orderRow.form_fields) : orderRow.form_fields || [];
+
+  const outstandingForOrder = await buildPickupOrders(
+    [{ order: orderRow, formName: orderRow.form_name, formToken: orderRow.form_token, fields }],
+    'pending'
+  );
+  const orderSummary = outstandingForOrder[0];
+  if (!orderSummary) {
+    throw new Error('此訂單已沒有待取貨的商品');
+  }
+  const targetItem = orderSummary.items.find((item) => item.itemKey === itemKey);
+  if (!targetItem) {
+    throw new Error('指定的商品已完成取貨或不存在');
+  }
+
+  await recordPickupEventSQLite(
+    orderId,
+    itemKey,
+    targetItem.itemLabel,
+    targetItem.remainingQuantity,
+    targetItem.unitPrice,
+    performedBy
+  );
+
+  const updatedOrders = await getOutstandingPickupsByCustomerSQLite(
+    tokenRecord.name,
+    tokenRecord.phone,
+    statusFilter
+  );
+  return { orders: updatedOrders };
+}
+
+async function undoPickupItemSQLite(
+  token: string,
+  orderId: number,
+  itemKey: string,
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<{ orders: PickupOrderSummary[] }> {
+  const tokenRecord = await getPickupTokenSQLite(token);
+  if (!tokenRecord) {
+    throw new Error('找不到或已過期的取貨憑證');
+  }
+
+  const orderRow = (await dbGet(
+    `
+      SELECT o.*, f.name AS form_name, f.form_token, f.fields AS form_fields, f.deadline AS form_deadline
+      FROM orders o
+      INNER JOIN forms f ON o.form_id = f.id
+      WHERE o.id = ?
+    `,
+    [orderId]
+  )) as any;
+
+  if (!orderRow) {
+    throw new Error('找不到對應的訂單');
+  }
+
+  if (
+    (orderRow.customer_name || '').trim() !== tokenRecord.name ||
+    (orderRow.customer_phone || '').trim() !== tokenRecord.phone
+  ) {
+    throw new Error('此取貨憑證與訂單資料不符');
+  }
+
+  const lastEvent = (await dbGet(
+    'SELECT id FROM order_pickup_events WHERE order_id = ? AND item_key = ? ORDER BY id DESC LIMIT 1',
+    [orderId, itemKey]
+  )) as any;
+
+  if (!lastEvent) {
+    throw new Error('目前沒有可取消的取貨紀錄');
+  }
+
+  await dbRun('DELETE FROM order_pickup_events WHERE id = ?', [lastEvent.id]);
+
+  const updatedOrders = await getOutstandingPickupsByCustomerSQLite(
+    tokenRecord.name,
+    tokenRecord.phone,
+    statusFilter
+  );
+  return { orders: updatedOrders };
+}
+
 // ??????????QLite??
 async function reserveOrderNumberSQLite(formId: number, sessionId: string): Promise<{ success: boolean; orderNumber?: number; error?: string }> {
   try {
@@ -1358,6 +1864,34 @@ export const markLineSaleEndAnnounced = DATABASE_TYPE === 'supabase'
 export const markLineSaleFirstWarningSent = DATABASE_TYPE === 'supabase'
   ? dbModule.markLineSaleFirstWarningSent
   : markLineSaleFirstWarningSentSQLite;
+
+const pickupFeatureNotAvailable = async () => {
+  throw new Error('目前的後端設定尚未支援取貨相關功能');
+};
+
+export const getOutstandingPickupsByCustomer = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : getOutstandingPickupsByCustomerSQLite;
+
+export const createPickupToken = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : createPickupTokenSQLite;
+
+export const getOrCreatePickupToken = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : getOrCreatePickupTokenSQLite;
+
+export const getOutstandingPickupsByToken = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : getOutstandingPickupsByTokenSQLite;
+
+export const markPickupItem = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : markPickupItemSQLite;
+
+export const undoPickupItem = DATABASE_TYPE === 'supabase'
+  ? pickupFeatureNotAvailable
+  : undoPickupItemSQLite;
 
 export const getSetting = DATABASE_TYPE === 'supabase'
   ? dbModule.getSetting

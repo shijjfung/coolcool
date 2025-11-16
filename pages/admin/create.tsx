@@ -59,6 +59,9 @@ export default function CreateForm() {
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  // 批量商品自動帶入
+  const [bulkInputText, setBulkInputText] = useState('');
+  const [useBulkInput, setUseBulkInput] = useState(false);
 
   // 載入現有表單資料（編輯模式）
   useEffect(() => {
@@ -161,6 +164,136 @@ export default function CreateForm() {
 
   const removeField = (index: number) => {
     setFields(fields.filter((_, i) => i !== index));
+  };
+
+  /**
+   * 解析批量輸入的商品文字，提取商品名稱和價格
+   * 支援格式：
+   * - 青花椒粉$150👑 → 名稱：青花椒粉，價格：150
+   * - 紅花椒粉（大紅袍）$150 → 名稱：紅花椒粉（大紅袍），價格：150
+   * - 五香粉X2$300 → 名稱：五香粉X2，價格：300
+   * - 五香粉*2 300 → 名稱：五香粉*2，價格：300
+   * - 十三香粉$150 → 名稱：十三香粉，價格：150
+   * - 香蒜粉$100 → 名稱：香蒜粉，價格：100
+   */
+  const parseBulkInput = (text: string): Array<{ name: string; price: number | undefined }> => {
+    const emojiRegex = /[\u{1F300}-\u{1FAFF}]/gu;
+    const sanitizedText = text.replace(emojiRegex, '');
+    const normalizedText = sanitizedText
+      .replace(/(\$[0-9]{2,})(?=\s*\S)/g, '$1\n')
+      .replace(/(\d{2,})(?=\s*[A-Z])/g, '$1\n');
+    const lines = normalizedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const results: Array<{ name: string; price: number | undefined }> = [];
+
+    for (const line of lines) {
+      // 移除 emoji 和特殊符號（保留中文、英文、數字、括號、空格、X、*）
+      let cleanedLine = line.replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
+      
+      let productName = cleanedLine;
+      let price: number | undefined = undefined;
+
+      // 策略1: 匹配 $價格 格式（最常見）
+      // 例如：青花椒粉$150、五香粉X2$300
+      const dollarMatch = cleanedLine.match(/\$(\d+)/);
+      if (dollarMatch) {
+        price = parseInt(dollarMatch[1], 10);
+        // 移除 $價格 及之後的所有內容（包括可能的特殊符號）
+        productName = cleanedLine.replace(/\$(\d+).*$/, '').trim();
+      } else {
+        // 策略2: 匹配 X數量$價格 或 *數量$價格 格式
+        // 例如：五香粉X2$300
+        const quantityDollarMatch = cleanedLine.match(/([Xx*]\d+)\$(\d+)/);
+        if (quantityDollarMatch) {
+          price = parseInt(quantityDollarMatch[2], 10);
+          // 保留 X數量 或 *數量 在名稱中，只移除 $價格 部分
+          productName = cleanedLine.replace(/\$(\d+).*$/, '').trim();
+        } else {
+          // 策略3: 匹配 X數量 價格 或 *數量 價格 格式（價格在空格後，2位數以上）
+          // 例如：五香粉*2 300
+          const quantitySpaceMatch = cleanedLine.match(/([Xx*]\d+)\s+(\d{2,})/);
+          if (quantitySpaceMatch) {
+            price = parseInt(quantitySpaceMatch[2], 10);
+            // 保留 X數量 或 *數量 在名稱中，只移除空格後的價格
+            productName = cleanedLine.replace(/\s+(\d{2,}).*$/, '').trim();
+          } else {
+            // 策略4: 匹配 商品名 價格 格式（價格是2位數以上，在空格後）
+            // 例如：十三香粉 150
+            // 注意：要避免誤判，價格必須是2位數以上（10、25、100等）
+            const spacePriceMatch = cleanedLine.match(/^(.+?)\s+(\d{2,})$/);
+            if (spacePriceMatch) {
+              const potentialPrice = parseInt(spacePriceMatch[2], 10);
+              // 確認是價格（2位數以上，通常是10、25、50、100等）
+              // 數量通常只有1個，所以單個數字不會是價格
+              if (potentialPrice >= 10) {
+                price = potentialPrice;
+                productName = spacePriceMatch[1].trim();
+              }
+            }
+          }
+        }
+      }
+
+      // 清理商品名稱：移除多餘空格，保留括號、X、*等
+      productName = productName.replace(/\s+/g, ' ').trim();
+
+      // 如果商品名稱不為空，添加到結果
+      if (productName.length > 0) {
+        results.push({ name: productName, price });
+      }
+    }
+
+    return results;
+  };
+
+  /**
+   * 批量創建欄位
+   */
+  const createFieldsFromBulkInput = () => {
+    if (!bulkInputText.trim()) {
+      alert('請先輸入商品列表');
+      return;
+    }
+
+    const parsedItems = parseBulkInput(bulkInputText);
+    
+    if (parsedItems.length === 0) {
+      alert('無法解析商品列表，請檢查格式是否正確');
+      return;
+    }
+
+    const cleanedItems = parsedItems
+      .map((item) => ({
+        name: (item.name || '').trim(),
+        price: item.price,
+      }))
+      .filter((item) => item.name.length > 0);
+
+    if (cleanedItems.length === 0) {
+      alert('無法解析有效的商品名稱，請檢查輸入內容');
+      return;
+    }
+
+    const uniqueItems = cleanedItems.filter(
+      (item, index, array) => array.findIndex((other) => other.name === item.name) === index
+    );
+
+    // 為每個商品創建欄位
+    const newFields: FormField[] = uniqueItems.map((item, index) => ({
+      name: `field_${fields.length + index + 1}`,
+      label: item.name,
+      type: 'number' as const, // 使用數字類型（因為有價格）
+      required: false,
+      price: item.price, // 設定價格
+    }));
+
+    // 添加到現有欄位
+    setFields([...fields, ...newFields]);
+
+    // 清空輸入框
+    setBulkInputText('');
+    setUseBulkInput(false);
+
+    alert(`已成功創建 ${newFields.length} 個欄位！`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1055,6 +1188,7 @@ export default function CreateForm() {
               <label className="block text-base font-bold text-gray-700">
                 表單欄位
               </label>
+              <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={addField}
@@ -1062,6 +1196,67 @@ export default function CreateForm() {
               >
                 + 新增欄位
               </button>
+              </div>
+            </div>
+
+            {/* 批量商品自動帶入 */}
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3 mb-3">
+                <input
+                  type="checkbox"
+                  id="useBulkInput"
+                  checked={useBulkInput}
+                  onChange={(e) => setUseBulkInput(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="useBulkInput" className="text-base font-bold text-gray-700 cursor-pointer">
+                  批量商品自動帶入
+                </label>
+              </div>
+              {useBulkInput && (
+                <div className="space-y-3 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      批量輸入商品列表（每行一個商品）
+                    </label>
+                    <textarea
+                      value={bulkInputText}
+                      onChange={(e) => setBulkInputText(e.target.value)}
+                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      placeholder={`範例格式：
+青花椒粉$150👑
+紅花椒粉（大紅袍）$150
+五香粉X2$300
+五香粉*2 300
+十三香粉$150
+香蒜粉$100
+A原味無蝦米$150B原味有蝦米$150🦐C薑黃無蝦米180`}
+                      rows={8}
+                      autoComplete="off"
+                    />
+                    <div className="mt-2 text-xs text-gray-600 space-y-1">
+                      <p className="font-medium">💡 支援的格式：</p>
+                      <ul className="list-disc list-inside ml-2 space-y-0.5">
+                        <li>商品名$價格（例如：青花椒粉$150）</li>
+                        <li>商品名X數量$價格（例如：五香粉X2$300）</li>
+                        <li>商品名*數量 價格（例如：五香粉*2 300）</li>
+                        <li>商品名 價格（例如：十三香粉 150）</li>
+                        <li>可一次貼上無換行的長字串，系統會自動分段（例如：A原味$150B原味$150C薑黃180）</li>
+                      </ul>
+                      <p className="mt-1 text-gray-500">系統會自動識別商品名稱和價格，$符號和特殊符號（如👑）會自動移除</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={createFieldsFromBulkInput}
+                      className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-sm sm:text-base touch-manipulation min-h-[44px] font-medium"
+                    >
+                      ✨ 創建欄位
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {fields.length === 0 ? (
@@ -1213,4 +1408,3 @@ export default function CreateForm() {
     </div>
   );
 }
-

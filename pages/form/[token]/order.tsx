@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -36,6 +36,7 @@ export default function CustomerForm() {
   const [order, setOrder] = useState<Order>({ order_data: {} });
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
@@ -48,13 +49,36 @@ export default function CustomerForm() {
   const [isOrderFull, setIsOrderFull] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [reservedExpiresAt, setReservedExpiresAt] = useState<Date | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number>(0); // 剩餘秒數
+  const [timeRemaining, setTimeRemaining] = useState<number>(0); // 剩餘秒數（用於訂單預約倒數）
+  const [countdown, setCountdown] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } | null>(null); // 表單截止時間倒數計時器
   const [source, setSource] = useState<string | undefined>(undefined);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [nameError, setNameError] = useState('');
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   // 用於保存每個數字輸入欄位的前一個有效值
   const previousValues = useRef<Record<string, string>>({});
+  const setFieldRef = (fieldName: string, element: HTMLElement | null) => {
+    if (element) {
+      fieldRefs.current[fieldName] = element;
+    }
+  };
+
+  const scrollToField = (fieldName: string) => {
+    const target = fieldRefs.current[fieldName];
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if ('focus' in target && typeof (target as HTMLElement & { focus?: () => void }).focus === 'function') {
+        (target as HTMLElement & { focus: () => void }).focus();
+      }
+    }
+  };
 
   useEffect(() => {
     if (router.isReady) {
@@ -99,304 +123,85 @@ export default function CustomerForm() {
 
   // 當訂單送出後，重新檢查訂單數量
   useEffect(() => {
-    if (order.order_token && form?.order_limit && form.order_limit > 0) {
-      checkOrderCount();
+    if (!submitting && order.order_token) {
+      fetchOrderCount();
     }
-  }, [order.order_token, form?.order_limit]);
+  }, [submitting, order.order_token, token]);
 
-  // 取得客戶端 IP
-  const fetchClientInfo = async () => {
+  // 訂單預約倒數計時器（5分鐘倒數）
+  useEffect(() => {
+    if (timeRemaining > 0) {
+      const timer = setInterval(() => {
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [timeRemaining]);
+
+  // 表單截止時間倒數計時器
+  useEffect(() => {
+    if (!form || isExpired) {
+      setCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const deadline = new Date(form.deadline);
+      const now = new Date();
+      const diff = deadline.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        setIsExpired(true);
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setCountdown({ days, hours, minutes, seconds });
+    };
+
+    // 立即執行一次
+    updateCountdown();
+
+    // 每秒更新一次
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [form, isExpired]);
+
+  // 顯示 Toast 訊息
+  useEffect(() => {
+    if (toastMessage) {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+      toastTimeoutRef.current = setTimeout(() => {
+        setToastMessage(null);
+      }, 3000);
+    }
+
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, [toastMessage]);
+
+  const fetchForm = async (sid: string) => {
+    if (!token || typeof token !== 'string') return;
     try {
-      const res = await fetch('/api/client-info');
-      const data = await res.json();
-      if (res.ok && data.ip) {
-        setClientIp(data.ip);
-      }
-    } catch (error) {
-      console.error('取得客戶端資訊錯誤:', error);
-    }
-  };
-
-  // 檢測設備類型（精準版）
-  const detectDeviceType = () => {
-    const ua = navigator.userAgent;
-    const uaLower = ua.toLowerCase();
-    const platform = (navigator as any).platform?.toLowerCase() || '';
-    const maxTouchPoints = (navigator as any).maxTouchPoints || 0;
-    const isTouchDevice = 'ontouchstart' in window || maxTouchPoints > 0;
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-    
-    let device = '其他';
-    let browser = '';
-    let osVersion = '';
-    let deviceModel = '';
-
-    // 檢測瀏覽器
-    if (uaLower.includes('edg/')) {
-      browser = 'Edge';
-      const match = ua.match(/edg\/([\d.]+)/i);
-      if (match) browser += ` ${match[1]}`;
-    } else if (uaLower.includes('chrome/') && !uaLower.includes('edg/')) {
-      browser = 'Chrome';
-      const match = ua.match(/chrome\/([\d.]+)/i);
-      if (match) browser += ` ${match[1]}`;
-    } else if (uaLower.includes('safari/') && !uaLower.includes('chrome/')) {
-      browser = 'Safari';
-      const match = ua.match(/version\/([\d.]+)/i);
-      if (match) browser += ` ${match[1]}`;
-    } else if (uaLower.includes('firefox/')) {
-      browser = 'Firefox';
-      const match = ua.match(/firefox\/([\d.]+)/i);
-      if (match) browser += ` ${match[1]}`;
-    } else if (uaLower.includes('opera/') || uaLower.includes('opr/')) {
-      browser = 'Opera';
-      const match = ua.match(/(?:opera|opr)\/([\d.]+)/i);
-      if (match) browser += ` ${match[1]}`;
-    }
-
-    // 1. 優先檢測 iPhone（最明確）
-    if (uaLower.includes('iphone')) {
-      // 嘗試提取 iPhone 型號
-      const modelMatch = ua.match(/iphone\s*os\s*([\d_]+)/i);
-      if (modelMatch) {
-        const iosVersion = modelMatch[1].replace(/_/g, '.');
-        osVersion = `iOS ${iosVersion}`;
-      }
-      
-      // 嘗試從 User-Agent 中提取更具體的型號資訊
-      if (uaLower.includes('iphone15,2') || uaLower.includes('iphone15,3')) {
-        deviceModel = 'iPhone 14 Pro';
-      } else if (uaLower.includes('iphone15,4') || uaLower.includes('iphone15,5')) {
-        deviceModel = 'iPhone 14 Pro Max';
-      } else if (uaLower.includes('iphone14,2') || uaLower.includes('iphone14,3')) {
-        deviceModel = 'iPhone 13 Pro';
-      } else if (uaLower.includes('iphone14,4') || uaLower.includes('iphone14,5')) {
-        deviceModel = 'iPhone 13 Pro Max';
-      } else if (uaLower.includes('iphone13,1') || uaLower.includes('iphone13,2')) {
-        deviceModel = 'iPhone 12 mini';
-      } else if (uaLower.includes('iphone13,3') || uaLower.includes('iphone13,4')) {
-        deviceModel = 'iPhone 12 Pro';
-      } else if (uaLower.includes('iphone12,1') || uaLower.includes('iphone12,3')) {
-        deviceModel = 'iPhone 11';
-      } else if (uaLower.includes('iphone12,5') || uaLower.includes('iphone12,8')) {
-        deviceModel = 'iPhone 11 Pro';
-      } else if (uaLower.includes('iphone11,2') || uaLower.includes('iphone11,4') || uaLower.includes('iphone11,6') || uaLower.includes('iphone11,8')) {
-        deviceModel = 'iPhone XS/XS Max/XR';
-      } else if (uaLower.includes('iphone10,1') || uaLower.includes('iphone10,2') || uaLower.includes('iphone10,3') || uaLower.includes('iphone10,4') || uaLower.includes('iphone10,5') || uaLower.includes('iphone10,6')) {
-        deviceModel = 'iPhone 8/X';
-      } else {
-        deviceModel = 'iPhone';
-      }
-      
-      device = `📱 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
-    }
-    // 2. 檢測 iPad（包括 iPadOS 13+）
-    else if (
-      uaLower.includes('ipad') ||
-      (platform === 'macintel' && maxTouchPoints > 1 && isTouchDevice) ||
-      (uaLower.includes('mac') && maxTouchPoints > 1 && isTouchDevice && screenWidth >= 768)
-    ) {
-      const modelMatch = ua.match(/os\s*([\d_]+)/i);
-      if (modelMatch) {
-        const iosVersion = modelMatch[1].replace(/_/g, '.');
-        osVersion = `iPadOS ${iosVersion}`;
-      }
-      
-      // 嘗試識別 iPad 型號
-      if (uaLower.includes('ipad13,1') || uaLower.includes('ipad13,2')) {
-        deviceModel = 'iPad Air 4';
-      } else if (uaLower.includes('ipad13,16') || uaLower.includes('ipad13,17')) {
-        deviceModel = 'iPad Air 5';
-      } else if (uaLower.includes('ipad14,1') || uaLower.includes('ipad14,2')) {
-        deviceModel = 'iPad mini 6';
-      } else if (uaLower.includes('ipad11,1') || uaLower.includes('ipad11,2')) {
-        deviceModel = 'iPad 10.2"';
-      } else if (uaLower.includes('ipad8,1') || uaLower.includes('ipad8,2') || uaLower.includes('ipad8,3') || uaLower.includes('ipad8,4')) {
-        deviceModel = 'iPad Pro 11"';
-      } else if (uaLower.includes('ipad8,5') || uaLower.includes('ipad8,6') || uaLower.includes('ipad8,7') || uaLower.includes('ipad8,8')) {
-        deviceModel = 'iPad Pro 12.9"';
-      } else {
-        deviceModel = 'iPad';
-      }
-      
-      device = `📱 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
-    }
-    // 3. 檢測 Android 設備
-    else if (uaLower.includes('android')) {
-      // 提取 Android 版本
-      const androidMatch = ua.match(/android\s*([\d.]+)/i);
-      if (androidMatch) {
-        osVersion = `Android ${androidMatch[1]}`;
-      }
-      
-      // 檢測品牌和型號
-      let brand = '';
-      let model = '';
-      
-      // Samsung
-      if (uaLower.includes('samsung') || uaLower.includes('sm-')) {
-        brand = 'Samsung';
-        const smMatch = ua.match(/sm-([a-z0-9]+)/i);
-        if (smMatch) {
-          model = smMatch[1].toUpperCase();
-        } else if (uaLower.includes('galaxy s')) {
-          model = 'Galaxy S';
-          const sMatch = ua.match(/galaxy\s*s(\d+)/i);
-          if (sMatch) model += sMatch[1];
-        } else if (uaLower.includes('galaxy note')) {
-          model = 'Galaxy Note';
-          const noteMatch = ua.match(/galaxy\s*note\s*(\d+)/i);
-          if (noteMatch) model += noteMatch[1];
-        } else if (uaLower.includes('galaxy a')) {
-          model = 'Galaxy A';
-          const aMatch = ua.match(/galaxy\s*a(\d+)/i);
-          if (aMatch) model += aMatch[1];
-        }
-      }
-      // Xiaomi
-      else if (uaLower.includes('xiaomi') || uaLower.includes('redmi') || uaLower.includes('mi\s')) {
-        brand = 'Xiaomi';
-        if (uaLower.includes('redmi')) {
-          model = 'Redmi';
-          const redmiMatch = ua.match(/redmi\s*(\w+)/i);
-          if (redmiMatch) model += ` ${redmiMatch[1]}`;
-        } else if (uaLower.includes('mi\s')) {
-          model = 'Mi';
-          const miMatch = ua.match(/mi\s*(\d+)/i);
-          if (miMatch) model += miMatch[1];
-        }
-      }
-      // Huawei
-      else if (uaLower.includes('huawei') || uaLower.includes('honor')) {
-        brand = uaLower.includes('honor') ? 'Honor' : 'Huawei';
-        const huaweiMatch = ua.match(/(?:huawei|honor)\s*([a-z0-9\s]+)/i);
-        if (huaweiMatch) model = huaweiMatch[1];
-      }
-      // OPPO
-      else if (uaLower.includes('oppo')) {
-        brand = 'OPPO';
-        const oppoMatch = ua.match(/oppo\s*([a-z0-9\s]+)/i);
-        if (oppoMatch) model = oppoMatch[1];
-      }
-      // vivo
-      else if (uaLower.includes('vivo')) {
-        brand = 'vivo';
-        const vivoMatch = ua.match(/vivo\s*([a-z0-9\s]+)/i);
-        if (vivoMatch) model = vivoMatch[1];
-      }
-      // OnePlus
-      else if (uaLower.includes('oneplus')) {
-        brand = 'OnePlus';
-        const oneplusMatch = ua.match(/oneplus\s*([a-z0-9\s]+)/i);
-        if (oneplusMatch) model = oneplusMatch[1];
-      }
-      // Google Pixel
-      else if (uaLower.includes('pixel')) {
-        brand = 'Google';
-        model = 'Pixel';
-        const pixelMatch = ua.match(/pixel\s*(\d+)/i);
-        if (pixelMatch) model += ` ${pixelMatch[1]}`;
-      }
-      // 其他 Android 品牌
-      else {
-        const brandMatch = ua.match(/android.*?;\s*([a-z]+)\s*/i);
-        if (brandMatch) {
-          brand = brandMatch[1].charAt(0).toUpperCase() + brandMatch[1].slice(1);
-        }
-      }
-      
-      // 判斷是手機還是平板
-      const isTablet = !uaLower.includes('mobile') && (screenWidth >= 600 || uaLower.includes('tablet'));
-      
-      if (isTablet) {
-        device = `📱 ${brand || 'Android'} 平板${model ? ` ${model}` : ''}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
-      } else {
-        device = `📱 ${brand || 'Android'} 手機${model ? ` ${model}` : ''}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
-      }
-    }
-    // 4. 檢測 Windows 設備
-    else if (uaLower.includes('windows')) {
-      // 檢測 Windows 版本
-      if (uaLower.includes('windows nt 10.0')) {
-        osVersion = 'Windows 10/11';
-      } else if (uaLower.includes('windows nt 6.3')) {
-        osVersion = 'Windows 8.1';
-      } else if (uaLower.includes('windows nt 6.2')) {
-        osVersion = 'Windows 8';
-      } else if (uaLower.includes('windows nt 6.1')) {
-        osVersion = 'Windows 7';
-      } else if (uaLower.includes('windows nt 6.0')) {
-        osVersion = 'Windows Vista';
-      } else if (uaLower.includes('windows nt 5.1')) {
-        osVersion = 'Windows XP';
-      } else {
-        osVersion = 'Windows';
-      }
-      
-      if (uaLower.includes('phone') || (isTouchDevice && screenWidth < 1024)) {
-        device = `📱 Windows Phone${browser ? ` - ${browser}` : ''}`;
-      } else if (uaLower.includes('tablet') || (isTouchDevice && screenWidth < 1366 && screenWidth >= 768)) {
-        device = `📱 Windows 平板 (${osVersion})${browser ? ` - ${browser}` : ''}`;
-      } else {
-        device = `💻 Windows PC (${osVersion})${browser ? ` - ${browser}` : ''}`;
-      }
-    }
-    // 5. 檢測 macOS（排除 iPad）
-    else if (uaLower.includes('mac os x') || uaLower.includes('macintosh')) {
-      // 再次確認不是 iPad（iPadOS 13+ 會偽裝成 Mac）
-      if (maxTouchPoints > 1 && isTouchDevice && screenWidth >= 768) {
-        device = `📱 iPad (偽裝為 Mac)${browser ? ` - ${browser}` : ''}`;
-      } else {
-        // 提取 macOS 版本
-        const macMatch = ua.match(/mac\s*os\s*x\s*([\d_]+)/i);
-        if (macMatch) {
-          const version = macMatch[1].replace(/_/g, '.');
-          osVersion = `macOS ${version}`;
-        }
-        
-        // 嘗試檢測 Mac 型號
-        if (uaLower.includes('intel')) {
-          deviceModel = 'Mac (Intel)';
-        } else if (uaLower.includes('arm') || uaLower.includes('apple silicon')) {
-          deviceModel = 'Mac (Apple Silicon)';
-        } else {
-          deviceModel = 'Mac';
-        }
-        
-        device = `💻 ${deviceModel}${osVersion ? ` (${osVersion})` : ''}${browser ? ` - ${browser}` : ''}`;
-      }
-    }
-    // 6. 檢測 Linux
-    else if (uaLower.includes('linux') && !uaLower.includes('android')) {
-      if (uaLower.includes('ubuntu')) {
-        osVersion = 'Ubuntu';
-      } else if (uaLower.includes('fedora')) {
-        osVersion = 'Fedora';
-      } else if (uaLower.includes('debian')) {
-        osVersion = 'Debian';
-      } else if (uaLower.includes('arch')) {
-        osVersion = 'Arch Linux';
-      } else {
-        osVersion = 'Linux';
-      }
-      device = `💻 ${osVersion}${browser ? ` - ${browser}` : ''}`;
-    }
-    // 7. 檢測其他移動設備
-    else if (uaLower.includes('mobile') || (isTouchDevice && screenWidth < 768)) {
-      device = `📱 手機${browser ? ` - ${browser}` : ''}`;
-    }
-    // 8. 默認為電腦
-    else {
-      device = `💻 電腦${browser ? ` - ${browser}` : ''}`;
-    }
-
-    setDeviceType(device);
-  };
-
-  const fetchForm = async (sid?: string) => {
-    try {
-      const res = await fetch(`/api/forms/token/${token}`);
+      const res = await fetch(`/api/forms/token/${token}?sessionId=${sid}`);
       const data = await res.json();
 
       if (res.ok) {
@@ -406,14 +211,6 @@ export default function CustomerForm() {
         const now = new Date();
         if (now > deadline) {
           setIsExpired(true);
-        }
-        
-        // 如果有訂單限制，先保留排序
-        if (data.order_limit && data.order_limit > 0 && (sid || sessionId)) {
-          const currentSessionId = sid || sessionId;
-          if (currentSessionId) {
-            await reserveOrderNumberWithSession(currentSessionId);
-          }
         }
       } else {
         alert(data.error || '表單不存在');
@@ -426,260 +223,786 @@ export default function CustomerForm() {
     }
   };
 
-  // 使用指定的 sessionId 保留排序
-  const reserveOrderNumberWithSession = async (sid: string) => {
-    if (!token) return;
-    
+  const fetchOrderCount = async () => {
+    if (!token || typeof token !== 'string') return;
     try {
-      const res = await fetch('/api/orders/reserve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          formToken: token,
-          sessionId: sid,
-        }),
-      });
-      
+      const res = await fetch(`/api/orders/count?formToken=${typeof token === 'string' ? token : ''}`);
       const data = await res.json();
-      
-      if (res.ok && data.success) {
-        setOrderNumber(data.orderNumber);
-        setReservedExpiresAt(new Date(data.expiresAt));
-        // 開始倒計時
-        startCountdown(new Date(data.expiresAt));
-        // 檢查訂單數量
-        await checkOrderCount();
-      } else if (data.error && data.error.includes('已達')) {
-        setIsOrderFull(true);
+      if (res.ok) {
+        setOrderCount(data.count || 0);
       }
     } catch (error) {
-      console.error('保留訂單排序錯誤:', error);
+      console.error('取得訂單數量錯誤:', error);
     }
   };
 
-  // 保留訂單排序（使用當前的 sessionId）
-  const reserveOrderNumber = async () => {
-    if (!sessionId || !token) return;
-    await reserveOrderNumberWithSession(sessionId);
+  const fetchClientInfo = async () => {
+    try {
+      const res = await fetch('/api/client-info');
+      const data = await res.json();
+      if (res.ok) {
+        setClientIp(data.ip || '');
+      }
+    } catch (error) {
+      console.error('取得客戶資訊錯誤:', error);
+    }
   };
 
-  // 開始倒計時
-  const startCountdown = (expiresAt: Date) => {
-    const updateCountdown = () => {
-      const now = new Date();
-      const remaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-      setTimeRemaining(remaining);
-      
-      if (remaining <= 0) {
-        // 時間到，重新檢查並嘗試保留
-        if (form && form.order_limit && form.order_limit > 0 && sessionId) {
-          reserveOrderNumberWithSession(sessionId);
+  const detectDeviceType = () => {
+    const userAgent = navigator.userAgent;
+    const ua = userAgent.toLowerCase();
+    
+    // 檢測 iPad
+    if (/ipad/i.test(userAgent)) {
+      // 嘗試檢測 iPad 型號
+      if (/cpu os (\d+)_(\d+)/i.test(userAgent)) {
+        const match = userAgent.match(/cpu os (\d+)_(\d+)/i);
+        if (match) {
+          const major = match[1];
+          const minor = match[2];
+          setDeviceType(`iPad (iPadOS ${major}.${minor})`);
+        } else {
+          setDeviceType('iPad');
         }
       } else {
-        setTimeout(updateCountdown, 1000);
+        setDeviceType('iPad');
       }
-    };
-    updateCountdown();
-  };
-
-  // 檢查訂單數量和排序
-  const checkOrderCount = async () => {
-    try {
-      const res = await fetch(`/api/orders/count?formToken=${token}`);
-      const data = await res.json();
+      return;
+    }
+    
+    // 檢測 iPhone
+    if (/iphone/i.test(userAgent)) {
+      // 嘗試檢測 iPhone 型號
+      const iphoneModels: { [key: string]: string } = {
+        'iphone15,2': 'iPhone 14 Pro',
+        'iphone15,3': 'iPhone 14 Pro Max',
+        'iphone14,2': 'iPhone 13 Pro',
+        'iphone14,3': 'iPhone 13 Pro Max',
+        'iphone13,2': 'iPhone 12 Pro',
+        'iphone13,3': 'iPhone 12 Pro Max',
+        'iphone12,8': 'iPhone SE (第2代)',
+        'iphone11,8': 'iPhone XR',
+        'iphone11,2': 'iPhone XS',
+        'iphone11,6': 'iPhone XS Max',
+        'iphone10,3': 'iPhone X',
+        'iphone10,6': 'iPhone X',
+        'iphone9,1': 'iPhone 7',
+        'iphone9,2': 'iPhone 7 Plus',
+        'iphone9,3': 'iPhone 7',
+        'iphone9,4': 'iPhone 7 Plus',
+        'iphone8,1': 'iPhone 6s',
+        'iphone8,2': 'iPhone 6s Plus',
+        'iphone8,4': 'iPhone SE',
+        'iphone7,1': 'iPhone 6 Plus',
+        'iphone7,2': 'iPhone 6',
+      };
       
-      if (res.ok && data.success) {
-        setOrderCount(data.currentCount);
-        setIsOrderFull(data.isFull);
-        
-        // 如果當前訂單已送出，找到對應的排序號
-        if (order.order_token) {
-          const currentOrder = data.orders.find((o: any) => o.order_token === order.order_token);
-          if (currentOrder) {
-            setOrderNumber(currentOrder.order_number);
+      // 嘗試從 user agent 中提取型號
+      let model = 'iPhone';
+      for (const [key, value] of Object.entries(iphoneModels)) {
+        if (ua.includes(key)) {
+          model = value;
+          break;
+        }
+      }
+      
+      // 如果沒有找到具體型號，嘗試從 iOS 版本推斷
+      if (model === 'iPhone') {
+        const iosMatch = userAgent.match(/os (\d+)_(\d+)/i);
+        if (iosMatch) {
+          const major = parseInt(iosMatch[1]);
+          if (major >= 16) {
+            model = 'iPhone (較新機型)';
+          } else if (major >= 14) {
+            model = 'iPhone (較新機型)';
+          } else {
+            model = 'iPhone';
           }
         }
       }
-    } catch (error) {
-      console.error('檢查訂單數量錯誤:', error);
+      
+      setDeviceType(model);
+      return;
     }
+    
+    // 檢測 Android 手機
+    if (/android/i.test(userAgent) && !/tablet/i.test(userAgent)) {
+      // 檢測三星手機
+      if (/samsung/i.test(userAgent)) {
+        const samsungModels: { [key: string]: string } = {
+          'sm-s': 'Samsung Galaxy S',
+          'sm-n': 'Samsung Galaxy Note',
+          'sm-a': 'Samsung Galaxy A',
+          'sm-g': 'Samsung Galaxy',
+          'sm-f': 'Samsung Galaxy Fold',
+        };
+        
+        let model = 'Samsung';
+        for (const [key, value] of Object.entries(samsungModels)) {
+          if (ua.includes(key)) {
+            // 嘗試提取完整型號
+            const modelMatch = userAgent.match(new RegExp(`${key}(\\d+)`, 'i'));
+            if (modelMatch) {
+              model = `${value} ${modelMatch[1]}`;
+            } else {
+              model = value;
+            }
+            break;
+          }
+        }
+        
+        // 如果沒有找到具體型號，檢查是否有其他標識
+        if (model === 'Samsung') {
+          if (ua.includes('galaxy')) {
+            model = 'Samsung Galaxy';
+          } else {
+            model = 'Samsung 手機';
+          }
+        }
+        
+        setDeviceType(model);
+        return;
+      }
+      
+      // 檢測其他 Android 手機品牌
+      if (/xiaomi|redmi|mi /i.test(userAgent)) {
+        setDeviceType('小米手機');
+        return;
+      }
+      if (/huawei|honor/i.test(userAgent)) {
+        setDeviceType('華為手機');
+        return;
+      }
+      if (/oppo/i.test(userAgent)) {
+        setDeviceType('OPPO 手機');
+        return;
+      }
+      if (/vivo/i.test(userAgent)) {
+        setDeviceType('vivo 手機');
+        return;
+      }
+      if (/oneplus/i.test(userAgent)) {
+        setDeviceType('OnePlus 手機');
+        return;
+      }
+      if (/sony/i.test(userAgent)) {
+        setDeviceType('Sony 手機');
+        return;
+      }
+      if (/lg/i.test(userAgent)) {
+        setDeviceType('LG 手機');
+        return;
+      }
+      if (/htc/i.test(userAgent)) {
+        setDeviceType('HTC 手機');
+        return;
+      }
+      
+      // 其他 Android 手機
+      setDeviceType('Android 手機');
+      return;
+    }
+    
+    // 檢測 Windows
+    if (/windows/i.test(userAgent)) {
+      if (/windows nt 10.0/i.test(userAgent)) {
+        // Windows 10 或 11（User Agent 無法準確區分，統一顯示為 Windows 10/11）
+        // 可以通過檢查其他特徵來判斷，但 User Agent 本身無法區分
+        // 這裡統一顯示為 Windows 10/11
+        setDeviceType('Windows 10/11');
+      } else if (/windows nt 6.3/i.test(userAgent)) {
+        setDeviceType('Windows 8.1');
+      } else if (/windows nt 6.2/i.test(userAgent)) {
+        setDeviceType('Windows 8');
+      } else if (/windows nt 6.1/i.test(userAgent)) {
+        setDeviceType('Windows 7');
+      } else if (/windows nt 6.0/i.test(userAgent)) {
+        setDeviceType('Windows Vista');
+      } else if (/windows nt 5.1/i.test(userAgent)) {
+        setDeviceType('Windows XP');
+      } else {
+        setDeviceType('Windows');
+      }
+      return;
+    }
+    
+    // 檢測 macOS
+    if (/macintosh|mac os x/i.test(userAgent)) {
+      const macMatch = userAgent.match(/mac os x (\d+)[._](\d+)/i);
+      if (macMatch) {
+        const major = parseInt(macMatch[1]);
+        const minor = parseInt(macMatch[2]);
+        
+        const macVersions: { [key: number]: string } = {
+          14: 'macOS Sonoma',
+          13: 'macOS Ventura',
+          12: 'macOS Monterey',
+          11: 'macOS Big Sur',
+        };
+        
+        let macVersionName: string;
+        if (major === 10) {
+          if (minor >= 15) {
+            macVersionName = 'macOS Catalina';
+          } else if (minor >= 14) {
+            macVersionName = 'macOS Mojave';
+          } else if (minor >= 13) {
+            macVersionName = 'macOS High Sierra';
+          } else {
+            macVersionName = 'macOS';
+          }
+        } else if (macVersions[major]) {
+          macVersionName = macVersions[major];
+        } else if (major >= 15) {
+          macVersionName = `macOS (版本 ${major}.${minor})`;
+        } else {
+          macVersionName = 'macOS';
+        }
+        
+        setDeviceType(macVersionName);
+      } else {
+        setDeviceType('Mac 電腦');
+      }
+      return;
+    }
+    
+    // 檢測 Linux
+    if (/linux/i.test(userAgent)) {
+      setDeviceType('Linux');
+      return;
+    }
+    
+    // 預設為電腦
+    setDeviceType('電腦');
   };
 
   const handleFieldChange = (fieldName: string, value: any) => {
-    setOrder({
-      ...order,
+    setOrder((prev) => ({
+      ...prev,
       order_data: {
-        ...order.order_data,
+        ...prev.order_data,
         [fieldName]: value,
       },
+    }));
+  };
+  const findFirstMissingField = () => {
+    if (!form) return null;
+    for (const field of form.fields) {
+      if (!field.required) continue;
+      const value = order.order_data[field.name];
+      if (field.type === 'costco') {
+        const items = Array.isArray(value) ? value : [];
+        const hasFilledItem =
+          items.length > 0 && items.some((item) => item && typeof item.name === 'string' && item.name.trim() !== '');
+        if (!hasFilledItem) return field;
+      } else if (field.type === 'number') {
+        if (value === undefined || value === null || value === '' || isNaN(Number(value))) {
+          return field;
+        }
+      } else {
+        if (!value || String(value).trim() === '') {
+          return field;
+        }
+      }
+    }
+    return null;
+  };
+
+  const scrollToFirstProductField = () => {
+    if (!form) return;
+    const productField = form.fields.find(
+      (field) => field.type === 'number' || field.type === 'costco'
+    );
+    if (productField) {
+      scrollToField(productField.name);
+    }
+  };
+
+  const renderFieldInput = (field: FormField) => {
+    if (field.type === 'costco') {
+      const rawValue = order.order_data[field.name];
+      const items: Array<{ name: string; quantity: string }> = Array.isArray(rawValue)
+        ? rawValue
+        : rawValue
+        ? [{ name: String(rawValue), quantity: '' }]
+        : [{ name: '', quantity: '' }];
+
+      const updateItems = (newItems: Array<{ name: string; quantity: string }>) => {
+        handleFieldChange(field.name, newItems);
+      };
+
+      const addItem = () => {
+        updateItems([...items, { name: '', quantity: '' }]);
+      };
+
+      const removeItem = (index: number) => {
+        const newItems = items.filter((_, i) => i !== index);
+        updateItems(newItems.length > 0 ? newItems : [{ name: '', quantity: '' }]);
+      };
+
+      const updateItem = (index: number, key: 'name' | 'quantity', value: string) => {
+        const newItems = [...items];
+        newItems[index] = { ...newItems[index], [key]: value };
+        updateItems(newItems);
+      };
+
+      return (
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <div key={index} className="flex gap-2">
+              <input
+                type="text"
+                value={item.name}
+                onChange={(e) => updateItem(index, 'name', e.target.value)}
+                className="flex-1 px-3 py-2.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                placeholder="商品名稱"
+                ref={index === 0 ? (el) => setFieldRef(field.name, el) : undefined}
+              />
+              <input
+                type="text"
+                value={item.quantity}
+                onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                className="w-20 px-3 py-2.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                placeholder="數量"
+              />
+              {items.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeItem(index)}
+                  className="px-3 py-2.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-base"
+                >
+                  刪除
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addItem}
+            className="px-4 py-2.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-base"
+          >
+            + 新增商品
+          </button>
+        </div>
+      );
+    }
+
+    if (field.type === 'text') {
+      return (
+        <input
+          type="text"
+          value={order.order_data[field.name] || ''}
+          onChange={(e) => handleFieldChange(field.name, e.target.value)}
+          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-base shadow-sm"
+          required={field.required}
+          ref={(el) => setFieldRef(field.name, el)}
+        />
+      );
+    }
+
+    if (field.type === 'number') {
+      const rawValue = order.order_data[field.name] ?? 0;
+      const currentValue = parseInt(String(rawValue), 10) || 0;
+
+      const handleIncrease = () => {
+        handleFieldChange(field.name, currentValue + 1);
+      };
+
+      const handleDecrease = () => {
+        if (currentValue > 0) {
+          handleFieldChange(field.name, currentValue - 1);
+        }
+      };
+
+      const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const fieldName = field.name;
+        const value = e.target.value;
+
+        if (value === '') {
+          previousValues.current[fieldName] = '';
+          handleFieldChange(fieldName, '');
+          return;
+        }
+
+        if (value.includes('.') || value.includes(',')) {
+          alert('只能輸入整數，請勿輸入小數點');
+          const prevValue = previousValues.current[fieldName] || '';
+          if (prevValue === '') {
+            handleFieldChange(fieldName, '');
+          } else {
+            const prevInt = parseInt(prevValue, 10);
+            if (!isNaN(prevInt) && prevInt >= 0) {
+              handleFieldChange(fieldName, prevInt);
+            } else {
+              handleFieldChange(fieldName, '');
+            }
+          }
+          return;
+        }
+
+        const intValue = parseInt(value, 10);
+        if (!isNaN(intValue) && intValue >= 0) {
+          previousValues.current[fieldName] = String(intValue);
+          handleFieldChange(fieldName, intValue);
+        } else if (value === '-') {
+          previousValues.current[fieldName] = '';
+          handleFieldChange(fieldName, '');
+        } else {
+          alert('只能輸入大於等於 0 的整數');
+          const prevValue = previousValues.current[fieldName] || '';
+          if (prevValue === '') {
+            handleFieldChange(fieldName, '');
+          } else {
+            const prevInt = parseInt(prevValue, 10);
+            if (!isNaN(prevInt) && prevInt >= 0) {
+              handleFieldChange(fieldName, prevInt);
+            } else {
+              handleFieldChange(fieldName, '');
+            }
+          }
+        }
+      };
+
+      const showPriceInfo = field.price !== undefined && field.price !== null && field.price > 0;
+      const itemTotal = showPriceInfo ? currentValue * (field.price || 0) : 0;
+
+      return (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDecrease}
+            disabled={currentValue <= 0}
+            className="px-4 py-2 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 active:from-gray-400 active:to-gray-500 disabled:from-gray-100 disabled:to-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed rounded-full border-2 border-gray-300/50 shadow-[0_4px_8px_rgba(0,0,0,0.15),0_2px_4px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:translate-y-0 disabled:shadow-[0_1px_2px_rgba(0,0,0,0.05)] disabled:translate-y-0 transition-all duration-200 text-lg sm:text-xl font-bold text-gray-700 min-w-[44px] sm:min-w-[48px] touch-manipulation"
+            aria-label="減少數量"
+          >
+            −
+          </button>
+          <input
+            type="number"
+            value={currentValue || ''}
+            onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === '.' || e.key === ',') {
+                e.preventDefault();
+                alert('只能輸入整數，請勿輸入小數點');
+              }
+            }}
+            className="w-20 sm:w-24 px-3 py-2.5 text-center border-2 border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none text-base font-medium shadow-sm"
+            required={field.required}
+            min="0"
+            step="1"
+            placeholder="0"
+            ref={(el) => setFieldRef(field.name, el)}
+          />
+          <button
+            type="button"
+            onClick={handleIncrease}
+            className="px-4 py-2 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 active:from-gray-400 active:to-gray-500 rounded-full border-2 border-gray-300/50 shadow-[0_4px_8px_rgba(0,0,0,0.15),0_2px_4px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:translate-y-0 transition-all duration-200 text-lg sm:text-xl font-bold text-gray-700 min-w-[44px] sm:min-w-[48px] touch-manipulation"
+            aria-label="增加數量"
+          >
+            +
+          </button>
+          {showPriceInfo && (
+            <div className="text-sm sm:text-base text-gray-600 min-w-[70px] sm:min-w-[90px] text-right">
+              {itemTotal > 0 && (
+                <span className="text-green-600 font-bold">
+                  = {itemTotal.toFixed(0)}元
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const namePlaceholder = '請輸入您的姓名（範例：王小明）';
+  const phonePlaceholder = '請輸入您的電話（範例：0912345678）';
+
+  const handleNameFocus = () => {
+    if (!namePlaceholder.includes('範例')) {
+      return;
+    }
+    const newPlaceholder = namePlaceholder.replace('（範例：王小明）', '');
+    // 這裡可以更新 placeholder，但由於是常數，我們不修改它
+  };
+
+  const handlePhoneFocus = () => {
+    if (!phonePlaceholder.includes('範例')) {
+      return;
+    }
+    const newPlaceholder = phonePlaceholder.replace('（範例：0912345678）', '');
+    // 這裡可以更新 placeholder，但由於是常數，我們不修改它
+  };
+
+  const calculateTotal = () => {
+    if (!form) return 0;
+    let total = 0;
+    form.fields.forEach((field) => {
+      if (field.price && field.price > 0) {
+        const value = order.order_data[field.name];
+        if (field.type === 'number') {
+          const quantity = parseInt(String(value), 10) || 0;
+          total += quantity * field.price;
+        }
+      }
+    });
+    return total;
+  };
+
+  // 檢查是否有購買至少一個商品
+  const hasPurchasedItems = () => {
+    if (!form) return false;
+    return form.fields.some((field) => {
+      const value = order.order_data[field.name];
+      if (field.type === 'number') {
+        const quantity = parseInt(String(value), 10) || 0;
+        return quantity > 0;
+      } else if (field.type === 'costco') {
+        if (Array.isArray(value)) {
+          return value.some((item: { name: string; quantity: string }) => 
+            item.name && item.name.trim() !== ''
+          );
+        }
+        return value && String(value).trim() !== '';
+      } else if (field.type === 'text') {
+        return value && String(value).trim() !== '';
+      }
+      return false;
     });
   };
 
-  // 計算單項總計（數量 × 價格）
-  const calculateItemTotal = (field: FormField): number => {
-    if (!field.price || field.price <= 0) return 0;
-    const quantity = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
-    return quantity * field.price;
-  };
-
-  // 計算總計價格
-  const calculateTotal = (): number => {
-    if (!form) return 0;
-    return form.fields.reduce((total, field) => {
-      return total + calculateItemTotal(field);
-    }, 0);
-  };
-
-  const validateForm = (): boolean => {
-    // 驗證姓名（必填）
-    if (!customerName.trim()) {
-      alert('請填寫「姓名」');
+  // 驗證電話號碼
+  const validatePhone = (phone: string): boolean => {
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone.length < 7) {
+      setPhoneError('請輸入正確聯絡號碼（至少7碼）');
       return false;
     }
-
-    // 驗證電話（必填）
-    if (!customerPhone.trim()) {
-      alert('請填寫「電話」');
+    if (!/^\d+$/.test(trimmedPhone)) {
+      setPhoneError('電話僅能輸入數字');
       return false;
     }
+    setPhoneError('');
+    return true;
+  };
 
-    // 驗證表單欄位
-    if (form) {
-      for (const field of form.fields) {
-        const value = order.order_data[field.name];
-        
-        // 必填欄位檢查
-        if (field.required) {
-          if (value === null || value === undefined || value === '') {
-            alert(`請填寫「${field.label}」`);
-            return false;
-          }
-        }
-
-        // 根據欄位類型進行額外檢查
-        if (value !== null && value !== undefined && value !== '') {
-          if (field.type === 'number') {
-            const numValue = Number(value);
-            if (isNaN(numValue) || numValue <= 0) {
-              alert(`「${field.label}」必須輸入大於 0 的數字`);
-              return false;
-            }
-          } else if (field.type === 'text') {
-            if (typeof value !== 'string' || value.trim() === '') {
-              if (field.required) {
-                alert(`「${field.label}」不能為空`);
-                return false;
-              }
-            }
-          } else if (field.type === 'costco') {
-            // 支持數組格式（物品名稱和數量）
-            if (Array.isArray(value)) {
-              if (value.length === 0) {
-                if (field.required) {
-                  alert(`「${field.label}」至少需要一個項目`);
-                  return false;
-                }
-              } else {
-                // 檢查每個項目是否有物品名稱
-                const hasEmptyName = value.some((item: any) => !item.name || !item.name.trim());
-                if (hasEmptyName) {
-                  alert(`「${field.label}」的項目名稱不能為空`);
-                  return false;
-                }
-              }
-            } else {
-              if (field.required) {
-                alert(`「${field.label}」至少需要一個項目`);
-                return false;
-              }
-            }
-          }
-        }
-      }
+  const validateName = (name: string): boolean => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setNameError('請輸入姓名');
+      return false;
     }
-
-    // 檢查是否至少有一個表單欄位有值（避免空表單）
-    if (form && form.fields.length > 0) {
-      const hasAnyValue = form.fields.some(field => {
-        const value = order.order_data[field.name];
-        return value !== null && value !== undefined && value !== '';
-      });
-      if (!hasAnyValue) {
-        alert('請至少填寫一個表單欄位');
-        return false;
-      }
+    const namePattern = /^[A-Za-z\u4e00-\u9fa5\s]+$/;
+    if (!namePattern.test(trimmedName)) {
+      setNameError('姓名僅能輸入中文或英文');
+      return false;
     }
-
+    setNameError('');
     return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 先進行驗證
-    if (!validateForm()) {
+
+    if (!customerName.trim()) {
+      alert('請填寫姓名');
+      scrollToField('customerName');
+      return;
+    }
+    if (!validateName(customerName)) {
+      scrollToField('customerName');
+      return;
+    }
+    if (!customerPhone.trim()) {
+      alert('請填寫電話');
+      scrollToField('customerPhone');
       return;
     }
 
-    // 顯示確認畫面
-    setShowConfirm(true);
+    // 驗證電話號碼
+    if (!validatePhone(customerPhone)) {
+      scrollToField('customerPhone');
+      return;
+    }
+
+    const missingField = findFirstMissingField();
+    if (missingField) {
+      alert(`${missingField.label}為必填欄位，請先完成填寫`);
+      scrollToField(missingField.name);
+      return;
+    }
+
+    // 檢查是否有購買商品
+    if (!hasPurchasedItems()) {
+      setToastMessage('你沒有選擇商品數量');
+      scrollToFirstProductField();
+      return;
+    }
+
+    // 檢查是否超過截止時間
+    if (form) {
+      const deadline = new Date(form.deadline);
+      const now = new Date();
+      if (now > deadline) {
+        alert('表單已截止，無法再下單');
+        setIsExpired(true);
+        return;
+      }
+    }
+
+    // 如果是編輯模式，直接提交
+    if (isEditMode) {
+      setShowConfirm(true);
+      return;
+    }
+
+    // 檢查訂單限額
+    if (form && form.order_limit && form.order_limit > 0) {
+      try {
+        const res = await fetch(`/api/orders/reserve?formToken=${typeof token === 'string' ? token : ''}&sessionId=${sessionId}`);
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          setOrderNumber(data.orderNumber);
+          setTimeRemaining(data.timeRemaining || 300); // 預設 5 分鐘
+          setReservedExpiresAt(new Date(data.reservedExpiresAt));
+          setShowConfirm(true);
+        } else {
+          if (data.error === 'ORDER_LIMIT_REACHED') {
+            setIsOrderFull(true);
+            setOrderCount(data.currentCount || 0);
+          } else {
+            alert(data.error || '預約訂單失敗，請稍後再試');
+          }
+        }
+      } catch (error) {
+        console.error('預約訂單錯誤:', error);
+        alert('預約訂單時發生錯誤，請稍後再試');
+      }
+    } else {
+      // 沒有訂單限額，直接顯示確認畫面
+      setShowConfirm(true);
+    }
   };
 
   const handleConfirmSubmit = async () => {
-    setShowConfirm(false);
+    if (!validateName(customerName)) {
+      scrollToField('customerName');
+      return;
+    }
+
+    // 再次驗證電話號碼
+    if (!validatePhone(customerPhone)) {
+      scrollToField('customerPhone');
+      return;
+    }
+
+    const missingField = findFirstMissingField();
+    if (missingField) {
+      alert(`${missingField.label}為必填欄位，請先完成填寫`);
+      scrollToField(missingField.name);
+      return;
+    }
+
+    // 再次檢查是否有購買商品
+    if (!hasPurchasedItems()) {
+      setToastMessage('你沒有選擇商品數量');
+      scrollToFirstProductField();
+      return;
+    }
+
     setSubmitting(true);
-
     try {
-      if (isEditMode && order.order_token) {
-        // 更新現有訂單（使用訂單編號驗證）
-        const res = await fetch(`/api/orders/${order.order_token}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderData: order.order_data,
-            formToken: token,
-            orderToken: order.order_token, // 使用訂單編號驗證
-            customerName: customerName.trim(),
-            customerPhone: customerPhone.trim(),
-          }),
-        });
+      const url = isEditMode ? `/api/orders/${order.order_token}` : '/api/orders/create';
+      const method = isEditMode ? 'PUT' : 'POST';
 
-        const data = await res.json();
-        if (res.ok) {
-          alert('訂單已更新成功！');
+      const body: any = {
+        formToken: typeof token === 'string' ? token : '',
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        orderData: order.order_data,
+        source: source,
+        deviceType: deviceType,
+        clientIp: clientIp,
+      };
+
+      if (!isEditMode && form && form.order_limit && form.order_limit > 0) {
+        body.sessionId = sessionId;
+        body.orderNumber = orderNumber;
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        const createdOrderToken = data.orderToken || data.order_token;
+        const nextOrderToken = createdOrderToken || order.order_token;
+        if (isEditMode) {
+          if (!nextOrderToken) {
+            alert('訂單已成功更新，但未取得訂單代碼，請聯絡客服。');
+            setShowConfirm(false);
+            setIsEditMode(false);
+            fetchOrderCount();
+            setSubmitting(false);
+            return;
+          }
+          setToastMessage('訂單已成功更新！');
+          setShowConfirm(false);
           setIsEditMode(false);
-        } else {
-          alert(data.error || '更新訂單失敗');
-        }
-      } else {
-        // 建立新訂單
-        const res = await fetch('/api/orders/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            formToken: token,
-            orderData: order.order_data,
-            customerName: customerName.trim(),
-            customerPhone: customerPhone.trim(),
-            source,
-          }),
-        });
-
-        const data = await res.json();
-        if (res.ok) {
-          // 跳轉到訂單確認頁面
-          const successUrl = source ? `/order/success/${data.orderToken}?source=${encodeURIComponent(source)}` : `/order/success/${data.orderToken}`;
+          setOrder((prev) => ({ ...prev, order_token: nextOrderToken }));
+          fetchOrderCount();
+          const params = new URLSearchParams();
+          if (source) {
+            params.set('source', source);
+          }
+          params.set('updated', 'true');
+          const successUrl = params.toString()
+            ? `/order/success/${nextOrderToken}?${params.toString()}`
+            : `/order/success/${nextOrderToken}`;
           router.push(successUrl);
         } else {
-          // 檢查是否是因為額滿而失敗
-          if (data.error && data.error.includes('額滿')) {
-            setIsOrderFull(true);
-            // 重新檢查訂單數量
-            if (form?.order_limit && form.order_limit > 0) {
-              await checkOrderCount();
-            }
+          if (!createdOrderToken) {
+            alert('送出訂單成功，但未取得訂單代碼，請聯絡客服。');
+            setShowConfirm(false);
+            setIsEditMode(false);
+            fetchOrderCount();
+            setSubmitting(false);
+            return;
           }
-          alert(data.error || '送出訂單失敗');
+          const params = new URLSearchParams();
+          if (source) {
+            params.set('source', source);
+          }
+          const successUrl = params.toString()
+            ? `/order/success/${createdOrderToken}?${params.toString()}`
+            : `/order/success/${createdOrderToken}`;
+          setOrder({ ...order, order_token: createdOrderToken });
+          setToastMessage('訂單已成功送出！');
+          fetchOrderCount();
+          setShowConfirm(false);
+          setIsEditMode(false);
+          router.push(successUrl);
+        }
+      } else {
+        if (data.error === 'ORDER_LIMIT_REACHED') {
+          setIsOrderFull(true);
+          setOrderCount(data.currentCount || 0);
+          setShowConfirm(false);
+        } else if (data.error === 'RESERVATION_EXPIRED') {
+          alert('您的預約已過期，請重新下單');
+          setShowConfirm(false);
+          setOrderNumber(null);
+          setTimeRemaining(0);
+        } else {
+          alert(data.error || '送出訂單失敗，請稍後再試');
         }
       }
     } catch (error) {
@@ -690,46 +1013,13 @@ export default function CustomerForm() {
     }
   };
 
-  const showToast = (message: string) => {
-    if (!message) return;
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToastMessage(message);
-    toastTimeoutRef.current = setTimeout(() => {
-      setToastMessage(null);
-      toastTimeoutRef.current = null;
-    }, 3000);
-  };
-
-  const namePlaceholder = useMemo(() => {
-    if (source === 'facebook') {
-      return '請正確輸入您 Facebook 的名稱或暱稱，避免無法通知你取貨';
-    }
-    if (source === 'line') {
-      return '請正確輸入您 LINE 的名稱或暱稱，避免無法通知你取貨';
-    }
-    return '請正確輸入您的姓名，避免無法通知你取貨';
-  }, [source]);
-
-  const phonePlaceholder = '請正確輸入您的聯繫方式避免無法通知您取貨';
-
-  const handleNameFocus = () => {
-    if (source === 'facebook') {
-      showToast('請正確輸入臉書名稱（暱稱），避免取貨通知發送不到。');
-    } else if (source === 'line') {
-      showToast('請正確輸入 LINE 群組內名稱（暱稱），避免取貨通知發送不到。');
-    }
-  };
-
-  const handlePhoneFocus = () => {
-    showToast('請正確輸入您的聯繫方式避免無法通知您取貨');
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">載入中...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">載入中...</p>
+        </div>
       </div>
     );
   }
@@ -770,13 +1060,15 @@ export default function CustomerForm() {
     );
   }
 
-  // 檢查訂單是否已額滿
-  if (isOrderFull && form && form.order_limit && form.order_limit > 0) {
+  if (isOrderFull) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center bg-white rounded-lg shadow p-8 max-w-md">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">本訂單已達{form.order_limit}單</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">
+            訂單已滿
+          </h1>
           <p className="text-gray-600 mb-2">
+            目前訂單數量已達上限（{form.order_limit} 單），
             無法再下單
           </p>
           <p className="text-sm text-gray-500">
@@ -788,8 +1080,9 @@ export default function CustomerForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-6 sm:py-10">
       <Head>
+        <title>{form.name} - 涼涼古早味創意冰品-團購</title>
         <style>{`
           @keyframes fadeInDown {
             from {
@@ -814,91 +1107,152 @@ export default function CustomerForm() {
           </div>
         </div>
       )}
-      <div className="container mx-auto px-2 sm:px-4 max-w-4xl">
-        <div className="bg-white rounded-lg shadow p-4 sm:p-6 lg:p-8">
-          <div className="mb-4 sm:mb-6 text-center">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">涼涼冰品團購</h1>
-            <p className="text-sm sm:text-base text-gray-600 mb-2">吼哩涼涼ㄟ妹!</p>
-            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mt-4 mb-2">
-              [{form.name}]
-            </p>
-          </div>
-          <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-            結單及停止下單時間：{new Date(form.deadline).toLocaleString('zh-TW', { 
-              year: 'numeric', 
-              month: '2-digit', 
-              day: '2-digit', 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: false 
-            })}
+      <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
+        {/* 主卡片 */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+          {/* 頂部裝飾條 */}
+          <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+          
+          <div className="p-6 sm:p-8 lg:p-10">
+            {/* 標題區域 */}
+            <div className="mb-8 text-center">
+              <div className="inline-block mb-4">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3">
+                  涼涼古早味創意冰品-團購
+                </h1>
+                <div className="h-1 w-24 mx-auto bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+              </div>
+              <p className="text-base sm:text-lg text-indigo-600 font-medium mb-4">咻揪來涼涼ㄚ妹!</p>
+              <div className="inline-block px-6 py-3 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full border-2 border-indigo-200">
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">
+                  {form.name}
+                </p>
+              </div>
+            </div>
+
+            {/* 時間資訊卡片 */}
+            <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm">
+              {/* 倒數計時器 */}
+              {countdown !== null && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <span className="text-base sm:text-lg font-semibold text-gray-700">剩餘</span>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      {countdown.days > 0 && (
+                        <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                          <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
+                            {countdown.days}
+                          </span>
+                          <span className="text-xs text-gray-600 font-medium">天</span>
+                        </div>
+                      )}
+                      <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
+                          {String(countdown.hours).padStart(2, '0')}
+                        </span>
+                        <span className="text-xs text-gray-600 font-medium">時</span>
+                      </div>
+                      <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
+                          {String(countdown.minutes).padStart(2, '0')}
+                        </span>
+                        <span className="text-xs text-gray-600 font-medium">分</span>
+                      </div>
+                      <div className="flex flex-col items-center px-3 py-2 bg-white rounded-lg border-2 border-orange-300 shadow-sm min-w-[60px]">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-orange-600">
+                          {String(countdown.seconds).padStart(2, '0')}
+                        </span>
+                        <span className="text-xs text-gray-600 font-medium">秒</span>
+                      </div>
+                    </div>
+                    <span className="text-base sm:text-lg font-semibold text-gray-700">可下單</span>
+                  </div>
+                </div>
+              )}
             {form.order_limit && form.order_limit > 0 && (
-              <>
-                <br />
-                <span className="text-xs text-gray-500">
-                  訂單限額：{form.order_limit} 單
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <span className="text-sm text-gray-700 font-medium">
+                      訂單限額：<span className="font-bold text-indigo-700">{form.order_limit}</span> 單
                   {orderCount > 0 && (
-                    <span className="ml-2">
-                      （目前已達 {orderCount} 單）
+                        <span className="ml-2 text-gray-600">
+                          （目前已達 <span className="font-bold text-orange-600">{orderCount}</span> 單）
                     </span>
                   )}
                 </span>
+                  </div>
                 {orderNumber && !order.order_token && (
-                  <>
-                    <br />
-                    <div className="flex items-center justify-between gap-2 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
-                      <span className="text-sm text-blue-700 font-semibold">
-                        你搶到第 {orderNumber} 張單，請於5分鐘內送出表單
+                    <div className="mt-3 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border-2 border-orange-200">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-orange-800 font-bold">
+                          🎉 你搶到第 {orderNumber} 張單，請於5分鐘內送出表單
                       </span>
                       {timeRemaining > 0 && (
-                        <span className="text-sm text-orange-600 font-bold whitespace-nowrap">
-                          剩餘 {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                          <span className="text-base text-orange-600 font-extrabold whitespace-nowrap bg-white px-3 py-1 rounded-lg border-2 border-orange-300">
+                            ⏰ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
                         </span>
                       )}
                     </div>
-                  </>
+                    </div>
                 )}
-              </>
+                </div>
             )}
             {form.pickup_time && (
-              <>
-                <br />
-                <span className="text-xs text-green-600 font-semibold">
-                  📦 取貨時間：{form.pickup_time}
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="text-sm text-green-700 font-semibold">
+                      取貨時間：{form.pickup_time}
                 </span>
-              </>
-            )}
-            <br />
-            <span className="text-xs text-gray-500">在結單時間之前，您可以填寫和修改訂單</span>
-          </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
           {/* 客戶端資訊顯示 */}
           {(deviceType || clientIp || order.order_token || orderNumber) && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm">
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs sm:text-sm">
+                <div className="flex flex-wrap items-center gap-4">
                   {orderNumber && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-600">訂單排序：</span>
-                      <span className="font-bold text-blue-600">第 {orderNumber} 張</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 rounded-lg">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                      <span className="text-gray-700 font-medium">訂單排序：</span>
+                      <span className="font-bold text-blue-700">第 {orderNumber} 張</span>
                     </div>
                   )}
                   {order.order_token && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-600">訂單編號：</span>
-                      <span className="font-mono font-medium text-gray-800">{order.order_token}</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-100 rounded-lg">
+                      <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2m-7 4h.01M9 16h.01" />
+                      </svg>
+                      <span className="text-gray-700 font-medium">訂單編號：</span>
+                      <span className="font-mono font-semibold text-indigo-800">{order.order_token}</span>
                     </div>
                   )}
                   {deviceType && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-600">您的設備類型：</span>
-                      <span className="font-medium text-gray-800">{deviceType}</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 rounded-lg">
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-gray-700 font-medium">設備：</span>
+                      <span className="font-semibold text-purple-800">{deviceType}</span>
                     </div>
                   )}
                   {clientIp && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-600">您的IP地址：</span>
-                      <span className="font-mono font-medium text-gray-800">{clientIp}</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg">
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                      </svg>
+                      <span className="text-gray-700 font-medium">IP：</span>
+                      <span className="font-mono font-semibold text-gray-800">{clientIp}</span>
                     </div>
                   )}
                 </div>
@@ -907,345 +1261,154 @@ export default function CustomerForm() {
           )}
 
           {isEditMode && (
-            <div className="mb-6 p-4 bg-green-50 rounded-lg">
-              <p className="text-sm text-green-800">
-                您正在編輯訂單（訂單代碼：{order.order_token}）
-              </p>
+            <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border-2 border-green-200 shadow-sm">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <p className="text-sm font-semibold text-green-800">
+                  您正在編輯訂單（訂單代碼：<span className="font-mono">{order.order_token}</span>）
+                </p>
+              </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
             {/* 試算表風格的表單 */}
             <div className="mb-6 overflow-x-auto -mx-2 sm:mx-0">
-              <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+              <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden shadow-lg">
                 <table className="w-full min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
-                        欄位
-                      </th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
-                        內容
-                      </th>
-                    </tr>
-                  </thead>
                   <tbody className="divide-y divide-gray-200">
                     {/* 姓名欄位 */}
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
-                        姓名
-                        <span className="text-red-500 text-xs ml-1">*</span>
+                    <tr className="hover:bg-blue-50 transition-colors">
+                      <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span>姓名</span>
+                          <span className="text-red-500 text-sm font-semibold">(必填)</span>
+                        </div>
                       </td>
-                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <td className="px-4 sm:px-6 py-5">
                         <input
                           type="text"
                           value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
+                          onChange={(e) => {
+                            setCustomerName(e.target.value);
+                            if (nameError) {
+                              setNameError('');
+                            }
+                          }}
                           onFocus={handleNameFocus}
-                          className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
+                          onBlur={() => {
+                            if (customerName.trim()) {
+                              validateName(customerName);
+                            }
+                          }}
+                          className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-base sm:text-lg shadow-sm"
                           placeholder={namePlaceholder}
                           required
+                          ref={(el) => setFieldRef('customerName', el)}
                         />
+                        {nameError && (
+                          <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {nameError}
+                          </p>
+                        )}
                       </td>
                     </tr>
                     
                     {/* 電話欄位 */}
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
-                        電話
-                        <span className="text-red-500 text-xs ml-1">*</span>
+                    <tr className="hover:bg-blue-50 transition-colors">
+                      <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <span>電話</span>
+                          <span className="text-red-500 text-sm font-semibold">(必填)</span>
+                        </div>
                       </td>
-                      <td className="px-2 sm:px-4 py-2 sm:py-3">
-                        <input
-                          type="tel"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          onFocus={handlePhoneFocus}
-                          className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
-                          placeholder={phonePlaceholder}
-                          required
-                        />
+                      <td className="px-4 sm:px-6 py-5">
+                        <div>
+                          <input
+                            type="tel"
+                            value={customerPhone}
+                            onChange={(e) => {
+                              setCustomerPhone(e.target.value);
+                              // 清除錯誤訊息當用戶開始輸入時
+                              if (phoneError) {
+                                setPhoneError('');
+                              }
+                            }}
+                            onBlur={() => {
+                              // 當失去焦點時驗證
+                              if (customerPhone.trim()) {
+                                validatePhone(customerPhone);
+                              }
+                            }}
+                            onFocus={handlePhoneFocus}
+                            className={`w-full px-4 py-3.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all text-base sm:text-lg shadow-sm ${
+                              phoneError 
+                                ? 'border-red-500 focus:border-red-500' 
+                                : 'border-gray-300 focus:border-blue-500'
+                            }`}
+                            placeholder={phonePlaceholder}
+                            required
+                          ref={(el) => setFieldRef('customerPhone', el)}
+                          />
+                          {phoneError && (
+                            <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {phoneError}
+                            </p>
+                          )}
+                        </div>
                       </td>
                     </tr>
 
                     {/* 動態欄位 */}
                     {form.fields.map((field) => (
-                      <tr key={field.name} className="hover:bg-gray-50">
-                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50">
-                          {field.label}
+                      <tr key={field.name} className="hover:bg-indigo-50 transition-colors">
+                        <td className="px-4 sm:px-6 py-5 text-lg sm:text-xl font-bold text-gray-800 bg-gradient-to-r from-indigo-50 to-purple-50">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            <span>{field.label}</span>
                           {field.price !== undefined && field.price !== null && (
-                            <span className="text-blue-600 font-semibold ml-1 text-xs sm:text-sm">
-                              ({field.price}元)
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
+                              {field.price}
                             </span>
                           )}
                           {field.required && (
-                            <span className="text-red-500 ml-1">*</span>
+                            <span className="text-red-500 text-sm font-semibold">(必填)</span>
                           )}
+                          </div>
                         </td>
-                        <td className="px-2 sm:px-4 py-2 sm:py-3">
-                          {field.type === 'costco' && (() => {
-                            // 將數據轉換為數組格式（如果還沒有）
-                            const items = Array.isArray(order.order_data[field.name])
-                              ? order.order_data[field.name]
-                              : order.order_data[field.name]
-                                ? [{ name: String(order.order_data[field.name]), quantity: '' }]
-                                : [{ name: '', quantity: '' }];
-
-                            const updateItems = (newItems: Array<{ name: string; quantity: string }>) => {
-                              handleFieldChange(field.name, newItems);
-                            };
-
-                            const addItem = () => {
-                              updateItems([...items, { name: '', quantity: '' }]);
-                            };
-
-                            const removeItem = (index: number) => {
-                              if (items.length > 1) {
-                                updateItems(items.filter((_: any, i: number) => i !== index));
-                              }
-                            };
-
-                            const updateItem = (index: number, field: 'name' | 'quantity', value: string) => {
-                              const newItems = [...items];
-                              newItems[index] = { ...newItems[index], [field]: value };
-                              updateItems(newItems);
-                            };
-
-                            return (
-                              <div className="space-y-3">
-                                {items.map((item: any, index: number) => (
-                                  <div key={index} className="flex gap-2 items-start">
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
-                                      <input
-                                        type="text"
-                                        value={item.name}
-                                        onChange={(e) => updateItem(index, 'name', e.target.value)}
-                                        className="px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
-                                        placeholder="物品名稱"
-                                        required={field.required && index === 0}
-                                      />
-                                      <div className="flex items-center border border-gray-300 rounded overflow-hidden">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentQty = parseInt(item.quantity || '0', 10) || 0;
-                                            if (currentQty > 0) {
-                                              updateItem(index, 'quantity', String(currentQty - 1));
-                                            }
-                                          }}
-                                          disabled={!item.quantity || parseInt(item.quantity || '0', 10) <= 0}
-                                          className="px-2 sm:px-3 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-base sm:text-lg font-bold text-gray-700 min-w-[36px] sm:min-w-[40px] touch-manipulation"
-                                          aria-label="減少數量"
-                                        >
-                                          −
-                                        </button>
-                                        <input
-                                          type="number"
-                                          value={item.quantity}
-                                          onChange={(e) => {
-                                            const value = e.target.value;
-                                            // 只接受整數
-                                            if (value === '' || (parseInt(value, 10) > 0 && !value.includes('.'))) {
-                                              updateItem(index, 'quantity', value);
-                                            } else if (value.includes('.')) {
-                                              alert('數量只能輸入整數');
-                                            }
-                                          }}
-                                          onKeyDown={(e) => {
-                                            if (e.key === '.' || e.key === ',') {
-                                              e.preventDefault();
-                                              alert('數量只能輸入整數');
-                                            }
-                                          }}
-                                          className="w-12 sm:w-16 px-1 sm:px-2 py-2 text-center border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs sm:text-sm font-medium"
-                                          placeholder="0"
-                                          min="0"
-                                          step="1"
-                                          required={field.required && index === 0}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentQty = parseInt(item.quantity || '0', 10) || 0;
-                                            updateItem(index, 'quantity', String(currentQty + 1));
-                                          }}
-                                          className="px-2 sm:px-3 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors text-base sm:text-lg font-bold text-gray-700 min-w-[36px] sm:min-w-[40px] touch-manipulation"
-                                          aria-label="增加數量"
-                                        >
-                                          +
-                                        </button>
-                                      </div>
-                                    </div>
-                                    {items.length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => removeItem(index)}
-                                        className="px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors text-sm font-medium"
-                                        title="刪除此項目"
-                                      >
-                                        ✕
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                                <button
-                                  type="button"
-                                  onClick={addItem}
-                                  className="w-full px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
-                                >
-                                  + 新增項目
-                                </button>
-                              </div>
-                            );
-                          })()}
-                          {field.type === 'text' && (
-                            <input
-                              type="text"
-                              value={order.order_data[field.name] || ''}
-                              onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                              className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm"
-                              placeholder={`請輸入${field.label}`}
-                              required={field.required}
-                            />
-                          )}
-                          {field.type === 'number' && (() => {
-                            const currentValue = parseInt(String(order.order_data[field.name] || 0), 10) || 0;
-                            
-                            const handleDecrease = () => {
-                              if (currentValue > 0) {
-                                const newValue = currentValue - 1;
-                                previousValues.current[field.name] = String(newValue);
-                                handleFieldChange(field.name, newValue);
-                              }
-                            };
-                            
-                            const handleIncrease = () => {
-                              const newValue = currentValue + 1;
-                              previousValues.current[field.name] = String(newValue);
-                              handleFieldChange(field.name, newValue);
-                            };
-                            
-                            const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-                              const value = e.target.value;
-                              const fieldName = field.name;
-                              
-                              // 允許空值
-                              if (value === '') {
-                                previousValues.current[fieldName] = '';
-                                handleFieldChange(fieldName, '');
-                                return;
-                              }
-                              
-                              // 檢查是否包含小數點或逗號
-                              if (value.includes('.') || value.includes(',')) {
-                                alert('只能輸入整數，請勿輸入小數點');
-                                // 恢復到前一個有效值
-                                const prevValue = previousValues.current[fieldName] || '';
-                                if (prevValue === '') {
-                                  handleFieldChange(fieldName, '');
-                                } else {
-                                  const prevInt = parseInt(prevValue, 10);
-                                  if (!isNaN(prevInt) && prevInt >= 0) {
-                                    handleFieldChange(fieldName, prevInt);
-                                  } else {
-                                    handleFieldChange(fieldName, '');
-                                  }
-                                }
-                                return;
-                              }
-                              
-                              // 檢查是否為有效的整數
-                              const intValue = parseInt(value, 10);
-                              if (!isNaN(intValue) && intValue >= 0) {
-                                // 保存當前有效值
-                                previousValues.current[fieldName] = String(intValue);
-                                handleFieldChange(fieldName, intValue);
-                              } else if (value === '-') {
-                                // 允許輸入負號（但最終會被拒絕，因為 min="0"）
-                                previousValues.current[fieldName] = '';
-                                handleFieldChange(fieldName, '');
-                              } else {
-                                // 如果不是有效數字，拒絕輸入並恢復
-                                alert('只能輸入大於等於 0 的整數');
-                                const prevValue = previousValues.current[fieldName] || '';
-                                if (prevValue === '') {
-                                  handleFieldChange(fieldName, '');
-                                } else {
-                                  const prevInt = parseInt(prevValue, 10);
-                                  if (!isNaN(prevInt) && prevInt >= 0) {
-                                    handleFieldChange(fieldName, prevInt);
-                                  } else {
-                                    handleFieldChange(fieldName, '');
-                                  }
-                                }
-                              }
-                            };
-                            
-                            return (
-                              <div className="flex items-center gap-2">
-                                {/* 數量選擇器：- 按鈕 + 輸入框 + + 按鈕 */}
-                                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                                  <button
-                                    type="button"
-                                    onClick={handleDecrease}
-                                    disabled={currentValue <= 0}
-                                    className="px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-lg sm:text-xl font-bold text-gray-700 min-w-[40px] sm:min-w-[44px] touch-manipulation"
-                                    aria-label="減少數量"
-                                  >
-                                    −
-                                  </button>
-                                  <input
-                                    type="number"
-                                    value={currentValue || ''}
-                                    onChange={handleInputChange}
-                                    onKeyDown={(e) => {
-                                      // 阻止輸入小數點
-                                      if (e.key === '.' || e.key === ',') {
-                                        e.preventDefault();
-                                        alert('只能輸入整數，請勿輸入小數點');
-                                      }
-                                    }}
-                                    className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs sm:text-sm font-medium"
-                                    required={field.required}
-                                    min="0"
-                                    step="1"
-                                    placeholder="0"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={handleIncrease}
-                                    className="px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors text-lg sm:text-xl font-bold text-gray-700 min-w-[40px] sm:min-w-[44px] touch-manipulation"
-                                    aria-label="增加數量"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                                {field.price !== undefined && field.price !== null && field.price > 0 && (
-                                  <div className="text-xs sm:text-sm text-gray-600 min-w-[60px] sm:min-w-[80px] text-right">
-                                    {(() => {
-                                      const quantity = currentValue;
-                                      const itemTotal = quantity * field.price;
-                                      return itemTotal > 0 ? (
-                                        <span className="text-green-600 font-semibold">
-                                          = {itemTotal.toFixed(0)}元
-                                        </span>
-                                      ) : null;
-                                    })()}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                        <td className="px-4 sm:px-6 py-5">
+                          {renderFieldInput(field)}
                         </td>
                       </tr>
                     ))}
                     {/* 總計價格行 */}
                     {form.fields.some(f => f.price !== undefined && f.price !== null && f.price > 0) && (
-                      <tr className="bg-green-50 border-t-2 border-green-200">
-                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-gray-800 bg-green-50" colSpan={2}>
+                      <tr className="bg-gradient-to-r from-green-50 to-emerald-50 border-t-4 border-green-400">
+                        <td className="px-4 sm:px-6 py-5 text-base sm:text-lg font-extrabold text-gray-800 bg-gradient-to-r from-green-50 to-emerald-50" colSpan={2}>
                           <div className="flex justify-between items-center">
-                            <span>總計價格：</span>
-                            <span className="text-green-600 text-base sm:text-lg font-bold">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-lg sm:text-xl">總計價格：</span>
+                            </div>
+                            <span className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
                               {calculateTotal().toFixed(0)} 元
                             </span>
                           </div>
@@ -1257,17 +1420,35 @@ export default function CustomerForm() {
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 mt-8">
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                className="flex-1 relative bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white px-8 py-4 rounded-full border-2 border-blue-500/30 shadow-[0_10px_25px_rgba(59,130,246,0.5),0_5px_10px_rgba(59,130,246,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 hover:shadow-[0_15px_35px_rgba(59,130,246,0.6),0_8px_15px_rgba(59,130,246,0.5),inset_0_1px_0_rgba(255,255,255,0.3)] hover:-translate-y-1 active:shadow-[0_5px_15px_rgba(59,130,246,0.4),inset_0_2px_4px_rgba(0,0,0,0.2)] active:translate-y-0 disabled:from-gray-400 disabled:via-gray-500 disabled:to-gray-600 disabled:border-gray-400/30 disabled:shadow-[0_2px_4px_rgba(0,0,0,0.1)] disabled:cursor-not-allowed disabled:translate-y-0 transition-all duration-300 transform font-bold text-lg flex items-center justify-center gap-2"
               >
-                {submitting
-                  ? '處理中...'
-                  : isEditMode
-                  ? '更新訂單'
-                  : '送出訂單'}
+                {submitting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="drop-shadow-md">處理中...</span>
+                  </>
+                ) : isEditMode ? (
+                  <>
+                    <svg className="w-5 h-5 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="drop-shadow-md">更新訂單</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="drop-shadow-md">送出訂單</span>
+                  </>
+                )}
               </button>
               {isEditMode && (
                 <button
@@ -1278,9 +1459,9 @@ export default function CustomerForm() {
                     setCustomerName('');
                     setCustomerPhone('');
                   }}
-                  className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-colors"
+                  className="relative bg-gradient-to-r from-gray-300 via-gray-300 to-gray-400 text-gray-700 px-6 py-4 rounded-full border-2 border-gray-300/30 shadow-[0_6px_15px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.3)] hover:from-gray-400 hover:via-gray-400 hover:to-gray-500 hover:shadow-[0_10px_25px_rgba(0,0,0,0.3),0_5px_10px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.4)] hover:-translate-y-1 active:shadow-[0_3px_8px_rgba(0,0,0,0.15),inset_0_2px_4px_rgba(0,0,0,0.15)] active:translate-y-0 transition-all duration-300 transform font-semibold"
                 >
-                  取消編輯
+                  <span className="drop-shadow-md">取消編輯</span>
                 </button>
               )}
             </div>
@@ -1288,20 +1469,39 @@ export default function CustomerForm() {
 
           {/* 確認畫面 */}
           {showConfirm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="p-6">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">確認訂單資訊</h2>
-                  <p className="text-sm text-gray-600 mb-6">請確認以下訂單資訊是否正確：</p>
+            <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200">
+                {/* 頂部裝飾條 */}
+                <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+                <div className="p-6 sm:p-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">確認訂單資訊</h2>
+                  </div>
+                  <p className="text-sm sm:text-base text-gray-600 mb-6 pl-11">請確認以下訂單資訊是否正確：</p>
                   
                   <div className="space-y-4 mb-6">
-                    <div className="border-b border-gray-200 pb-3">
-                      <div className="text-sm font-medium text-gray-700 mb-1">姓名</div>
-                      <div className="text-base text-gray-900">{customerName}</div>
+                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <div className="text-sm font-semibold text-gray-700">姓名</div>
                     </div>
-                    <div className="border-b border-gray-200 pb-3">
-                      <div className="text-sm font-medium text-gray-700 mb-1">電話</div>
-                      <div className="text-base text-gray-900">{customerPhone}</div>
+                      <div className="text-lg font-bold text-gray-900">{customerName}</div>
+                    </div>
+                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <div className="text-sm font-semibold text-gray-700">電話</div>
+                      </div>
+                      <div className="text-lg font-bold text-gray-900">{customerPhone}</div>
                     </div>
                     {form && form.fields.map((field) => {
                       const value = order.order_data[field.name];
@@ -1310,11 +1510,16 @@ export default function CustomerForm() {
                       // 處理好事多代購類型（數組格式）
                       if (field.type === 'costco' && Array.isArray(value)) {
                         return (
-                          <div key={field.name} className="border-b border-gray-200 pb-3">
-                            <div className="text-sm font-medium text-gray-700 mb-2">{field.label}</div>
+                          <div key={field.name} className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              </svg>
+                              <div className="text-base sm:text-lg font-bold text-gray-800">{field.label}</div>
+                            </div>
                             <div className="space-y-2">
-                              {value.map((item: any, idx: number) => (
-                                <div key={idx} className="text-base text-gray-900 bg-gray-50 p-2 rounded">
+                              {value.map((item: { name: string; quantity: string }, idx: number) => (
+                                <div key={idx} className="text-base text-gray-900 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
                                   {item.name} {item.quantity ? `× ${item.quantity}` : ''}
                                 </div>
                               ))}
@@ -1330,28 +1535,33 @@ export default function CustomerForm() {
                         : 0;
                       
                       return (
-                        <div key={field.name} className="border-b border-gray-200 pb-3">
+                          <div key={field.name} className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <div className="text-sm font-medium text-gray-700 mb-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                                <div className="text-base sm:text-lg font-bold text-gray-800">
                                 {field.label}
                                 {field.price !== undefined && field.price !== null && field.price > 0 && (
-                                  <span className="text-blue-600 font-semibold ml-1">
-                                    ({field.price}元/單位)
+                                  <span className="inline-flex items-center px-2 py-0.5 ml-2 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+                                    {field.price}/單位
                                   </span>
                                 )}
                               </div>
-                              <div className="text-base text-gray-900">
+                              </div>
+                              <div className="text-lg font-semibold text-gray-900">
                                 {String(value)}
                                 {field.type === 'number' && quantity > 0 && (
-                                  <span className="text-gray-500 ml-1">單位</span>
+                                  <span className="text-gray-500 ml-1 text-sm">單位</span>
                                 )}
                               </div>
                             </div>
                             {itemTotal > 0 && (
-                              <div className="text-right ml-4">
-                                <div className="text-sm text-gray-600">小計</div>
-                                <div className="text-lg font-bold text-green-600">
+                              <div className="text-right ml-4 p-3 bg-white rounded-lg border-2 border-green-200 shadow-sm">
+                                <div className="text-xs text-gray-600 mb-1">小計</div>
+                                <div className="text-xl font-extrabold text-green-600">
                                   {itemTotal.toFixed(0)} 元
                                 </div>
                               </div>
@@ -1367,10 +1577,15 @@ export default function CustomerForm() {
                       const quantity = f.type === 'number' ? (parseInt(String(value), 10) || 0) : 0;
                       return f.price && f.price > 0 && quantity > 0;
                     }) && (
-                      <div className="border-t-2 border-green-200 pt-4 mt-4 bg-green-50 rounded-lg p-4">
+                      <div className="border-t-4 border-green-400 pt-6 mt-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 shadow-lg">
                         <div className="flex justify-between items-center">
-                          <div className="text-lg font-bold text-gray-800">總計價格：</div>
-                          <div className="text-2xl font-bold text-green-600">
+                          <div className="flex items-center gap-3">
+                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div className="text-xl sm:text-2xl font-extrabold text-gray-800">總計價格：</div>
+                          </div>
+                          <div className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
                             {calculateTotal().toFixed(0)} 元
                           </div>
                         </div>
@@ -1378,19 +1593,34 @@ export default function CustomerForm() {
                     )}
                   </div>
 
-                  <div className="flex gap-3 justify-end">
+                  <div className="flex gap-4 justify-end mt-8">
                     <button
                       onClick={() => setShowConfirm(false)}
-                      className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                      className="relative px-6 py-3 bg-gradient-to-r from-gray-300 via-gray-300 to-gray-400 text-gray-700 rounded-full border-2 border-gray-300/30 shadow-[0_6px_15px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.3)] hover:from-gray-400 hover:via-gray-400 hover:to-gray-500 hover:shadow-[0_10px_25px_rgba(0,0,0,0.3),0_5px_10px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.4)] hover:-translate-y-1 active:shadow-[0_3px_8px_rgba(0,0,0,0.15),inset_0_2px_4px_rgba(0,0,0,0.15)] active:translate-y-0 transition-all duration-300 transform font-semibold"
                     >
-                      返回修改
+                      <span className="drop-shadow-md">返回修改</span>
                     </button>
                     <button
                       onClick={handleConfirmSubmit}
                       disabled={submitting}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      className="relative w-1/2 max-w-xs px-8 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white rounded-full border-2 border-blue-500/30 shadow-[0_10px_25px_rgba(59,130,246,0.5),0_5px_10px_rgba(59,130,246,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 hover:shadow-[0_15px_35px_rgba(59,130,246,0.6),0_8px_15px_rgba(59,130,246,0.5),inset_0_1px_0_rgba(255,255,255,0.3)] hover:-translate-y-1 active:shadow-[0_5px_15px_rgba(59,130,246,0.4),inset_0_2px_4px_rgba(0,0,0,0.2)] active:translate-y-0 disabled:from-gray-400 disabled:via-gray-500 disabled:to-gray-600 disabled:border-gray-400/30 disabled:shadow-[0_2px_4px_rgba(0,0,0,0.1)] disabled:cursor-not-allowed disabled:translate-y-0 transition-all duration-300 transform font-bold flex items-center justify-center gap-2"
                     >
-                      {submitting ? '送出中...' : '確認送出'}
+                      {submitting ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span className="drop-shadow-md">送出中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="drop-shadow-md">確認送出</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1408,9 +1638,9 @@ export default function CustomerForm() {
               </p>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

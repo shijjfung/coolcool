@@ -1145,65 +1145,65 @@ export default function AdminDashboard() {
         </div>
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
-        {/* 即時訂單通知區域 */}
-        {realtimeNotifications.length > 0 && (
+            {/* 即時訂單通知區域 */}
+      {realtimeNotifications.length > 0 && (
           <div className="mb-4">
             <div className="p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                   🔔 入單即時訊息
-                </h3>
-                <button
-                  onClick={() => setRealtimeNotifications([])}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  清除全部
-                </button>
-              </div>
-              <div className="space-y-1">
-                {realtimeNotifications.map((notification) => {
-                  const sourceIcon = notification.source === 'facebook' ? '📘' : 
-                                    notification.source === 'line' ? '💬' : '🌐';
-                  const sourceText = notification.source === 'facebook' ? '臉書' : 
-                                   notification.source === 'line' ? 'LINE' : '網頁';
-                  const timeAgo = Math.floor((Date.now() - notification.timestamp.getTime()) / 1000);
-                  const timeText = timeAgo < 60 ? `${timeAgo}秒前` : 
-                                 timeAgo < 3600 ? `${Math.floor(timeAgo / 60)}分鐘前` : 
-                                 `${Math.floor(timeAgo / 3600)}小時前`;
-                  
-                  return (
-                    <div
-                      key={notification.id}
-                      className="text-xs text-gray-700 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-base">{sourceIcon}</span>
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium text-purple-600">{notification.formName}</span>
-                          <span className="mx-1">·</span>
-                          <span className="font-medium">{notification.customerName}</span>
-                          {notification.productName && (
-                            <>
-                              <span className="mx-1">·</span>
-                              <span className="text-gray-600">{notification.productName}</span>
-                            </>
-                          )}
-                          <span className="mx-1">·</span>
-                          <span className="text-blue-600">數量 {notification.quantity}</span>
-                          <span className="mx-1 text-gray-400">·</span>
-                          <span className="text-gray-500">{sourceText}</span>
-                          <span className="mx-1 text-gray-400">·</span>
-                          <span className="text-gray-400">{timeText}</span>
-                        </div>
+                  </h3>
+                  <button
+                    onClick={() => setRealtimeNotifications([])}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    清除全部
+                  </button>
+                </div>
+            <div className="space-y-1">
+              {realtimeNotifications.map((notification) => {
+                const sourceIcon = notification.source === 'facebook' ? '📘' : 
+                                  notification.source === 'line' ? '💬' : '🌐';
+                const sourceText = notification.source === 'facebook' ? '臉書' : 
+                                 notification.source === 'line' ? 'LINE' : '網頁';
+                const timeAgo = Math.floor((Date.now() - notification.timestamp.getTime()) / 1000);
+                const timeText = timeAgo < 60 ? `${timeAgo}秒前` : 
+                               timeAgo < 3600 ? `${Math.floor(timeAgo / 60)}分鐘前` : 
+                               `${Math.floor(timeAgo / 3600)}小時前`;
+                
+                return (
+                  <div
+                    key={notification.id}
+                    className="text-xs text-gray-700 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-base">{sourceIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-purple-600">{notification.formName}</span>
+                        <span className="mx-1">·</span>
+                        <span className="font-medium">{notification.customerName}</span>
+                        {notification.productName && (
+                          <>
+                            <span className="mx-1">·</span>
+                            <span className="text-gray-600">{notification.productName}</span>
+                          </>
+                        )}
+                        <span className="mx-1">·</span>
+                        <span className="text-blue-600">數量 {notification.quantity}</span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span className="text-gray-500">{sourceText}</span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span className="text-gray-400">{timeText}</span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+          </div>
         )}
-        <div className="mb-6 sm:mb-8">
+        <div id="form-management" className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center sm:text-left">表單管理</h1>

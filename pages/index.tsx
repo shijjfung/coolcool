@@ -31,7 +31,7 @@ export default function Home() {
       }
       setIsAuthenticated(true);
       // 導向管理頁面
-      router.push('/admin');
+      router.push('/admin/portal');
     } else {
       setError('密碼錯誤，請重新輸入');
       setPassword('');
@@ -44,7 +44,7 @@ export default function Home() {
       setError('請先輸入正確的密碼');
       return;
     }
-    router.push('/admin');
+    router.push('/admin/portal');
   };
 
   return (
