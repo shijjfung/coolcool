@@ -763,7 +763,7 @@ export default function PickupVerifyPage() {
                           handleScanSuccess(payload);
                         }
                       }
-                      if (error && error.name !== 'NotFoundException') {
+                      if (error && (error as { name?: string }).name !== 'NotFoundException') {
                         setScannerError('掃描失敗，請確認鏡頭是否被遮擋或重新對準。');
                       }
                     }}
