@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { useRouter } from 'next/router';
 
 interface FormField {
@@ -47,6 +47,8 @@ export default function CreateForm() {
   const [facebookPostTemplate, setFacebookPostTemplate] = useState('');
   const [facebookVendorContent, setFacebookVendorContent] = useState('');
   const [facebookPostImagesInput, setFacebookPostImagesInput] = useState('');
+  const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [facebookKeywords, setFacebookKeywords] = useState<string[]>(['+1', '+2', '+3', '加一', '加1']);
   const [facebookAutoMonitor, setFacebookAutoMonitor] = useState(false);
   const [facebookReplyMessage, setFacebookReplyMessage] = useState('已登記');
@@ -334,6 +336,49 @@ export default function CreateForm() {
       const needsSpace = !/\s$/.test(prev);
       return `${prev}${needsSpace ? ' ' : ''}${token}`;
     });
+  };
+
+  const handleSelectImagesClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFilesChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const selectedFiles = Array.from(files).slice(0, 10);
+    setImageUploadLoading(true);
+    const uploadedUrls: string[] = [];
+
+    for (const file of selectedFiles) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/facebook/upload-image', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.url) {
+          throw new Error(data?.error || '上傳失敗');
+        }
+        uploadedUrls.push(data.url);
+      } catch (error: any) {
+        alert(`圖片「${file.name}」上傳失敗：${error?.message || '未知錯誤'}`);
+      }
+    }
+
+    if (uploadedUrls.length > 0) {
+      setFacebookPostImagesInput((prev) => {
+        const prefix = prev.trim().length > 0 ? `${prev.trim()}\n` : '';
+        return `${prefix}${uploadedUrls.join('\n')}`;
+      });
+    }
+
+    setImageUploadLoading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1021,6 +1066,14 @@ export default function CreateForm() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     貼文圖片（每行一個 URL，可選）
                   </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={handleImageFilesChange}
+                  />
                   <textarea
                     value={facebookPostImagesInput}
                     onChange={(e) => setFacebookPostImagesInput(e.target.value)}
@@ -1028,8 +1081,21 @@ export default function CreateForm() {
                     rows={3}
                     placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
                   />
+                  <div className="flex flex-wrap items-center gap-3 mt-3">
+                    <button
+                      type="button"
+                      onClick={handleSelectImagesClick}
+                      disabled={imageUploadLoading}
+                      className="px-4 py-2 rounded-full bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:bg-purple-300 transition-colors"
+                    >
+                      {imageUploadLoading ? '上傳圖片中...' : '選擇圖片檔案'}
+                    </button>
+                    <p className="text-xs text-gray-500">
+                      一次最多 10 張，會自動上傳並產生可貼文的圖片連結。
+                    </p>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    📎 目前支援貼上圖片連結，之後會加入直接上傳圖片的功能。
+                    📎 也可以直接貼上外部圖片 URL；若使用上傳功能，系統會自動幫你生成連結。
                   </p>
                 </div>
 
