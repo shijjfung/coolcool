@@ -1,4 +1,4 @@
-import { ComponentType, CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { ComponentType, CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -75,6 +75,12 @@ export default function PickupVerifyPage() {
   const [scannerError, setScannerError] = useState('');
   const [scannerKey, setScannerKey] = useState(0);
   const scanProcessingRef = useRef(false);
+  const qrConstraints = useMemo<MediaTrackConstraints>(
+    () => ({
+      facingMode: { ideal: 'environment' },
+    }),
+    []
+  );
 
   const openScanner = useCallback(() => {
     if (!isAdmin) {
@@ -753,6 +759,7 @@ export default function PickupVerifyPage() {
                 {QrReader ? (
                   <QrReader
                     key={scannerKey}
+                    constraints={qrConstraints}
                     onResult={(result, error) => {
                       if (result) {
                         const payload =
@@ -763,8 +770,12 @@ export default function PickupVerifyPage() {
                           handleScanSuccess(payload);
                         }
                       }
-                      if (error && (error as { name?: string }).name !== 'NotFoundException') {
-                        setScannerError('掃描失敗，請確認鏡頭是否被遮擋或重新對準。');
+                      if (error) {
+                        const errorName = (error as { name?: string }).name;
+                        const benignErrors = ['NotFoundException', 'ChecksumException', 'FormatException'];
+                        if (!errorName || !benignErrors.includes(errorName)) {
+                          setScannerError('掃描失敗，請確認鏡頭是否被遮擋或重新對準。');
+                        }
                       }
                     }}
                     videoStyle={{ width: '100%' }}
