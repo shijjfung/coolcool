@@ -269,7 +269,12 @@ export async function fetchCommentsWithPuppeteer(
 
     // 等待留言區域載入
     console.log('[Puppeteer] 等待留言區域載入...');
-    await page.waitForTimeout(3000); // 等待 3 秒讓頁面完全載入
+    await page.waitForTimeout?.(3000);
+    if (typeof page.waitForTimeout !== 'function') {
+      await page.waitForFunction(
+        () => new Promise((resolve) => setTimeout(resolve, 3000))
+      );
+    }
 
     // 滾動頁面以載入更多留言
     console.log('[Puppeteer] 滾動頁面載入留言...');
@@ -316,7 +321,13 @@ async function autoScroll(page: Page): Promise<void> {
   });
 
   // 等待新內容載入
-  await page.waitForTimeout(2000);
+  if (typeof page.waitForTimeout === 'function') {
+    await page.waitForTimeout(2000);
+  } else {
+    await page.waitForFunction(
+      () => new Promise((resolve) => setTimeout(resolve, 2000))
+    );
+  }
 }
 
 /**
