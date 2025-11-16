@@ -436,7 +436,7 @@ export async function replyToCommentWithPuppeteer(
     console.log('[Puppeteer] 啟動瀏覽器以回覆留言...');
     
     browser = await puppeteerExtra.launch({
-      headless: headless ? 'new' : false,
+      headless: headless ? ('new' as any) : false,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
