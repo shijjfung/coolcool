@@ -1012,7 +1012,8 @@ export default function CreateForm() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    💡 系統會在發文時自動替換占位符（例如把 {{'{{formUrl}}'}} 改成實際表單網址）。
+                    💡 系統會在發文時自動替換占位符（例如把{' '}
+                    <span className="font-mono text-gray-600">{'{{formUrl}}'}</span> 改成實際表單網址）。
                   </p>
                 </div>
 
