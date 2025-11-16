@@ -4,20 +4,42 @@ import Head from 'next/head';
 
 const ADMIN_PASSWORD = '690921';
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+
 export default function Home() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installMessage, setInstallMessage] = useState('');
+  const [showInstallCTA, setShowInstallCTA] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
-  // 檢查是否已經驗證過
+  // 檢查是否已經驗證過 + 安裝捷徑提示
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const authStatus = sessionStorage.getItem('admin_authenticated');
-      if (authStatus === 'true') {
-        setIsAuthenticated(true);
-      }
+    if (typeof window === 'undefined') return;
+    const authStatus = sessionStorage.getItem('admin_authenticated');
+    if (authStatus === 'true') {
+      setIsAuthenticated(true);
     }
+
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      // @ts-ignore
+      window.navigator.standalone === true;
+    setIsStandalone(standalone);
+
+    const handler = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as BeforeInstallPromptEvent);
+      setShowInstallCTA(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler as EventListener);
+    return () => window.removeEventListener('beforeinstallprompt', handler as EventListener);
   }, []);
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -45,6 +67,37 @@ export default function Home() {
       return;
     }
     router.push('/admin/portal');
+  };
+
+  const handleInstallShortcut = async () => {
+    if (typeof window === 'undefined') return;
+    setInstallMessage('');
+
+    if (installPromptEvent) {
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+      if (choice.outcome === 'accepted') {
+        setInstallMessage('已建立「團購後台」捷徑，可到主畫面或桌面找到它。');
+        setInstallPromptEvent(null);
+        setShowInstallCTA(false);
+      } else {
+        setInstallMessage('已取消捷徑安裝，可隨時再試一次。');
+      }
+      return;
+    }
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    if (isIOS) {
+      setInstallMessage('請使用 Safari → 分享 → 加到主畫面，即可建立「團購後台」圖示。');
+      return;
+    }
+    const isAndroid = /android/.test(ua);
+    if (isAndroid) {
+      setInstallMessage('請在瀏覽器選單中選擇「安裝應用程式」或「加到主畫面」。');
+      return;
+    }
+    setInstallMessage('請於瀏覽器的功能選單中選擇「安裝應用程式 / 建立捷徑」，即可在桌面顯示團購後台。');
   };
 
   return (
@@ -90,6 +143,28 @@ export default function Home() {
             <p className="text-base sm:text-lg text-gray-600 mb-12">
               輕鬆建立表單，收集客戶訂單，自動生成報表
             </p>
+            {!isStandalone && (
+              <div className="flex flex-col items-center gap-3 mb-10">
+                <button
+                  type="button"
+                  onClick={handleInstallShortcut}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-purple-600 text-white font-semibold shadow-lg shadow-purple-300/60 hover:bg-purple-700 transition-colors"
+                >
+                  📱 添加團購後台捷徑
+                </button>
+                {installMessage ? (
+                  <p className="text-sm text-purple-800 bg-white/70 px-4 py-2 rounded-full border border-purple-100 max-w-md">
+                    {installMessage}
+                  </p>
+                ) : (
+                  showInstallCTA && (
+                    <p className="text-sm text-gray-500">
+                      支援 Android、桌面瀏覽器的安裝提示，iPhone 請改用「加到主畫面」。
+                    </p>
+                  )
+                )}
+              </div>
+            )}
 
             <div className="flex justify-center mt-16">
               <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
