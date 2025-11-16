@@ -50,6 +50,55 @@ type LineSale = {
   first_warning_sent?: boolean;
 };
 
+type PickupItemStatus = 'pending' | 'picked';
+export type PickupStatusFilter = 'pending' | 'picked' | 'all';
+
+export interface PickupOrderItem {
+  itemKey: string;
+  fieldName: string;
+  fieldLabel: string;
+  itemLabel: string;
+  orderedQuantity: number;
+  pickedQuantity: number;
+  remainingQuantity: number;
+  status: PickupItemStatus;
+  unitPrice?: number;
+  orderedTotalPrice?: number;
+  pickedTotalPrice?: number;
+  remainingTotalPrice?: number;
+  lastEventId?: number;
+  lastEventQuantity?: number;
+}
+
+export interface PickupOrderSummary {
+  orderId: number;
+  orderToken: string;
+  formId: number;
+  formName: string;
+  formToken: string;
+  orderCreatedAt: string;
+  items: PickupOrderItem[];
+}
+
+interface PickupTokenRecord {
+  token: string;
+  name: string;
+  phone: string;
+  expiresAt: string;
+}
+
+type OrderRowWithForm = {
+  order: any;
+  formName: string;
+  formToken: string;
+  fields: FormField[];
+};
+
+interface PickupEventStats {
+  totals: Record<string, number>;
+  latestEvents: Record<string, { id: number; quantity: number }>;
+}
+
 // 確保使用 Supabase Admin 客戶端
 function getSupabase() {
   if (!supabaseAdmin) {
@@ -59,11 +108,166 @@ function getSupabase() {
   return supabaseAdmin;
 }
 
+function normalizeCostcoName(value: string): string {
+  return value ? value.trim().toLowerCase() : '';
+}
+
+function buildOrderItemKey(prefix: string, fieldName: string, suffix?: string): string {
+  return `${prefix}:${fieldName}${suffix ? `:${suffix}` : ''}`;
+}
+
+function buildOrderItemsForPickup(
+  formLike: { fields: FormField[] },
+  orderData: Record<string, any>
+): Array<{
+  itemKey: string;
+  fieldName: string;
+  fieldLabel: string;
+  itemLabel: string;
+  quantity: number;
+  unitPrice?: number;
+}> {
+  const items: Array<{
+    itemKey: string;
+    fieldName: string;
+    fieldLabel: string;
+    itemLabel: string;
+    quantity: number;
+    unitPrice?: number;
+  }> = [];
+
+  for (const field of formLike.fields) {
+    const value = orderData?.[field.name];
+    if (field.type === 'number') {
+      const quantity = parseFloat(String(value ?? 0)) || 0;
+      if (quantity > 0) {
+        const unitPrice =
+          typeof field.price === 'number' && !Number.isNaN(field.price) ? Number(field.price) : undefined;
+        items.push({
+          itemKey: buildOrderItemKey('field', field.name),
+          fieldName: field.name,
+          fieldLabel: field.label,
+          itemLabel: field.label,
+          quantity,
+          unitPrice,
+        });
+      }
+    } else if (field.type === 'costco') {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (!entry || !entry.name) continue;
+          const entryName = String(entry.name).trim();
+          if (!entryName) continue;
+          const quantity = parseFloat(String(entry.quantity ?? 0)) || 0;
+          if (quantity <= 0) continue;
+          const unitPrice =
+            typeof field.price === 'number' && !Number.isNaN(field.price) ? Number(field.price) : undefined;
+          items.push({
+            itemKey: buildOrderItemKey('costco', field.name, normalizeCostcoName(entryName)),
+            fieldName: field.name,
+            fieldLabel: field.label,
+            itemLabel: `${field.label} - ${entryName}`,
+            quantity,
+            unitPrice,
+          });
+        }
+      }
+    }
+  }
+
+  return items;
+}
+
+async function getPickupEventStatsSupabase(orderId: number): Promise<PickupEventStats> {
+  const { data, error } = await getSupabase()
+    .from('order_pickup_events')
+    .select('id, item_key, quantity')
+    .eq('order_id', orderId)
+    .order('id', { ascending: false });
+  if (error) {
+    throw new Error(`取得取貨紀錄失敗：${error.message}`);
+  }
+  const totals: Record<string, number> = {};
+  const latestEvents: Record<string, { id: number; quantity: number }> = {};
+  for (const row of data || []) {
+    const key = row.item_key;
+    const quantity = Number(row.quantity) || 0;
+    totals[key] = (totals[key] || 0) + quantity;
+    if (!latestEvents[key]) {
+      latestEvents[key] = { id: row.id, quantity };
+    }
+  }
+  return { totals, latestEvents };
+}
+
+async function buildPickupOrders(
+  rows: OrderRowWithForm[],
+  statusFilter: PickupStatusFilter = 'pending'
+): Promise<PickupOrderSummary[]> {
+  const results: PickupOrderSummary[] = [];
+  for (const { order, formName, formToken, fields } of rows) {
+    const orderData = typeof order.order_data === 'string' ? JSON.parse(order.order_data) : order.order_data;
+    const items = buildOrderItemsForPickup({ fields }, orderData);
+    if (items.length === 0) continue;
+    const { totals, latestEvents } = await getPickupEventStatsSupabase(order.id);
+    const filteredItems: PickupOrderItem[] = [];
+    for (const item of items) {
+      const picked = totals[item.itemKey] || 0;
+      const remaining = Math.max(item.quantity - picked, 0);
+      const hasPicked = picked > 0.0001;
+      const status: PickupItemStatus = remaining > 0.0001 ? 'pending' : hasPicked ? 'picked' : 'pending';
+
+      if (statusFilter === 'pending' && status !== 'pending') continue;
+      if (statusFilter === 'picked' && status !== 'picked') continue;
+
+      const unitPrice = item.unitPrice;
+      const orderedTotalPrice = unitPrice ? unitPrice * item.quantity : undefined;
+      const effectivePicked = Math.min(picked, item.quantity);
+      const pickedTotalPrice = unitPrice ? unitPrice * effectivePicked : undefined;
+      const remainingTotalPrice = unitPrice ? unitPrice * remaining : undefined;
+      const latestEvent = latestEvents[item.itemKey];
+
+      filteredItems.push({
+        itemKey: item.itemKey,
+        fieldName: item.fieldName,
+        fieldLabel: item.fieldLabel,
+        itemLabel: item.itemLabel,
+        orderedQuantity: item.quantity,
+        pickedQuantity: picked,
+        remainingQuantity: remaining,
+        status,
+        unitPrice,
+        orderedTotalPrice,
+        pickedTotalPrice,
+        remainingTotalPrice,
+        lastEventId: latestEvent?.id,
+        lastEventQuantity: latestEvent?.quantity,
+      });
+    }
+    if (filteredItems.length === 0) continue;
+    results.push({
+      orderId: order.id,
+      orderToken: order.order_token,
+      orderCreatedAt: order.created_at,
+      formId: order.form_id,
+      formName,
+      formToken,
+      items: filteredItems,
+    });
+  }
+  return results;
+}
+
 // 初始化資料庫表（在 Supabase Dashboard 的 SQL Editor 中執行 supabase-schema.sql）
 export async function initDatabase() {
   // Supabase 表結構已在 SQL Editor 中建立，這裡不需要做任何事
   // 但保留此函數以保持 API 相容性
   console.log('Supabase 資料庫已初始化（表結構應已在 SQL Editor 中建立）');
+}
+
+async function cleanupExpiredPickupTokensSupabase() {
+  const nowIso = new Date().toISOString();
+  await getSupabase().from('pickup_tokens').delete().lt('expires_at', nowIso);
 }
 
 // 表單相關操作

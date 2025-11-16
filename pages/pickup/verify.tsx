@@ -144,6 +144,11 @@ export default function PickupVerifyPage() {
       setScannerError('無法解析 QR Code，請重新掃描');
       return;
     }
+    const pickupTokenPattern = /^[a-zA-Z0-9_-]{6,}$/;
+    if (!pickupTokenPattern.test(extracted)) {
+      setScannerError('此 QR Code 並非取貨憑證，請確認後再掃描。');
+      return;
+    }
     scanProcessingRef.current = true;
     closeScanner({ preserveProcessing: true });
     router.push(
