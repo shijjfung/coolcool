@@ -228,7 +228,7 @@ export async function fetchCommentsWithPuppeteer(
     
     // 啟動瀏覽器
     browser = await puppeteerExtra.launch({
-      headless: headless ? 'new' : false, // 'new' 使用新的無頭模式
+      headless: headless ? ('new' as any) : false, // 'new' 使用新的無頭模式
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
