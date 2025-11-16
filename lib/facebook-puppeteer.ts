@@ -480,7 +480,12 @@ export async function replyToCommentWithPuppeteer(
     });
 
     // 等待留言區域載入
-    await page.waitForTimeout(3000);
+    const waitForTimeout = (page as any).waitForTimeout?.bind(page);
+    if (typeof waitForTimeout === 'function') {
+      await waitForTimeout(3000);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
 
     // 如果有 commentId，嘗試滾動到該留言
     if (commentId) {
@@ -492,7 +497,11 @@ export async function replyToCommentWithPuppeteer(
           commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, commentId);
-      await page.waitForTimeout(2000);
+      if (typeof waitForTimeout === 'function') {
+        await waitForTimeout(2000);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
 
     // 如果有 commentId，先嘗試找到該留言並點擊回覆
@@ -523,7 +532,11 @@ export async function replyToCommentWithPuppeteer(
 
       if (replyButtonFound) {
         console.log('[Puppeteer] 已點擊回覆按鈕，等待輸入框出現...');
-        await page.waitForTimeout(1000);
+        if (typeof waitForTimeout === 'function') {
+          await waitForTimeout(1000);
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
       }
     }
 
