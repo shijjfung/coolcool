@@ -1146,7 +1146,7 @@ export default function AdminDashboard() {
       )}
       <div className="container mx-auto px-3 py-6 sm:px-6 lg:px-8">
             {/* 即時訂單通知區域 */}
-      {realtimeNotifications.length > 0 && (
+            {realtimeNotifications.length > 0 && (
           <div className="mb-4">
             <div className="p-3 bg-white rounded-lg shadow border-l-4 border-green-500 max-h-48 overflow-y-auto">
                 <div className="flex items-center justify-between mb-2">

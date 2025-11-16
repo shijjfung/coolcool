@@ -210,7 +210,7 @@ export default function FormReport() {
         } else if (major >= 15) {
           return `macOS (版本 ${major}.${minor})`;
         }
-      }
+    }
       return 'Mac 電腦';
     }
     

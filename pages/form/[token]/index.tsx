@@ -900,77 +900,77 @@ export default function FormEntry() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-gray-600 mb-4">
-                    請輸入以下任一方式進行驗證：
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        訂單編號
-                      </label>
-                      <input
-                        type="text"
-                        value={modifyOrderToken}
-                        onChange={(e) => setModifyOrderToken(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入訂單編號"
-                        disabled={verifying}
-                      />
-                    </div>
-                    
-                    <div className="text-center text-sm text-gray-500">或</div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        姓名
-                      </label>
-                      <input
-                        type="text"
-                        value={modifyName}
-                        onChange={(e) => setModifyName(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入姓名"
-                        disabled={verifying}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        電話
-                      </label>
-                      <input
-                        type="tel"
-                        value={modifyPhone}
-                        onChange={(e) => setModifyPhone(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="輸入電話"
-                        disabled={verifying}
-                      />
-                    </div>
-                  </div>
+              <p className="text-sm text-gray-600 mb-4">
+                請輸入以下任一方式進行驗證：
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    訂單編號
+                  </label>
+                  <input
+                    type="text"
+                    value={modifyOrderToken}
+                    onChange={(e) => setModifyOrderToken(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="輸入訂單編號"
+                    disabled={verifying}
+                  />
+                </div>
+                
+                <div className="text-center text-sm text-gray-500">或</div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    姓名
+                  </label>
+                  <input
+                    type="text"
+                    value={modifyName}
+                    onChange={(e) => setModifyName(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="輸入姓名"
+                    disabled={verifying}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    電話
+                  </label>
+                  <input
+                    type="tel"
+                    value={modifyPhone}
+                    onChange={(e) => setModifyPhone(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="輸入電話"
+                    disabled={verifying}
+                  />
+                </div>
+              </div>
 
-                  <div className="flex gap-3 justify-end mt-6">
-                    <button
-                      onClick={() => {
-                        setShowModifyDialog(false);
-                        setModifyOrderToken('');
-                        setModifyName('');
-                        setModifyPhone('');
-                      }}
-                      className="px-6 py-2 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-full border-2 border-gray-300/50 shadow-[0_4px_8px_rgba(0,0,0,0.15),0_2px_4px_rgba(0,0,0,0.1)] hover:from-gray-400 hover:to-gray-500 hover:shadow-[0_6px_12px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:translate-y-0 transition-all duration-200 font-medium"
-                      disabled={verifying}
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleModifyOrder}
-                      disabled={verifying}
-                      className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full border-2 border-blue-500/30 shadow-[0_6px_12px_rgba(59,130,246,0.4),0_3px_6px_rgba(59,130,246,0.3)] hover:from-blue-700 hover:to-blue-800 hover:shadow-[0_8px_16px_rgba(59,130,246,0.5),0_4px_8px_rgba(59,130,246,0.4)] hover:-translate-y-0.5 active:shadow-[0_3px_6px_rgba(59,130,246,0.3)] active:translate-y-0 disabled:from-gray-400 disabled:to-gray-500 disabled:border-gray-400/30 disabled:shadow-[0_2px_4px_rgba(0,0,0,0.1)] disabled:cursor-not-allowed disabled:translate-y-0 transition-all duration-200 font-medium"
-                    >
-                      {verifying ? '驗證中...' : '確認'}
-                    </button>
-                  </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setShowModifyDialog(false);
+                    setModifyOrderToken('');
+                    setModifyName('');
+                    setModifyPhone('');
+                  }}
+                  className="px-6 py-2 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-full border-2 border-gray-300/50 shadow-[0_4px_8px_rgba(0,0,0,0.15),0_2px_4px_rgba(0,0,0,0.1)] hover:from-gray-400 hover:to-gray-500 hover:shadow-[0_6px_12px_rgba(0,0,0,0.2),0_3px_6px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:translate-y-0 transition-all duration-200 font-medium"
+                  disabled={verifying}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleModifyOrder}
+                  disabled={verifying}
+                  className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full border-2 border-blue-500/30 shadow-[0_6px_12px_rgba(59,130,246,0.4),0_3px_6px_rgba(59,130,246,0.3)] hover:from-blue-700 hover:to-blue-800 hover:shadow-[0_8px_16px_rgba(59,130,246,0.5),0_4px_8px_rgba(59,130,246,0.4)] hover:-translate-y-0.5 active:shadow-[0_3px_6px_rgba(59,130,246,0.3)] active:translate-y-0 disabled:from-gray-400 disabled:to-gray-500 disabled:border-gray-400/30 disabled:shadow-[0_2px_4px_rgba(0,0,0,0.1)] disabled:cursor-not-allowed disabled:translate-y-0 transition-all duration-200 font-medium"
+                >
+                  {verifying ? '驗證中...' : '確認'}
+                </button>
+              </div>
                 </>
               )}
             </div>

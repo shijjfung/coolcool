@@ -261,7 +261,7 @@ export default function CustomerForm() {
           const major = match[1];
           const minor = match[2];
           setDeviceType(`iPad (iPadOS ${major}.${minor})`);
-        } else {
+    } else {
           setDeviceType('iPad');
         }
       } else {
@@ -462,7 +462,7 @@ export default function CustomerForm() {
         setDeviceType(macVersionName);
       } else {
         setDeviceType('Mac 電腦');
-      }
+    }
       return;
     }
     
@@ -973,7 +973,7 @@ export default function CustomerForm() {
             alert('送出訂單成功，但未取得訂單代碼，請聯絡客服。');
             setShowConfirm(false);
             setIsEditMode(false);
-            fetchOrderCount();
+          fetchOrderCount();
             setSubmitting(false);
             return;
           }
@@ -987,8 +987,8 @@ export default function CustomerForm() {
           setOrder({ ...order, order_token: createdOrderToken });
           setToastMessage('訂單已成功送出！');
           fetchOrderCount();
-          setShowConfirm(false);
-          setIsEditMode(false);
+        setShowConfirm(false);
+        setIsEditMode(false);
           router.push(successUrl);
         }
       } else {
@@ -1383,7 +1383,7 @@ export default function CustomerForm() {
                             </svg>
                             <span>{field.label}</span>
                           {field.price !== undefined && field.price !== null && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
                               {field.price}
                             </span>
                           )}
@@ -1545,7 +1545,7 @@ export default function CustomerForm() {
                                 <div className="text-base sm:text-lg font-bold text-gray-800">
                                 {field.label}
                                 {field.price !== undefined && field.price !== null && field.price > 0 && (
-                                  <span className="inline-flex items-center px-2 py-0.5 ml-2 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+                                    <span className="inline-flex items-center px-2 py-0.5 ml-2 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
                                     {field.price}/單位
                                   </span>
                                 )}

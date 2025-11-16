@@ -75,6 +75,8 @@ export default function PickupVerifyPage() {
   const [scannerError, setScannerError] = useState('');
   const [scannerKey, setScannerKey] = useState(0);
   const scanProcessingRef = useRef(false);
+  const [pickedTotalAmount, setPickedTotalAmount] = useState(0);
+  const [summaryContext, setSummaryContext] = useState<{ token?: string; name?: string; phone?: string } | null>(null);
   const qrConstraints = useMemo<MediaTrackConstraints>(
     () => ({
       facingMode: { ideal: 'environment' },
@@ -168,6 +170,59 @@ export default function PickupVerifyPage() {
     }
   }, []);
 
+  const computePickedTotal = (orders?: PickupOrderSummary[]) => {
+    if (!orders) return 0;
+    return orders.reduce((sum, order) => {
+      const orderSum = order.items.reduce((sub, item) => {
+        if (!item.pickedQuantity || item.pickedQuantity <= 0) return sub;
+        const amount =
+          item.pickedTotalPrice ??
+          (item.unitPrice ? item.unitPrice * item.pickedQuantity : 0);
+        return sub + (amount || 0);
+      }, 0);
+      return sum + orderSum;
+    }, 0);
+  };
+
+  const refreshPickedTotal = useCallback(
+    async (context?: { token?: string; name?: string; phone?: string }) => {
+      if (!context) {
+        setPickedTotalAmount(0);
+        return;
+      }
+      try {
+        if (context.token) {
+          const res = await fetch(`/api/pickup/token/${context.token}?status=picked`);
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setPickedTotalAmount(computePickedTotal(data.orders));
+            return;
+          }
+        } else if (context.name && context.phone) {
+          const res = await fetch('/api/pickup/admin-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: context.name,
+              phone: context.phone,
+              status: 'picked',
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setPickedTotalAmount(computePickedTotal(data.orders));
+            return;
+          }
+        }
+        setPickedTotalAmount(0);
+      } catch (err) {
+        console.error('refresh picked total error', err);
+        setPickedTotalAmount(0);
+      }
+    },
+    []
+  );
+
   const fetchByToken = async (
     tokenValue: string,
     statusValue: PickupStatusFilter,
@@ -190,8 +245,11 @@ export default function PickupVerifyPage() {
       }
       setPayload(data);
       setActiveToken(tokenValue);
+      const context = { token: tokenValue };
       setViewMode('token');
       setInitialized(true);
+      setSummaryContext(context);
+      refreshPickedTotal(context);
     } catch (err) {
       console.error('pickup verify error', err);
       setError('系統忙碌中，請稍後再試');
@@ -241,9 +299,12 @@ export default function PickupVerifyPage() {
       }
       setPayload(data);
       setActiveToken(data.token);
+      const context = { name: trimmedName, phone: trimmedPhone };
       setViewMode('manual');
       setLastManualQuery({ name: trimmedName, phone: trimmedPhone });
       setInitialized(true);
+      setSummaryContext(context);
+      refreshPickedTotal(context);
     } catch (err) {
       console.error('pickup admin search error', err);
       setManualError('查詢時發生錯誤，請稍後再試');
@@ -351,6 +412,9 @@ export default function PickupVerifyPage() {
             }
           : prev
       );
+      if (summaryContext) {
+        refreshPickedTotal(summaryContext);
+      }
     } catch (err) {
       console.error('mark pickup error', err);
       alert('標記取貨時發生錯誤，請稍後再試');
@@ -407,6 +471,9 @@ export default function PickupVerifyPage() {
             }
           : prev
       );
+      if (summaryContext) {
+        refreshPickedTotal(summaryContext);
+      }
     } catch (err) {
       console.error('undo pickup error', err);
       alert('取消取貨紀錄時發生錯誤，請稍後再試');
@@ -526,94 +593,109 @@ export default function PickupVerifyPage() {
         </div>
 
         {hasItems ? (
-          <div className="space-y-5">
-            {payload.orders.map((order) => (
-              <div key={order.orderId} className="border border-slate-200 rounded-2xl shadow-sm p-5 bg-white">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-semibold text-gray-800">{order.formName}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      訂單建立：{new Date(order.orderCreatedAt).toLocaleString('zh-TW', { hour12: false })}
-                    </p>
+          <>
+            <div className="space-y-5">
+              {payload.orders.map((order) => (
+                <div key={order.orderId} className="border border-slate-200 rounded-2xl shadow-sm p-5 bg-white">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-semibold text-gray-800">{order.formName}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        訂單建立：{new Date(order.orderCreatedAt).toLocaleString('zh-TW', { hour12: false })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-sm font-semibold inline-block">
+                        {order.items.length} 項商品
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">訂單代碼：{order.orderToken}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-sm font-semibold inline-block">
-                      {order.items.length} 項商品
-                    </span>
-                    <p className="text-xs text-gray-400 mt-1">訂單代碼：{order.orderToken}</p>
-                  </div>
-                </div>
 
-                <div className="mt-4 space-y-3">
-                  {order.items.map((item) => {
-                    const isPending = item.status === 'pending';
-                    const loadingMark = actionLoading === `mark:${order.orderId}:${item.itemKey}`;
-                    const loadingUndo = actionLoading === `undo:${order.orderId}:${item.itemKey}`;
-                    return (
-                      <div
-                        key={item.itemKey}
-                        className="p-4 rounded-2xl border border-gray-100 bg-gradient-to-r from-slate-50 to-white flex flex-col gap-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{item.itemLabel}</p>
-                            <p className="text-xs text-gray-500">
-                              訂購數量：{item.orderedQuantity}　|　已取貨：{item.pickedQuantity}
-                              {isPending && (
-                                <span className="ml-2">
-                                  未取貨：<span className="text-indigo-600 font-semibold">{item.remainingQuantity}</span>
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-sm">
+                      <thead>
+                        <tr className="text-xs uppercase text-gray-500">
+                          <th className="py-2 text-left font-semibold">商品</th>
+                          <th className="py-2 text-center font-semibold">訂購</th>
+                          <th className="py-2 text-center font-semibold">已取貨</th>
+                          <th className="py-2 text-center font-semibold">未取貨</th>
+                          <th className="py-2 text-center font-semibold">單價</th>
+                          <th className="py-2 text-center font-semibold">金額</th>
+                          <th className="py-2 text-center font-semibold">狀態</th>
+                          <th className="py-2 text-center font-semibold">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {order.items.map((item) => {
+                          const isPicked = item.status === 'picked';
+                          const remainingQty = Math.max(item.remainingQuantity, 0);
+                          const unitPriceDisplay =
+                            item.unitPrice !== undefined ? `${item.unitPrice.toLocaleString('zh-TW')} 元` : '-';
+                          const amountDisplay =
+                            item.orderedTotalPrice !== undefined
+                              ? `${item.orderedTotalPrice.toLocaleString('zh-TW')} 元`
+                              : '-';
+                          const loadingKey = isPicked
+                            ? `undo:${order.orderId}:${item.itemKey}`
+                            : `mark:${order.orderId}:${item.itemKey}`;
+                          const isLoading = actionLoading === loadingKey;
+                          return (
+                            <tr key={item.itemKey} className="align-middle">
+                              <td className="py-3 pr-3">
+                                <p className="font-semibold text-gray-800">{item.itemLabel}</p>
+                              </td>
+                              <td className="py-3 text-center text-gray-600">{item.orderedQuantity}</td>
+                              <td className="py-3 text-center text-gray-600">{item.pickedQuantity}</td>
+                              <td className="py-3 text-center">
+                                <span className="font-semibold text-indigo-600">{remainingQty}</span>
+                              </td>
+                              <td className="py-3 text-center text-gray-600">{unitPriceDisplay}</td>
+                              <td className="py-3 text-center text-gray-800 font-semibold">{amountDisplay}</td>
+                              <td className="py-3 text-center">
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                    isPicked ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'
+                                  }`}
+                                >
+                                  {isPicked ? '已取貨' : '待取貨'}
                                 </span>
-                              )}
-                            </p>
-                            {item.unitPrice !== undefined && (
-                              <p className="text-xs text-gray-500">
-                                單價：{item.unitPrice} 元　|　總額：{item.orderedTotalPrice?.toFixed(0) ?? '-'} 元
-                              </p>
-                            )}
-                          </div>
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              isPending ? 'bg-yellow-100 text-yellow-700' : 'bg-emerald-100 text-emerald-700'
-                            }`}
-                          >
-                            {isPending ? '未領取' : '已領取'}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          {isPending && (
-                            <button
-                              disabled={!isAdmin || loadingMark}
-                              onClick={() => handleMarkPicked(order.orderId, item)}
-                              className={`px-4 py-2 rounded-full text-sm font-semibold text-white transition-colors ${
-                                isAdmin
-                                  ? 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300'
-                                  : 'bg-gray-300 cursor-not-allowed'
-                              }`}
-                            >
-                              {loadingMark ? '更新中…' : '已取貨'}
-                            </button>
-                          )}
-                          {!isPending && item.lastEventId && (
-                            <button
-                              disabled={!isAdmin || loadingUndo}
-                              onClick={() => handleUndoPickup(order.orderId, item)}
-                              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                                isAdmin
-                                  ? 'bg-rose-500 text-white hover:bg-rose-600 disabled:bg-rose-300'
-                                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                              }`}
-                            >
-                              {loadingUndo ? '取消中…' : '取消'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                              </td>
+                              <td className="py-3 text-center">
+                                <button
+                                  disabled={!isAdmin || isLoading}
+                                  onClick={() =>
+                                    isPicked
+                                      ? handleUndoPickup(order.orderId, item)
+                                      : handleMarkPicked(order.orderId, item)
+                                  }
+                                  className={`px-4 py-2 rounded-full text-xs font-semibold text-white transition-all ${
+                                    isPicked
+                                      ? 'bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300'
+                                      : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300'
+                                  } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {isLoading ? '更新中…' : isPicked ? '取消' : '取貨'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <div className="px-6 py-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-right">
+                <p className="text-xs font-semibold text-emerald-600 tracking-wide">目前取貨金額總計</p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">
+                  NT$ {pickedTotalAmount.toLocaleString('zh-TW')}
+                </p>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         ) : (
           <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
             <p className="text-emerald-600 font-semibold">{emptyMessage}</p>
