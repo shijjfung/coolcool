@@ -580,7 +580,14 @@ export async function replyToCommentWithPuppeteer(
 
     // 點擊輸入框以確保焦點
     await replyInput.click();
-    await page.waitForTimeout(500);
+    {
+      const waitForTimeout = (page as any).waitForTimeout?.bind(page);
+      if (typeof waitForTimeout === 'function') {
+        await waitForTimeout(500);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
 
     // 清空輸入框（如果有內容）
     await page.evaluate((selector) => {
@@ -628,7 +635,14 @@ export async function replyToCommentWithPuppeteer(
     }
 
     // 等待回覆完成
-    await page.waitForTimeout(2000);
+    {
+      const waitForTimeout = (page as any).waitForTimeout?.bind(page);
+      if (typeof waitForTimeout === 'function') {
+        await waitForTimeout(2000);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
 
     // 檢查是否回覆成功（檢查是否有新的回覆出現）
     const replySuccess = await page.evaluate((msg) => {
