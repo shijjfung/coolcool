@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ComponentType, CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
+type QrReaderProps = {
+  onResult?: (result: unknown, error: unknown) => void;
+  constraints?: MediaTrackConstraints;
+  containerStyle?: CSSProperties;
+  videoStyle?: CSSProperties;
+};
+
 const QrReader = dynamic(
   () => import('react-qr-reader').then((mod: any) => mod.QrReader ?? mod.default),
   { ssr: false }
-);
+) as ComponentType<QrReaderProps>;
 
 type PickupStatusFilter = 'pending' | 'picked' | 'all';
 
