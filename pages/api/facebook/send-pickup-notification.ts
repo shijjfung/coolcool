@@ -73,7 +73,7 @@ export default async function handler(
       let form = formCache.get(order.form_id);
       if (form === undefined) {
         form = await getFormByIdLite(order.form_id);
-        formCache.set(order.form_id, form);
+        formCache.set(order.form_id, form ?? null);
       }
       if (!form || !form.facebook_post_url) {
         failed.push({
