@@ -846,10 +846,10 @@ export default function FormEntry() {
           </h1>
           <p className="text-gray-600 mb-4">
             結單時間：{new Date(form.deadline).toLocaleString('zh-TW', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
+              year: 'numeric', 
+              month: '2-digit', 
+              day: '2-digit', 
+              hour: '2-digit', 
               minute: '2-digit',
               hour12: false,
             })}
@@ -876,8 +876,8 @@ export default function FormEntry() {
             </button>
             <p className="text-sm text-gray-600 text-center mt-2">
               查詢未取貨商品並生成 QR Code，取貨時提供給店家掃描
-            </p>
-          </div>
+          </p>
+        </div>
         </div>
         {pickupModal}
       </div>

@@ -22,10 +22,10 @@ export default function Home() {
   // 檢查是否已經驗證過 + 安裝捷徑提示
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const authStatus = sessionStorage.getItem('admin_authenticated');
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-    }
+      const authStatus = sessionStorage.getItem('admin_authenticated');
+      if (authStatus === 'true') {
+        setIsAuthenticated(true);
+      }
 
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||

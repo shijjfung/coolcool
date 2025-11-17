@@ -273,7 +273,7 @@ export default function CreateForm() {
     }
 
     const parsedItems = parseBulkInput(sourceText);
-
+    
     if (parsedItems.length === 0) {
       alert('無法解析商品列表，請檢查格式是否正確');
       return 0;
@@ -958,19 +958,19 @@ export default function CreateForm() {
             {facebookAutoMonitor && (
               <div className="space-y-6 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                       社團/粉專目標連結 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="url"
+                  </label>
+                  <input
+                    type="url"
                       value={facebookTargetUrl}
                       onChange={(e) => setFacebookTargetUrl(e.target.value)}
-                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
                       placeholder="https://www.facebook.com/groups/xxx"
-                      autoComplete="off"
-                      required={facebookAutoMonitor}
-                    />
+                    autoComplete="off"
+                    required={facebookAutoMonitor}
+                  />
                     <p className="text-xs text-gray-500 mt-1">
                       ✅ 發布與抓文都會前往這個連結（建議填社團網址或預計貼文位置）。
                     </p>
@@ -1100,18 +1100,18 @@ export default function CreateForm() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                       發文備註（可選）
-                    </label>
-                    <input
-                      type="text"
-                      value={facebookPostAuthor}
-                      onChange={(e) => setFacebookPostAuthor(e.target.value)}
-                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookPostAuthor}
+                    onChange={(e) => setFacebookPostAuthor(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
                       placeholder="例如：愛買小編、代理商、廠商"
-                      autoComplete="off"
-                    />
+                    autoComplete="off"
+                  />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1279,7 +1279,7 @@ export default function CreateForm() {
                     </span>
                   </span>
                 </label>
-              </div>
+                </div>
               </div>
             )}
           </div>

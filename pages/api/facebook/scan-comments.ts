@@ -169,8 +169,8 @@ export default async function handler(
     const monitoringForms = forms.filter(
       form =>
         form.facebook_auto_monitor === 1 &&
-        form.facebook_post_url &&
-        form.facebook_keywords
+              form.facebook_post_url &&
+              form.facebook_keywords
     );
 
     if (monitoringForms.length === 0) {
@@ -194,8 +194,8 @@ export default async function handler(
     for (const form of monitoringForms) {
       try {
         // 檢查結單時間（使用 order_deadline 或 deadline）
-        const deadline = form.order_deadline
-          ? new Date(form.order_deadline)
+        const deadline = form.order_deadline 
+          ? new Date(form.order_deadline) 
           : new Date(form.deadline);
         const now = new Date();
         const allowOverdue = form.facebook_allow_overdue === 1;
@@ -265,7 +265,7 @@ export default async function handler(
               allowOverdue: form.facebook_allow_overdue === 1,
             },
           };
-
+          
           const automationResponse = await callAutomationScanComments<{ comments?: FacebookComment[]; autoReplies?: string[] }>(automationPayload);
           const automationComments = Array.isArray(automationResponse?.comments)
             ? automationResponse.comments
@@ -277,7 +277,7 @@ export default async function handler(
             from: comment.from,
             created_time: comment.created_time,
           }));
-
+          
           if (Array.isArray(automationResponse?.autoReplies)) {
             autoReplySet = new Set(
               automationResponse.autoReplies.map((id) => String(id))

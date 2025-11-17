@@ -323,9 +323,9 @@ export default function OrderSuccess() {
 
   const handleLeavePage = () => {
     if (!form?.form_token) {
-      router.push('/');
+              router.push('/');
       return;
-    }
+        }
 
     router.push(`/form/${form.form_token}`);
   };
@@ -556,86 +556,86 @@ export default function OrderSuccess() {
               </h2>
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full border-collapse min-w-[640px]">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="px-4 py-3 text-left border border-gray-300 font-semibold">項目</th>
-                      <th className="px-4 py-3 text-left border border-gray-300 font-semibold">數量/內容</th>
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-3 text-left border border-gray-300 font-semibold">項目</th>
+                    <th className="px-4 py-3 text-left border border-gray-300 font-semibold">數量/內容</th>
                       {hasPriceColumn && (
-                        <>
-                          <th className="px-4 py-3 text-right border border-gray-300 font-semibold">單價</th>
-                          <th className="px-4 py-3 text-right border border-gray-300 font-semibold">小計</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {form.fields.map((field) => {
-                      const value = order.order_data[field.name];
-                      if (value === null || value === undefined || value === '') return null;
+                      <>
+                        <th className="px-4 py-3 text-right border border-gray-300 font-semibold">單價</th>
+                        <th className="px-4 py-3 text-right border border-gray-300 font-semibold">小計</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {form.fields.map((field) => {
+                    const value = order.order_data[field.name];
+                    if (value === null || value === undefined || value === '') return null;
 
-                      if (field.type === 'costco' && Array.isArray(value)) {
-                        return (
-                          <tr key={field.name} className="border-b border-gray-200">
-                            <td className="px-4 py-3 border border-gray-300">{field.label}</td>
-                            <td className="px-4 py-3 border border-gray-300">
-                              <div className="space-y-1">
-                                {value.map((item: any, idx: number) => (
-                                  <div key={idx} className="text-sm">
-                                    {item.name} {item.quantity ? `× ${item.quantity}` : ''}
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                            {hasPriceColumn && (
-                              <>
-                                <td className="px-4 py-3 text-right border border-gray-300">-</td>
-                                <td className="px-4 py-3 text-right border border-gray-300">-</td>
-                              </>
-                            )}
-                          </tr>
-                        );
-                      }
-
-                      const quantity = field.type === 'number' ? (parseFloat(String(value)) || 0) : 0;
-                      const itemTotal = calculateItemTotal(field);
-
+                    if (field.type === 'costco' && Array.isArray(value)) {
                       return (
                         <tr key={field.name} className="border-b border-gray-200">
+                            <td className="px-4 py-3 border border-gray-300">{field.label}</td>
                           <td className="px-4 py-3 border border-gray-300">
-                            {field.label}
-                            {field.price && field.price > 0 && (
-                              <span className="text-blue-600 font-semibold ml-1">({field.price}元)</span>
-                            )}
+                            <div className="space-y-1">
+                              {value.map((item: any, idx: number) => (
+                                <div key={idx} className="text-sm">
+                                  {item.name} {item.quantity ? `× ${item.quantity}` : ''}
+                                </div>
+                              ))}
+                            </div>
                           </td>
-                          <td className="px-4 py-3 border border-gray-300">
-                            {String(value)}
-                            {field.type === 'number' && quantity > 0 && <span className="text-gray-500 ml-1">單位</span>}
-                          </td>
-                          {hasPriceColumn && (
+                            {hasPriceColumn && (
                             <>
-                              <td className="px-4 py-3 text-right border border-gray-300">
-                                {field.price && field.price > 0 ? `${field.price} 元` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-right border border-gray-300 font-semibold text-green-600">
-                                {itemTotal > 0 ? `${itemTotal.toFixed(0)} 元` : '-'}
-                              </td>
+                              <td className="px-4 py-3 text-right border border-gray-300">-</td>
+                              <td className="px-4 py-3 text-right border border-gray-300">-</td>
                             </>
                           )}
                         </tr>
                       );
-                    })}
-                    {hasPriceColumn && calculateTotal() > 0 && (
-                      <tr className="bg-green-50 border-t-2 border-green-300">
-                        <td className="px-4 py-4 text-right font-bold text-lg border border-gray-300" colSpan={3}>
-                          總計價格：
+                    }
+
+                    const quantity = field.type === 'number' ? (parseFloat(String(value)) || 0) : 0;
+                    const itemTotal = calculateItemTotal(field);
+
+                    return (
+                      <tr key={field.name} className="border-b border-gray-200">
+                        <td className="px-4 py-3 border border-gray-300">
+                          {field.label}
+                          {field.price && field.price > 0 && (
+                              <span className="text-blue-600 font-semibold ml-1">({field.price}元)</span>
+                          )}
                         </td>
-                        <td className="px-4 py-4 text-right font-bold text-xl text-green-600 border border-gray-300">
-                          {calculateTotal().toFixed(0)} 元
+                        <td className="px-4 py-3 border border-gray-300">
+                          {String(value)}
+                            {field.type === 'number' && quantity > 0 && <span className="text-gray-500 ml-1">單位</span>}
                         </td>
+                          {hasPriceColumn && (
+                          <>
+                            <td className="px-4 py-3 text-right border border-gray-300">
+                              {field.price && field.price > 0 ? `${field.price} 元` : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right border border-gray-300 font-semibold text-green-600">
+                              {itemTotal > 0 ? `${itemTotal.toFixed(0)} 元` : '-'}
+                            </td>
+                          </>
+                        )}
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    );
+                  })}
+                    {hasPriceColumn && calculateTotal() > 0 && (
+                    <tr className="bg-green-50 border-t-2 border-green-300">
+                      <td className="px-4 py-4 text-right font-bold text-lg border border-gray-300" colSpan={3}>
+                        總計價格：
+                      </td>
+                      <td className="px-4 py-4 text-right font-bold text-xl text-green-600 border border-gray-300">
+                        {calculateTotal().toFixed(0)} 元
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
               </div>
 
               <div className="md:hidden space-y-4">

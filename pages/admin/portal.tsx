@@ -59,13 +59,13 @@ export default function AdminPortal() {
             href="/admin"
             className="block rounded-3xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-2xl font-bold py-10 shadow-xl hover:shadow-2xl hover:scale-[1.01] transition-all"
           >
-            進入表單管理
+            表單管理
           </Link>
           <Link
             href="/pickup/verify"
             className="block rounded-3xl bg-gradient-to-r from-purple-500 to-pink-500 text-white text-2xl font-bold py-10 shadow-xl hover:shadow-2xl hover:scale-[1.01] transition-all"
           >
-            進入客戶取貨管理
+            取貨管理
           </Link>
         </div>
 

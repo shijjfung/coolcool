@@ -1237,8 +1237,8 @@ export default function CustomerForm() {
                     label: '姓名',
                     icon: (
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
                     ),
                     accent: 'from-blue-50 to-indigo-50',
                     required: true,
@@ -1280,44 +1280,44 @@ export default function CustomerForm() {
                     label: '電話',
                     icon: (
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
                     ),
                     accent: 'from-blue-50 to-indigo-50',
                     required: true,
                     children: (
-                      <div>
-                        <input
-                          type="tel"
-                          value={customerPhone}
-                          onChange={(e) => {
-                            setCustomerPhone(e.target.value);
-                            if (phoneError) {
-                              setPhoneError('');
-                            }
-                          }}
-                          onBlur={() => {
-                            if (customerPhone.trim()) {
-                              validatePhone(customerPhone);
-                            }
-                          }}
-                          onFocus={handlePhoneFocus}
-                          className={`w-full px-4 py-3.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all text-base sm:text-lg shadow-sm ${
+                        <div>
+                          <input
+                            type="tel"
+                            value={customerPhone}
+                            onChange={(e) => {
+                              setCustomerPhone(e.target.value);
+                              if (phoneError) {
+                                setPhoneError('');
+                              }
+                            }}
+                            onBlur={() => {
+                              if (customerPhone.trim()) {
+                                validatePhone(customerPhone);
+                              }
+                            }}
+                            onFocus={handlePhoneFocus}
+                            className={`w-full px-4 py-3.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all text-base sm:text-lg shadow-sm ${
                             phoneError ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
-                          }`}
-                          placeholder={phonePlaceholder}
-                          required
+                            }`}
+                            placeholder={phonePlaceholder}
+                            required
                           ref={(el) => setFieldRef('customerPhone', el)}
-                        />
-                        {phoneError && (
-                          <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {phoneError}
-                          </p>
-                        )}
-                      </div>
+                          />
+                          {phoneError && (
+                            <p className="mt-2 text-sm text-red-600 font-medium flex items-center gap-1">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {phoneError}
+                            </p>
+                          )}
+                        </div>
                     ),
                   })}
 
@@ -1328,7 +1328,7 @@ export default function CustomerForm() {
                         field.type === 'number' ? (
                           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m-4 6h12M9 9v2m-4 6h12m-6-2v2" />
-                          </svg>
+                            </svg>
                         ) : field.type === 'costco' ? (
                           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5m1.6 8L6 21h12l-1-8M7 13h10" />
@@ -1357,7 +1357,7 @@ export default function CustomerForm() {
                               小計：{((order.order_data[field.name] || 0) * field.price).toFixed(0)} 元
                             </p>
                           )}
-                        </div>
+                          </div>
                       ),
                     })
                   )}
@@ -1365,16 +1365,16 @@ export default function CustomerForm() {
                   {form.fields.some((f) => f.price !== undefined && f.price !== null && f.price > 0) && (
                     <div className="flex flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)] bg-gradient-to-r from-green-50 to-emerald-50">
                       <div className="px-4 sm:px-6 py-4 flex items-center gap-2 text-gray-800 font-bold">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
                         <span className="text-lg sm:text-xl">總計價格</span>
-                      </div>
+                            </div>
                       <div className="px-4 sm:px-6 py-4 flex items-center justify-end">
                         <span className="text-2xl sm:text-3xl font-extrabold text-green-600">{calculateTotal().toFixed(0)} 元</span>
-                      </div>
+                          </div>
                     </div>
-                  )}
+                    )}
                 </div>
               </div>
             </div>
