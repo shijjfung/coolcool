@@ -784,7 +784,14 @@ export default function CustomerForm() {
     // 檢查訂單限額
     if (form && form.order_limit && form.order_limit > 0) {
       try {
-        const res = await fetch(`/api/orders/reserve?formToken=${typeof token === 'string' ? token : ''}&sessionId=${sessionId}`);
+        const res = await fetch('/api/orders/reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            formToken: typeof token === 'string' ? token : '',
+            sessionId: sessionId,
+          }),
+        });
         const data = await res.json();
 
         if (res.ok && data.success) {

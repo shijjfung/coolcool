@@ -1102,16 +1102,19 @@ export default function CreateForm() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                      發文備註（可選）
+                      監看發文者（可選）
                   </label>
                   <input
                     type="text"
                     value={facebookPostAuthor}
                     onChange={(e) => setFacebookPostAuthor(e.target.value)}
                     className="w-full px-3 py-2.5 text-base border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                      placeholder="例如：愛買小編、代理商、廠商"
+                      placeholder="例如：愛買小編、代理商、廠商（留空則監看自己的貼文）"
                     autoComplete="off"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 設定後，系統會監看該發文者的貼文留言，而不只是自己的貼文
+                  </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -254,6 +254,7 @@ export default async function handler(
               deadline: form.order_deadline || form.deadline,
               lastScanAt: form.facebook_last_scan_at,
               keywords,
+              postAuthor: form.facebook_post_author || null, // 監看的發文者名稱
             },
             options: {
               mode: formId ? 'manual' : 'auto',

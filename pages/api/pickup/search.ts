@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!orders || orders.length === 0) {
       return res.status(404).json({
         success: false,
-        error: '查無已結單且未取貨的商品',
+        error: '查無尚可領取的物品',
       });
     }
 

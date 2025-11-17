@@ -602,7 +602,7 @@ export default function FormEntry() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setPickupError(data.error || '查無可取貨的資料');
+        setPickupError(data.error || '查無尚可領取的物品');
         return;
       }
 
